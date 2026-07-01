@@ -1,88 +1,90 @@
 /**
- * theme/colors.ts
+ * theme/colors.ts  — REGENERATED to match the real UI prototype.
  * ----------------------------------------------------------------------------
- * KapitPondo palette. Direction: trustworthy but warm — a community fund, not a
- * cold bank. Deep emerald carries "growth + money + trust"; a warm gold accent
- * nods to "pondo" (the fund itself) and is spent sparingly on highlights.
+ * Palette extracted from KapitPondo_Auth.html. Direction: calm steel-blue /
+ * slate — trustworthy, soft, financial. Export NAMES/SHAPES are unchanged, so
+ * Text.tsx and StatusBadge.tsx keep working without edits.
  *
- * Semantic intents (success/warning/danger/info/neutral) are what the rest of
- * the app consumes — screens should reference `intent.*`, not raw ramp values,
- * so the status system in theme/status.ts stays the single source of truth.
+ * Source tokens from the prototype:
+ *   bg #F7FBFD · card #FFF · chip #D6E6EF · accent #7FA6B8 · accentDk #5E8497
+ *   soft #EAF2F6 · ink #2A3E4B · muted #6F8A99 · faint #9DB2BE · line #E4EDF2
+ *   ok #3E8E66 / okBg #E2F0E8 · dang #C25C5E / dangBg #F7E5E5 · warn #A87C2C / warnBg #F8EFDA
  */
 
-// --- Brand ramp (emerald) ----------------------------------------------------
-export const emerald = {
-  50: '#E8F5EF',
-  100: '#C6E7D7',
-  200: '#92D1B4',
-  300: '#5DB890',
-  400: '#2F9E70',
-  500: '#0B6E4F', // primary
-  600: '#095C42',
-  700: '#074A35',
-  800: '#053829',
-  900: '#03261C',
+// --- Brand ramp (steel blue) -------------------------------------------------
+export const steel = {
+  50: '#F7FBFD',
+  100: '#EAF2F6',
+  200: '#D6E6EF',
+  300: '#9DB2BE',
+  400: '#7FA6B8', // accent (primary)
+  500: '#6A93A6',
+  600: '#5E8497', // accentDk
+  700: '#4A6A7A',
+  800: '#37505D',
+  900: '#2A3E4B', // ink
 } as const;
 
-// --- Accent ramp (gold) — use sparingly --------------------------------------
-export const gold = {
-  100: '#FBEFCF',
-  300: '#F2D27A',
-  500: '#E0A92E', // accent
-  700: '#A9781A',
-} as const;
-
-// --- Neutral ramp (slate) ----------------------------------------------------
+// --- Neutral ramp ------------------------------------------------------------
 export const slate = {
   0: '#FFFFFF',
-  50: '#F7F8F8',
-  100: '#EEF0F1',
-  200: '#DEE2E4',
-  300: '#C3C9CD',
-  400: '#9AA3A9',
-  500: '#6E777D',
-  600: '#4F575C',
-  700: '#3A4044',
-  800: '#23282B',
-  900: '#14181A',
-  950: '#0B0D0E',
+  50: '#F7FBFD',
+  100: '#EAF2F6',
+  200: '#E4EDF2',
+  300: '#D6E6EF',
+  400: '#9DB2BE',
+  500: '#6F8A99',
+  600: '#5E8497',
+  700: '#37505D',
+  800: '#2A3E4B',
+  900: '#1B2832',
+  950: '#10161B',
 } as const;
 
-// --- Functional ramps for status intents -------------------------------------
-const green = { 50: '#E7F6EC', 100: '#C2E9CF', 500: '#1E9E4F', 600: '#16803F', 700: '#0F5F2E' };
-const amber = { 50: '#FFF6E5', 100: '#FCE7BF', 500: '#D98A04', 600: '#B26E02', 700: '#8A5402' };
-const red   = { 50: '#FDECEC', 100: '#F8CFCF', 500: '#D23B3B', 600: '#B12B2B', 700: '#8C2020' };
-const blue  = { 50: '#E9F1FD', 100: '#CCDEFA', 500: '#2C6CD6', 600: '#2156AE', 700: '#193F80' };
+// --- Gold (warning only) -----------------------------------------------------
+export const gold = { 100: '#F8EFDA', 500: '#A87C2C', 700: '#7E5C1F' } as const;
 
-// --- Semantic intents (consume these, not the ramps above) -------------------
+// --- Functional ramps --------------------------------------------------------
+const green = { 50: '#E2F0E8', 500: '#3E8E66', 700: '#2C6B4B' };
+const amber = { 50: '#F8EFDA', 500: '#A87C2C', 700: '#7E5C1F' };
+const red   = { 50: '#F7E5E5', 500: '#C25C5E', 700: '#963E40' };
+
+// --- Semantic intents (consume these; map to the prototype's pill colors) ----
 export const intent = {
-  primary:   { base: emerald[500], strong: emerald[600], soft: emerald[50],  on: slate[0],  text: emerald[700] },
-  accent:    { base: gold[500],    strong: gold[700],    soft: gold[100],     on: slate[900], text: gold[700] },
-  success:   { base: green[500],   strong: green[700],   soft: green[50],     on: slate[0],  text: green[700] },
-  warning:   { base: amber[500],   strong: amber[700],   soft: amber[50],     on: slate[900], text: amber[700] },
-  danger:    { base: red[500],     strong: red[700],     soft: red[50],       on: slate[0],  text: red[700] },
-  info:      { base: blue[500],    strong: blue[700],    soft: blue[50],      on: slate[0],  text: blue[700] },
-  neutral:   { base: slate[400],   strong: slate[600],   soft: slate[100],    on: slate[900], text: slate[600] },
+  primary:  { base: '#7FA6B8', strong: '#5E8497', soft: '#EAF2F6', on: '#FFFFFF', text: '#5E8497' },
+  accent:   { base: '#5E8497', strong: '#2A3E4B', soft: '#EAF2F6', on: '#FFFFFF', text: '#5E8497' },
+  success:  { base: green[500], strong: green[700], soft: green[50], on: '#FFFFFF', text: green[500] },
+  warning:  { base: amber[500], strong: amber[700], soft: amber[50], on: '#2A3E4B', text: amber[500] },
+  danger:   { base: red[500],   strong: red[700],   soft: red[50],   on: '#FFFFFF', text: red[500] },
+  info:     { base: '#5E8497',  strong: '#2A3E4B',  soft: '#EAF2F6', on: '#FFFFFF', text: '#5E8497' },
+  neutral:  { base: '#9DB2BE',  strong: '#6F8A99',  soft: '#D6E6EF', on: '#2A3E4B', text: '#2A3E4B' },
 } as const;
 
 export type IntentName = keyof typeof intent;
 
 // --- Surface / text roles ----------------------------------------------------
 export const semantic = {
-  background: slate[50],
-  surface: slate[0],
-  surfaceAlt: slate[100],
-  border: slate[200],
-  borderStrong: slate[300],
+  background: '#F7FBFD',
+  surface: '#FFFFFF',
+  surfaceAlt: '#EAF2F6',
+  border: '#E4EDF2',
+  borderStrong: '#D6E6EF',
 
-  textPrimary: slate[900],
-  textSecondary: slate[600],
-  textMuted: slate[400],
-  textOnBrand: slate[0],
+  textPrimary: '#2A3E4B',
+  textSecondary: '#6F8A99',
+  textMuted: '#9DB2BE',
+  textOnBrand: '#FFFFFF',
 
-  brand: emerald[500],
-  brandDark: emerald[600],
-  accent: gold[500],
+  brand: '#7FA6B8',
+  brandDark: '#5E8497',
+  accent: '#5E8497',
 } as const;
 
-export const colors = { emerald, gold, slate, green, amber, red, blue, intent, semantic } as const;
+// Shared card/button shadow from the prototype (use in StyleSheet).
+// shadow* + elevation = iOS/Android; boxShadow = web.
+export const shadowToken = {
+  card: { shadowColor: '#2A3E4B', shadowOpacity: 0.07, shadowRadius: 20, shadowOffset: { width: 0, height: 6 }, elevation: 4, boxShadow: '0px 6px 20px rgba(42,62,75,0.07)' },
+  button: { shadowColor: '#7FA6B8', shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 6, boxShadow: '0px 8px 18px rgba(127,166,184,0.32)' },
+} as const;
+
+export const colors = { steel, slate, gold, green, amber, red, intent, semantic, shadowToken } as const;

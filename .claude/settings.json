@@ -16,7 +16,8 @@
       "Bash(netsh advfirewall *)",
       "Bash(Get-Content \"c:\\\\John Files\\\\capstone projects\\\\kapitpondo\\\\services\\\\api\\\\src\\\\modules\\\\groups\\\\groups.service.js\")",
       "Bash(Select-Object -Last 5)",
-      "Bash(Get-Content \"c:\\\\John Files\\\\capstone projects\\\\kapitpondo\\\\services\\\\api\\\\src\\\\modules\\\\groups\\\\groups.routes.js\")"
+      "Bash(Get-Content \"c:\\\\John Files\\\\capstone projects\\\\kapitpondo\\\\services\\\\api\\\\src\\\\modules\\\\groups\\\\groups.routes.js\")",
+      "PowerShell(cd \"c:\\\\John Files\\\\kapitpondo\\\\apps\\\\mobile\"; npx expo export --platform web --output-dir \"$env:TEMP\\\\expo-export-tmp\" 2>&1 | Select-Object -First 10)"
     ]
   }
 }

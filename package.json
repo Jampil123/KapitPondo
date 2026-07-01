@@ -17,6 +17,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "expo-dev-client": "~56.0.20"
+    "expo-dev-client": "~56.0.21"
   }
 }

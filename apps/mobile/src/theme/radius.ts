@@ -19,6 +19,7 @@ export const elevation = {
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    boxShadow: '0px 2px 4px rgba(11,13,14,0.06)',
   },
   md: {
     shadowColor: '#0B0D0E',
@@ -26,6 +27,7 @@ export const elevation = {
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 6,
+    boxShadow: '0px 6px 12px rgba(11,13,14,0.10)',
   },
 } as const;
 
