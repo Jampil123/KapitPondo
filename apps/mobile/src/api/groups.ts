@@ -43,11 +43,13 @@ export function joinByCode(fund_code: string) {
 }
 
 // --- Member management (officer) — paths per the API reference ---------------
-export function listPendingMembers(groupId: string) {
-  return api.get(`/api/groups/${groupId}/members/pending`);
+export async function listPendingMembers(groupId: string) {
+  const res = await api.get<{ members: unknown[] }>(`/api/groups/${groupId}/members/pending`);
+  return res.members ?? [];
 }
-export function listMembers(groupId: string) {
-  return api.get(`/api/groups/${groupId}/members`);
+export async function listMembers(groupId: string) {
+  const res = await api.get<{ members: unknown[] }>(`/api/groups/${groupId}/members`);
+  return res.members ?? [];
 }
 export function approveMember(groupId: string, memberId: string) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/approve`);

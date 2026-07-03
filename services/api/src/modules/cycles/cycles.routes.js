@@ -66,4 +66,15 @@ router.post('/groups/:groupId/cycles/:id/close', requireAuth,
   }
 );
 
+// Expected vs collected contributions for a cycle (any member)
+router.get('/groups/:groupId/cycles/:id/progress', requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const progress = await service.cycleProgress(req.params.id);
+      res.json({ progress });
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;

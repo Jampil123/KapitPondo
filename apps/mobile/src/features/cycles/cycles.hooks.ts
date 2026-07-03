@@ -18,6 +18,7 @@ import {
   activateCycle,
   closeCycle,
   selectActiveCycle,
+  getCycleProgress,
   type CreateCycleInput,
 } from '../../api/cycles';
 
@@ -36,6 +37,15 @@ export function useActiveCycle(groupId: string) {
     error,
     refetch,
   };
+}
+
+/** Expected vs collected contributions for a cycle. Safe to call with no cycleId yet. */
+export function useCycleProgress(groupId: string, cycleId?: string) {
+  const fn = useCallback(
+    () => (cycleId ? getCycleProgress(groupId, cycleId) : Promise.resolve(null)),
+    [groupId, cycleId],
+  );
+  return useQuery(fn, [groupId, cycleId]);
 }
 
 export function useCreateCycle(groupId: string) {

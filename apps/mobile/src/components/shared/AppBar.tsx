@@ -1,9 +1,10 @@
 /**
  * components/shared/AppBar.tsx
  * ----------------------------------------------------------------------------
- * Titled top bar for authenticated screens (matches the prototype's appBar):
- * optional back chevron, centered title, optional right node.
+ * Back header with a left-aligned title + optional subtitle + optional right
+ * node (matches the designer's AppBar). Used by group sub-screens.
  */
+import { ReactNode } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -12,12 +13,14 @@ import { semantic } from '../../theme/colors';
 
 export function AppBar({
   title,
+  subtitle,
   back = true,
   right,
 }: {
   title: string;
+  subtitle?: string;
   back?: boolean;
-  right?: React.ReactNode;
+  right?: ReactNode;
 }) {
   const router = useRouter();
   return (
@@ -25,26 +28,26 @@ export function AppBar({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
-        paddingHorizontal: 16,
-        paddingTop: 8,
-        paddingBottom: 12,
-        backgroundColor: semantic.background,
+        gap: 8,
+        paddingHorizontal: 12,
+        height: 56,
+        backgroundColor: semantic.surface,
         borderBottomWidth: 1,
         borderBottomColor: semantic.border,
       }}
     >
-      <View style={{ width: 30, alignItems: 'flex-start' }}>
-        {back ? (
-          <Pressable onPress={() => router.back()} hitSlop={8} style={{ marginLeft: -4 }}>
-            <ChevronLeft size={24} color={semantic.textPrimary} />
-          </Pressable>
-        ) : null}
+      {back ? (
+        <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+          <ChevronLeft size={24} color={semantic.textPrimary} />
+        </Pressable>
+      ) : (
+        <View style={{ width: 12 }} />
+      )}
+      <View style={{ flex: 1 }}>
+        <Text variant="h3" style={{ fontSize: 16 }} numberOfLines={1}>{title}</Text>
+        {subtitle ? <Text variant="caption" color="secondary">{subtitle}</Text> : null}
       </View>
-      <Text variant="h3" style={{ flex: 1, textAlign: 'center', fontSize: 17 }}>
-        {title}
-      </Text>
-      <View style={{ width: 30, alignItems: 'flex-end' }}>{right}</View>
+      {right}
     </View>
   );
 }

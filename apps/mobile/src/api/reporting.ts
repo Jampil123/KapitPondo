@@ -11,15 +11,16 @@ import { api } from './client';
 import type { Money } from '../lib/money';
 import type { LedgerEntry, LedgerEntryType } from './ledger';
 
-/** Group financial summary (officers). Shape — verify against reporting.service. */
+/** Group financial summary (officers). Matches the group_summary SQL function. */
 export interface GroupSummary {
-  fund_balance: Money;
   total_contributions: Money;
-  total_loans_outstanding: Money;
-  interest_income: Money;
-  penalty_income: Money;
+  total_loan_disbursements: Money;
+  total_loan_repayments: Money;
   total_expenses: Money;
-  [key: string]: Money | string | number; // tolerate extra fields
+  total_distributions: Money;
+  available_cash: Money;
+  active_members: number;
+  pending_loans: number;
 }
 
 /** Per-member balance row (officers). Shape — verify. */
@@ -46,8 +47,9 @@ export interface LedgerFilters extends Record<string, string | number | undefine
 }
 
 /** GET — group financial summary (treasurer/auditor/owner). */
-export function getSummary(groupId: string) {
-  return api.get<GroupSummary>(`/api/groups/${groupId}/reports/summary`);
+export async function getSummary(groupId: string) {
+  const res = await api.get<{ summary: GroupSummary }>(`/api/groups/${groupId}/reports/summary`);
+  return res.summary;
 }
 
 /** GET — per-member balances across the group (treasurer/auditor/owner). */

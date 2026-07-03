@@ -88,6 +88,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         details: (e as any).details,
       });
       setMember(null);
+      // The API rejected our access token (e.g. the account's password/session
+      // was revoked server-side) but the local Supabase client doesn't know
+      // that yet — it'll happily keep reporting `signedIn` until the token's
+      // natural expiry. Force a local sign-out so the UI drops back to login
+      // instead of getting stuck showing stale/empty data.
+      if ((e as any).status === 401) {
+        await supabase.auth.signOut();
+      }
     }
   }, []);
 
@@ -97,7 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(data.session);
       await loadMember(data.session);
-      setStatus(data.session ? 'signedIn' : 'signedOut');
+      if (!mounted) return;
+      // loadMember may have forced a sign-out (invalid/expired token), which
+      // fires its own onAuthStateChange — re-check the CURRENT session rather
+      // than trusting this now-possibly-stale reference.
+      const { data: fresh } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setStatus(fresh.session ? 'signedIn' : 'signedOut');
     });
     const {
       data: { subscription },
@@ -105,7 +119,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(s);
       await loadMember(s);
-      setStatus(s ? 'signedIn' : 'signedOut');
+      if (!mounted) return;
+      const { data: fresh } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setStatus(fresh.session ? 'signedIn' : 'signedOut');
     });
     return () => {
       mounted = false;

@@ -66,3 +66,15 @@ export function closeCycle(groupId: string, cycleId: string) {
 export function selectActiveCycle(cycles: Cycle[]): Cycle | null {
   return cycles.find((c) => c.status === 'active') ?? null;
 }
+
+export interface CycleProgress {
+  expected_total: Money;
+  collected_total: Money;
+  percent_collected: number;
+}
+
+/** GET — expected vs collected contributions for a cycle. */
+export async function getCycleProgress(groupId: string, cycleId: string) {
+  const res = await api.get<{ progress: CycleProgress }>(`/api/groups/${groupId}/cycles/${cycleId}/progress`);
+  return res.progress;
+}

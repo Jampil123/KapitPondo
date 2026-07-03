@@ -47,4 +47,10 @@ async function closeCycle(cycleId) {
   return data;
 }
 
-module.exports = { createCycle, listCycles, activateCycle, closeCycle };
+async function cycleProgress(cycleId) {
+  const { data, error } = await supabase.rpc('cycle_progress', { p_cycle_id: cycleId });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
+module.exports = { createCycle, listCycles, activateCycle, closeCycle, cycleProgress };
