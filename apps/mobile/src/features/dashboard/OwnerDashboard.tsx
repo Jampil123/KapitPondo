@@ -114,12 +114,12 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
 
 /* ---- Quick-actions grid (their ActionGrid) ---- */
 const ACTIONS: { label: string; icon: any; key: string }[] = [
-  { label: 'Configure Cycle', icon: SlidersHorizontal, key: 'configure-cycle' },
-  { label: 'Approve Members', icon: UserCheck, key: 'membership-approvals' },
-  { label: 'Manage Officers', icon: Users, key: 'members-officers' },
-  { label: 'Loan Decisions', icon: Coins, key: 'loan-decisions' },
+  { label: 'Configure Cycle', icon: SlidersHorizontal, key: 'cycles/configure' },
+  { label: 'Approve Members', icon: UserCheck, key: 'members/approvals' },
+  { label: 'Manage Officers', icon: Users, key: 'members/officers' },
+  { label: 'Loan Decisions', icon: Coins, key: 'loans/decisions' },
   { label: 'Penalties', icon: AlertTriangle, key: 'penalties' },
-  { label: 'Year-End', icon: CalendarClock, key: 'year-end' },
+  { label: 'Year-End', icon: CalendarClock, key: 'distribution/year-end' },
 ];
 
 function SectionTitle({ title }: { title: string }) {
@@ -143,8 +143,8 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <SectionTitle title="Action required" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile icon={UserCheck} count={memberCount} label="Membership requests" tone="accent" onPress={() => go('membership-approvals')} />
-        <StatTile icon={Coins} count={loanCount} label="Loan decisions" tone="warn" onPress={() => go('loan-decisions')} />
+        <StatTile icon={UserCheck} count={memberCount} label="Membership requests" tone="accent" onPress={() => go('members/approvals')} />
+        <StatTile icon={Coins} count={loanCount} label="Loan decisions" tone="warn" onPress={() => go('loans/decisions')} />
         <StatTile icon={AlertTriangle} count={penaltyCount} label="Penalties to review" tone="danger" onPress={() => go('penalties')} />
       </View>
 

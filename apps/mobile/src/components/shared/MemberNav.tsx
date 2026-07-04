@@ -15,13 +15,13 @@ export function MemberNav() {
         { label: 'Group feed', icon: MessageCircle, soon: true },
       ] }}
       services={{ title: 'My tools', items: [
-        { label: 'My ledger', icon: ScrollText, route: 'ledger' },
+        { label: 'My ledger', icon: ScrollText, route: 'reports/ledger' },
         { label: 'My statements', icon: FileText, soon: true },
       ] }}
       add={{ title: 'What would you like to do?', items: [
-        { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contribute' },
-        { label: 'Request a loan', icon: Coins, route: 'request-loan' },
-        { label: 'Repay a loan', icon: Repeat, route: 'repay' },
+        { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
+        { label: 'Request a loan', icon: Coins, route: 'loans/request' },
+        { label: 'Repay a loan', icon: Repeat, route: 'loans/repay' },
       ] }}
       more={{ title: 'More', items: [
         { label: 'Group members', icon: Users, soon: true },

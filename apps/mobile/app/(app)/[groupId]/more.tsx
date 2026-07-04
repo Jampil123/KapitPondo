@@ -14,12 +14,12 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 
 const ITEMS = [
-  { icon: SlidersHorizontal, label: 'Configure Cycle', key: 'configure-cycle' },
-  { icon: UserCheck, label: 'Membership Approvals', key: 'membership-approvals' },
-  { icon: Users, label: 'Members & Officers', key: 'members-officers' },
-  { icon: Coins, label: 'Loan Decisions', key: 'loan-decisions' },
+  { icon: SlidersHorizontal, label: 'Configure Cycle', key: 'cycles/configure' },
+  { icon: UserCheck, label: 'Membership Approvals', key: 'members/approvals' },
+  { icon: Users, label: 'Members & Officers', key: 'members/officers' },
+  { icon: Coins, label: 'Loan Decisions', key: 'loans/decisions' },
   { icon: AlertTriangle, label: 'Penalties', key: 'penalties' },
-  { icon: CalendarClock, label: 'Year-End', key: 'year-end' },
+  { icon: CalendarClock, label: 'Year-End', key: 'distribution/year-end' },
 ];
 
 function Row({ icon: Icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {

@@ -21,15 +21,15 @@ export function OrganizerNav() {
         { label: 'My statements', icon: FileText, soon: true },
       ] }}
       add={{ title: 'Create new', items: [
-        { label: 'Configure cycle', icon: SlidersHorizontal, route: 'configure-cycle' },
-        { label: 'Approve members', icon: UserCheck, route: 'membership-approvals' },
-        { label: 'Loan decision', icon: Coins, route: 'loan-decisions' },
+        { label: 'Configure cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
+        { label: 'Approve members', icon: UserCheck, route: 'members/approvals' },
+        { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
         { label: 'Record expense', icon: Receipt, soon: true },
       ] }}
       more={{ title: 'More', subtitle: 'Manage & account', items: [
-        { label: 'Group settings', icon: SlidersHorizontal, route: 'configure-cycle' },
-        { label: 'Manage officers', icon: Users, route: 'members-officers' },
-        { label: 'Year-end distribution', icon: CalendarClock, route: 'year-end' },
+        { label: 'Group settings', icon: SlidersHorizontal, route: 'cycles/configure' },
+        { label: 'Manage officers', icon: Users, route: 'members/officers' },
+        { label: 'Year-end distribution', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Repeat, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}

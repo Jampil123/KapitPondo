@@ -26,7 +26,7 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 
 
 function SectionTitle({ title }: { title: string }) {
-  return <Text variant="h3" style={{ fontSize: 15, marginTop: 22, marginBottom: 12 }}>{title}</Text>;
+  return <Text variant="h3" style={{ fontSize: 15}}>{title}</Text>;
 }
 
 function Hero({ groupId }: { groupId: string }) {
@@ -78,11 +78,11 @@ function Hero({ groupId }: { groupId: string }) {
 }
 
 const ACTIONS: { label: string; icon: any; route: string }[] = [
-  { label: 'Submit Contribution', icon: ArrowUpCircle, route: 'contribute' },
-  { label: 'Request Loan', icon: Coins, route: 'request-loan' },
-  { label: 'Repay Loan', icon: Repeat, route: 'repay' },
-  { label: 'My Ledger', icon: ScrollText, route: 'ledger' },
-  { label: 'Reports', icon: BarChart3, route: 'ledger' },
+  { label: 'Submit Contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
+  { label: 'Request Loan', icon: Coins, route: 'loans/request' },
+  { label: 'Repay Loan', icon: Repeat, route: 'loans/repay' },
+  { label: 'My Ledger', icon: ScrollText, route: 'reports/ledger' },
+  { label: 'Reports', icon: BarChart3, route: 'reports/ledger' },
 ];
 
 export function MemberDashboard({ groupId }: { groupId: string }) {
