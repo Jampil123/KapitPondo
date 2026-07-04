@@ -18,6 +18,8 @@ import { useAuth } from '@/context/AuthContext';
 import { DashboardShell } from '@/features/dashboard/DashboardShell';
 import { OrganizerNav } from '@/components/shared/OrganizerNav';
 import { MemberNav } from '@/components/shared/MemberNav';
+import { TreasurerNav } from '@/components/shared/TreasurerNav';
+import { AuditorNav } from '@/components/shared/AuditorNav';
 import { DashboardHeader } from '@/components/shared/DashboardHeader';
 import { OwnerDashboard } from '@/features/dashboard/OwnerDashboard';
 import { TreasurerDashboard } from '@/features/dashboard/TreasurerDashboard';
@@ -100,7 +102,7 @@ export default function GroupDashboard() {
       group={group}
       role={role}
       header={<DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />}
-      bottomBar={role === 'owner' ? <OrganizerNav /> : role === 'member' ? <MemberNav /> : undefined}
+      bottomBar={role === 'owner' ? <OrganizerNav /> : role === 'treasurer' ? <TreasurerNav /> : role === 'auditor' ? <AuditorNav /> : role === 'member' ? <MemberNav /> : undefined}
     >
       {role === 'owner' && <OwnerDashboard groupId={groupId!} />}
       {role === 'treasurer' && <TreasurerDashboard groupId={groupId!} />}

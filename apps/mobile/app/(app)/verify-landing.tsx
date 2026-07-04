@@ -1,6 +1,9 @@
 /**
- * app/(auth)/verify-landing.tsx — "You're in!" verify-now / do-it-later fork
+ * app/(app)/verify-landing.tsx — "You're in!" verify-now / do-it-later fork
  * (prototype screen 4). Verify Now → identity; Do it later → app dashboard.
+ * Lives under (app), not (auth) — this screen is shown to an already
+ * signed-in user (right after OTP confirms), so it must not be under (auth)
+ * or the root auth-guard bounces it straight back to /(app)/groups.
  *
  * NOTE: the prototype's benefit copy (savings account, credit card, ₱250k loans,
  * wallet limits) is generic fintech text and does NOT match KapitPondo's actual
@@ -12,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import {
   BadgeCheck, Gift, ChevronRight, ShieldCheck, Sparkles,
-  IdCard, Video, Pencil, Landmark, CreditCard, Banknote, Wallet,
+  IdCard, Camera, Pencil, Landmark, CreditCard, Banknote, Wallet,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -21,7 +24,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 
 const STEPS = [
   { icon: IdCard, title: 'Submit an ID', sub: 'A valid government-issued ID' },
-  { icon: Video, title: 'Record a Video', sub: 'A quick selfie video for liveness' },
+  { icon: Camera, title: 'Take a Selfie', sub: 'A quick selfie photo for verification' },
   { icon: Pencil, title: 'Enter your Information', sub: 'Confirm your personal details' },
 ];
 const BENEFITS = [
@@ -91,7 +94,7 @@ export default function VerifyLanding() {
           ))}
         </View>
 
-        <Button label="Verify Now" onPress={() => router.push('/(auth)/identity')} leading={<ShieldCheck size={18} color="#fff" />} />
+        <Button label="Verify Now" onPress={() => router.push('/(app)/identity' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
         <View style={{ alignItems: 'center', marginTop: 16 }}>
           <Button
             label="Do it later"

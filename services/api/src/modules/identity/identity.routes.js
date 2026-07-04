@@ -17,7 +17,12 @@ router.get('/me/profile', requireAuth, async (req, res, next) => {
 // Submit / resubmit identity document
 router.post('/me/identity', requireAuth, async (req, res, next) => {
   try {
-    const { id_document_url, full_name, phone } = req.body;
+    const {
+      id_document_url, full_name, phone, id_type, selfie_url, email,
+      first_name, middle_name, last_name, birthday,
+      nationality, region, province, city, barangay, street_address, zip_code,
+      source_of_funds, employment_status, occupation,
+    } = req.body;
     if (!id_document_url) {
       return res.status(400).json({ error: 'id_document_url is required' });
     }
@@ -26,6 +31,23 @@ router.post('/me/identity', requireAuth, async (req, res, next) => {
       idDocumentUrl: id_document_url,
       fullName: full_name,
       phone,
+      idType: id_type,
+      selfieUrl: selfie_url,
+      email,
+      firstName: first_name,
+      middleName: middle_name,
+      lastName: last_name,
+      birthday,
+      nationality,
+      region,
+      province,
+      city,
+      barangay,
+      streetAddress: street_address,
+      zipCode: zip_code,
+      sourceOfFunds: source_of_funds,
+      employmentStatus: employment_status,
+      occupation,
     });
     if (!member) {
       return res.status(409).json({ error: 'Cannot submit — already verified, or member not found' });

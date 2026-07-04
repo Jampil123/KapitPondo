@@ -70,7 +70,7 @@ export function GroupSheetNav({ chat, services, add, more }: { chat: SheetConfig
             <Plus size={28} color="#fff" strokeWidth={2.4} />
           </Pressable>
         </View>
-        <NavItem icon={User} label="Profile" onPress={() => router.push('/(app)/groups/profile')} />
+        <NavItem icon={User} label="Profile" onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
         <NavItem icon={MoreHorizontal} label="More" onPress={() => setActive(more)} />
       </View>
 

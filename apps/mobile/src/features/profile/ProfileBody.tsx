@@ -1,0 +1,89 @@
+/**
+ * features/profile/ProfileBody.tsx
+ * ----------------------------------------------------------------------------
+ * Shared profile content: avatar card, verification status + "Verify now"
+ * prompt when unverified, settings placeholders, and Sign Out. Reused by both
+ * the account-level profile screen (groups/profile.tsx, its own BottomNav)
+ * and the group-scoped one ([groupId]/profile.tsx, the group's own nav bar).
+ */
+import { View, ScrollView, Pressable, Alert } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut } from 'lucide-react-native';
+import { Text } from '@/components/ui/Text';
+import { Button } from '@/components/ui/Button';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { semantic, shadowToken } from '@/theme/colors';
+import { formatPH } from '@/lib/phone';
+import { useAuth } from '@/context/AuthContext';
+
+function initialsOf(name?: string | null) {
+  if (!name) return 'K';
+  return name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'K';
+}
+
+function Row({ icon: Icon, label, onPress }: { icon: any; label: string; onPress?: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
+      <Icon size={20} color={semantic.brandDark} />
+      <Text variant="body" style={{ flex: 1 }}>{label}</Text>
+      <ChevronRight size={18} color={semantic.textMuted} />
+    </Pressable>
+  );
+}
+
+export function ProfileBody() {
+  const router = useRouter();
+  const { member, signOut } = useAuth();
+  const verified = member?.verification_status === 'verified';
+
+  function confirmSignOut() {
+    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
+
+  return (
+    <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 20 }}>
+      <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 20, alignItems: 'center', gap: 6 }, shadowToken.card]}>
+        <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: semantic.textPrimary, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 24 }}>{initialsOf(member?.full_name)}</Text>
+        </View>
+        <Text variant="h2" style={{ fontSize: 19 }}>{member?.full_name ?? 'Your account'}</Text>
+        {member?.phone ? <Text variant="body" color="secondary">{formatPH(member.phone)}</Text> : null}
+        <View style={{ marginTop: 8 }}>
+          <StatusBadge entity="verification" value={member?.verification_status} />
+        </View>
+      </View>
+
+      {!verified && (
+        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, gap: 12 }, shadowToken.card]}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <ShieldCheck size={22} color={semantic.brandDark} />
+            <View style={{ flex: 1 }}>
+              <Text variant="label">Verify your identity</Text>
+              <Text variant="caption" color="secondary">Unlock creating groups, requesting loans, and officer roles.</Text>
+            </View>
+          </View>
+          <Button label="Verify now" onPress={() => router.push('/(app)/identity' as any)} />
+        </View>
+      )}
+
+      <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+        <Row icon={Bell} label="Notifications" onPress={() => {}} />
+        <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
+        <Row icon={Lock} label="Privacy & Security" onPress={() => {}} />
+        <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
+        <Row icon={HelpCircle} label="Help & Support" onPress={() => {}} />
+      </View>
+
+      <Pressable
+        onPress={confirmSignOut}
+        style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 13, borderWidth: 1.5, borderColor: semantic.border }}
+      >
+        <LogOut size={18} color="#C25C5E" />
+        <Text variant="label" style={{ color: '#C25C5E' }}>Sign Out</Text>
+      </Pressable>
+    </ScrollView>
+  );
+}

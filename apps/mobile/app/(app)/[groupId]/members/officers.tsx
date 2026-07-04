@@ -25,7 +25,9 @@ import type { GroupRole } from '@/constants/roles';
 type Row = { id: string; name: string; role: GroupRole; heads: number };
 function normalize(m: any): Row {
   return {
-    id: m?.id ?? m?.member_id ?? m?.membership_id,
+    // role/remove endpoints take the MEMBER id (members/:memberId/role), not the
+    // membership row's own id — member_id must win here.
+    id: m?.member_id ?? m?.members?.id ?? m?.member?.id ?? m?.id,
     name: m?.full_name ?? m?.name ?? m?.members?.full_name ?? m?.member?.full_name ?? 'Member',
     role: (m?.role ?? 'member') as GroupRole,
     heads: m?.heads ?? 1,
@@ -38,7 +40,7 @@ export default function MembersOfficers() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [filter, setFilter] = useState<Filter>('all');
 
-  const { data, loading, refetch } = useQuery(() => listMembers(groupId!) as Promise<any[]>, [groupId]);
+  const { data, loading, refetch } = useQuery(() => listMembers(groupId!), [groupId]);
   const changeRole = useAction((id: string, role: GroupRole) => setMemberRole(groupId!, id, role));
 
   const rows = useMemo(() => (Array.isArray(data) ? data.map(normalize) : []), [data]);

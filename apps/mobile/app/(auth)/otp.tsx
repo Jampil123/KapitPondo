@@ -36,7 +36,7 @@ export default function Otp() {
     setLoading(true);
     try {
       await confirmOtp(phone, code);
-      router.replace('/(auth)/verify-landing'); // verify-now / do-it-later fork
+      router.replace('/(app)/verify-landing' as any); // verify-now / do-it-later fork
     } catch (e) {
       Alert.alert('Verification failed', (e as Error).message);
     } finally {

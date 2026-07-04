@@ -21,6 +21,22 @@ export interface Member {
   is_system_admin: boolean;
   verification_status: VerificationStatus;
   id_document_url: string | null;
+  id_type: string | null;
+  selfie_url: string | null;
+  first_name: string | null;
+  middle_name: string | null;
+  last_name: string | null;
+  birthday: string | null;
+  nationality: string | null;
+  region: string | null;
+  province: string | null;
+  city: string | null;
+  barangay: string | null;
+  street_address: string | null;
+  zip_code: string | null;
+  source_of_funds: string | null;
+  employment_status: string | null;
+  occupation: string | null;
   created_at: string;
 }
 
@@ -34,6 +50,23 @@ export interface SubmitIdentityInput {
   id_document_url: string;
   full_name?: string;
   phone?: string;
+  id_type?: string;
+  selfie_url?: string;
+  email?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  birthday?: string;
+  nationality?: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  barangay?: string;
+  street_address?: string;
+  zip_code?: string;
+  source_of_funds?: string;
+  employment_status?: string;
+  occupation?: string;
 }
 
 /**

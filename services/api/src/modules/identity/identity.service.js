@@ -1,7 +1,12 @@
 const supabase = require('../../config/supabase');
 
 // Member submits (or resubmits) their identity document → status becomes 'pending'
-async function submitDocument({ memberId, idDocumentUrl, fullName, phone }) {
+async function submitDocument({
+  memberId, idDocumentUrl, fullName, phone, idType, selfieUrl, email,
+  firstName, middleName, lastName, birthday,
+  nationality, region, province, city, barangay, streetAddress, zipCode,
+  sourceOfFunds, employmentStatus, occupation,
+}) {
   const update = {
     id_document_url: idDocumentUrl,
     verification_status: 'pending',
@@ -9,14 +14,37 @@ async function submitDocument({ memberId, idDocumentUrl, fullName, phone }) {
   };
   if (fullName) update.full_name = fullName;
   if (phone) update.phone = phone;
+  if (idType) update.id_type = idType;
+  if (selfieUrl) update.selfie_url = selfieUrl;
+  if (email) update.email = email;
+  if (firstName) update.first_name = firstName;
+  if (middleName) update.middle_name = middleName;
+  if (lastName) update.last_name = lastName;
+  if (birthday) update.birthday = birthday;
+  if (firstName || lastName) {
+    update.full_name = [firstName, middleName, lastName].filter(Boolean).join(' ') || fullName;
+  }
+  if (nationality) update.nationality = nationality;
+  if (region) update.region = region;
+  if (province) update.province = province;
+  if (city) update.city = city;
+  if (barangay) update.barangay = barangay;
+  if (streetAddress) update.street_address = streetAddress;
+  if (zipCode) update.zip_code = zipCode;
+  if (sourceOfFunds) update.source_of_funds = sourceOfFunds;
+  if (employmentStatus) update.employment_status = employmentStatus;
+  if (occupation) update.occupation = occupation;
 
+  // .single() throws (rather than returning null) when 0 rows match, which
+  // broke the intended 409 "already verified/pending" response below —
+  // .maybeSingle() returns null instead so that check actually runs.
   const { data, error } = await supabase
     .from('members')
     .update(update)
     .eq('id', memberId)
     .in('verification_status', ['unverified', 'rejected']) // can't resubmit once verified
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
   return data;
 }

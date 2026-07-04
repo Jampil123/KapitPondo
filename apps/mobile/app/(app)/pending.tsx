@@ -1,7 +1,9 @@
 /**
- * app/(auth)/pending.tsx — "Verification in Progress" (prototype screen 7).
+ * app/(app)/pending.tsx — "Verification in Progress" (prototype screen 7).
  * Shown after submitting an ID. "Got It" continues into the app on a Basic
  * account; verification completes asynchronously (Sysadmin reviews on web).
+ * Lives under (app) — shown to an already signed-in user; must not be under
+ * (auth) or the root auth-guard bounces it back to /(app)/groups.
  */
 import { useEffect, useRef } from 'react';
 import { Platform, View, ScrollView, Animated, Easing } from 'react-native';

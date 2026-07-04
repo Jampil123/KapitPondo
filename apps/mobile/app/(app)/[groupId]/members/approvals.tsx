@@ -23,7 +23,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listPendingMembers, approveMember, rejectMember } from '@/api/groups';
 
-type PendingRow = { id: string; name: string; date: string | null; code: string | null };
+type PendingRow = { id: string; name: string; date: string | null; code: string | null; verification: string | null };
 
 function normalize(item: any): PendingRow {
   return {
@@ -33,6 +33,7 @@ function normalize(item: any): PendingRow {
     name: item?.full_name ?? item?.name ?? item?.members?.full_name ?? item?.member?.full_name ?? 'Member',
     date: item?.created_at ?? item?.joined_at ?? null,
     code: item?.fund_code ?? item?.groups?.fund_code ?? null,
+    verification: item?.verification_status ?? item?.members?.verification_status ?? item?.member?.verification_status ?? null,
   };
 }
 
@@ -122,9 +123,10 @@ export default function MembershipApprovals() {
                   <Avatar name={r.name} size={46} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text variant="label" style={{ fontSize: 15 }}>{r.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       {r.date ? <Text variant="caption" color="secondary">Joined {shortDate(r.date)}</Text> : null}
                       {r.code ? <StatusBadge entity="role" value="member" labelOverride={r.code} /> : null}
+                      {r.verification ? <StatusBadge entity="verification" value={r.verification} /> : null}
                     </View>
                   </View>
                 </View>
