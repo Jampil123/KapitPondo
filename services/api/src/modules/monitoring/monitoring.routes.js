@@ -6,6 +6,12 @@ const service = require('./monitoring.service');
 
 // All monitoring routes are System Administrator only.
 
+// Confirms the caller is a system admin, and returns their identity for the
+// admin console's sidebar. requireSystemAdmin 403s anyone who isn't.
+router.get('/admin/me', requireAuth, requireSystemAdmin, async (req, res) => {
+  res.json({ user_id: req.member.id, email: req.member.email });
+});
+
 // Platform overview — the headline dashboard numbers
 router.get('/admin/monitoring/overview', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {

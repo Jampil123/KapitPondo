@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+/* Arctic Pearl tokens (mirror packages/shared/theme/colors.ts) → Tailwind utilities like bg-bg, text-ink, border-line */
+@theme {
+  --color-bg: #F7FBFD;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #EAF2F6;
+  --color-line: #E4EDF2;
+  --color-line-strong: #D6E6EF;
+  --color-brand: #7FA6B8;
+  --color-brand-dark: #5E8497;
+  --color-ink: #2A3E4B;
+  --color-secondary: #6F8A99;
+  --color-muted: #9DB2BE;
+  --color-success: #3E8E66;
+  --color-success-bg: #E2F0E8;
+  --color-danger: #C25C5E;
+  --color-danger-bg: #F7E5E5;
+  --color-warning: #A87C2C;
+  --color-warning-bg: #F8EFDA;
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+}
+
+html, body, #root { height: 100%; }
+body { background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }

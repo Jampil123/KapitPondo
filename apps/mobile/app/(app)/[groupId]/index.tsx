@@ -6,6 +6,7 @@
  *   - not a member of this group           → "no access"
  *   - joined but not yet approved (pending) → "waiting for approval"
  */
+import { useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -16,10 +17,6 @@ import { AppBar } from '@/components/shared/AppBar';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
 import { DashboardShell } from '@/features/dashboard/DashboardShell';
-import { OrganizerNav } from '@/components/shared/OrganizerNav';
-import { MemberNav } from '@/components/shared/MemberNav';
-import { TreasurerNav } from '@/components/shared/TreasurerNav';
-import { AuditorNav } from '@/components/shared/AuditorNav';
 import { DashboardHeader } from '@/components/shared/DashboardHeader';
 import { OwnerDashboard } from '@/features/dashboard/OwnerDashboard';
 import { TreasurerDashboard } from '@/features/dashboard/TreasurerDashboard';
@@ -40,8 +37,21 @@ function Centered({ children }: { children: React.ReactNode }) {
 export default function GroupDashboard() {
   const router = useRouter();
   const { group, role, groupId, membership } = useActiveGroup();
-  const { loading } = useGroups();
+  const { loading, refresh } = useGroups();
   const { member } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Each dashboard's data hooks live inside its own component tree, so
+  // rather than threading refetch callbacks through every nested piece,
+  // bumping `refreshKey` remounts the active dashboard — every hook inside
+  // it (useSummary, useLoans, etc.) refetches fresh, same end result.
+  async function onRefresh() {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    await refresh();
+    setRefreshing(false);
+  }
 
   // Groups list still loading and we don't have this group resolved yet.
   if (loading && !membership) {
@@ -102,12 +112,13 @@ export default function GroupDashboard() {
       group={group}
       role={role}
       header={<DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />}
-      bottomBar={role === 'owner' ? <OrganizerNav /> : role === 'treasurer' ? <TreasurerNav /> : role === 'auditor' ? <AuditorNav /> : role === 'member' ? <MemberNav /> : undefined}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
     >
-      {role === 'owner' && <OwnerDashboard groupId={groupId!} />}
-      {role === 'treasurer' && <TreasurerDashboard groupId={groupId!} />}
-      {role === 'auditor' && <AuditorDashboard groupId={groupId!} />}
-      {role === 'member' && <MemberDashboard groupId={groupId!} />}
+      {role === 'owner' && <OwnerDashboard key={refreshKey} groupId={groupId!} />}
+      {role === 'treasurer' && <TreasurerDashboard key={refreshKey} groupId={groupId!} />}
+      {role === 'auditor' && <AuditorDashboard key={refreshKey} groupId={groupId!} />}
+      {role === 'member' && <MemberDashboard key={refreshKey} groupId={groupId!} />}
     </DashboardShell>
   );
 }

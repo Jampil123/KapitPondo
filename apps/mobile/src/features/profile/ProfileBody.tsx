@@ -6,7 +6,8 @@
  * the account-level profile screen (groups/profile.tsx, its own BottomNav)
  * and the group-scoped one ([groupId]/profile.tsx, the group's own nav bar).
  */
-import { View, ScrollView, Pressable, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -35,12 +36,32 @@ export function ProfileBody() {
   const router = useRouter();
   const { member, signOut } = useAuth();
   const verified = member?.verification_status === 'verified';
+  const [signingOut, setSigningOut] = useState(false);
 
   function confirmSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: () => {
+          // Sign out clears `member` to null right away, but the redirect to
+          // the landing screen only fires a moment later — without this, the
+          // profile briefly re-renders with everything reset to its empty
+          // fallback (name, avatar, phone) before the screen navigates away.
+          setSigningOut(true);
+          signOut();
+        },
+      },
     ]);
+  }
+
+  if (signingOut) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={semantic.brand} />
+      </View>
+    );
   }
 
   return (
