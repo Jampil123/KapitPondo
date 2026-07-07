@@ -28,11 +28,10 @@ router.get('/admin/monitoring/groups', requireAuth, requireSystemAdmin, async (r
   } catch (err) { next(err); }
 });
 
-// System-wide audit feed
+// System-wide (sysadmin) audit feed
 router.get('/admin/monitoring/audit', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
     const audit = await service.auditFeed({
-      groupId: req.query.group_id,
       action: req.query.action,
       limit: req.query.limit ? Number(req.query.limit) : 100,
     });

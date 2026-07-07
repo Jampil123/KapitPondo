@@ -1,5 +1,16 @@
 const supabase = require('../../config/supabase');
 
+// One immutable row per sysadmin decision (system_audit_log — migration 0017).
+async function writeAudit(actorId, action, targetId, metadata) {
+  await supabase.from('system_audit_log').insert({
+    actor_id: actorId,
+    action,
+    target_type: 'account',
+    target_id: targetId,
+    metadata,
+  });
+}
+
 // Member submits (or resubmits) their identity document → status becomes 'pending'
 async function submitDocument({
   memberId, idDocumentUrl, fullName, phone, idType, selfieUrl, email,
@@ -49,26 +60,35 @@ async function submitDocument({
   return data;
 }
 
-// Sysadmin: list members by verification status (default: pending queue)
+// Sysadmin: list members by verification status (default: pending queue).
+// status === 'all' returns every member regardless of verification status.
 async function listForReview(status = 'pending') {
-  const { data, error } = await supabase
+  let q = supabase
     .from('members')
-    .select('id, full_name, email, phone, id_document_url, verification_status, created_at')
-    .eq('verification_status', status)
+    .select('id, full_name, email, phone, id_document_url, verification_status, created_at, id_type, city, province')
     .order('created_at', { ascending: true });
+  if (status !== 'all') q = q.eq('verification_status', status);
+  const { data, error } = await q;
   if (error) throw error;
   return data;
 }
 
-async function getMember(id) {
+// `actorAuthId` is only passed when a sysadmin is inspecting another member's
+// record (the admin detail view) — the member's own getMyProfile() call
+// doesn't log anything. system_audit_log.actor_id references auth.users(id),
+// not members(id), so this must be the auth user id, not the member row id.
+async function getMember(id, actorAuthId) {
   const { data, error } = await supabase
     .from('members').select('*').eq('id', id).single();
   if (error) throw error;
+  if (actorAuthId) await writeAudit(actorAuthId, 'account.id_viewed', id, null);
   return data;
 }
 
-// Sysadmin approves a member
-async function approveMember({ memberId, reviewerId }) {
+// Sysadmin approves a member. `reviewerId` (members.id) fills the members
+// table's own verified_by column; `actorAuthId` (auth.users.id) is the actor
+// on the system_audit_log row — two different id spaces.
+async function approveMember({ memberId, reviewerId, actorAuthId }) {
   const { data, error } = await supabase
     .from('members')
     .update({
@@ -81,11 +101,13 @@ async function approveMember({ memberId, reviewerId }) {
     .select()
     .single();
   if (error) throw error;
+  if (data) await writeAudit(actorAuthId, 'account.verified', memberId, { before: 'pending', after: 'verified' });
   return data;
 }
 
-// Sysadmin rejects a member (they may resubmit)
-async function rejectMember({ memberId }) {
+// Sysadmin rejects a member (they may resubmit). `reason` has no dedicated
+// column on members (none exists), so it's recorded on the audit row instead.
+async function rejectMember({ memberId, actorAuthId, reason }) {
   const { data, error } = await supabase
     .from('members')
     .update({ verification_status: 'rejected' })
@@ -94,6 +116,7 @@ async function rejectMember({ memberId }) {
     .select()
     .single();
   if (error) throw error;
+  if (data) await writeAudit(actorAuthId, 'account.rejected', memberId, { reason: reason ?? null });
   return data;
 }
 

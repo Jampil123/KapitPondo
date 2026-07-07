@@ -12,6 +12,8 @@ import { LoginPage } from './features/auth/LoginPage';
 import { OverviewPage } from './features/overview/OverviewPage';
 import { VerificationsPage } from './features/verifications/VerificationsPage';
 import { AuditPage } from './features/audit/AuditPage';
+import { GroupsPage } from './features/groups/GroupsPage';
+import { SettingsPage } from './features/settings/SettingsPage';
 
 function Loader() {
   return <div className="flex h-full items-center justify-center text-muted text-sm">Loading…</div>;
@@ -57,7 +59,9 @@ export default function App() {
       >
         <Route index element={<OverviewPage />} />
         <Route path="verifications" element={<VerificationsPage />} />
+        <Route path="groups" element={<GroupsPage />} />
         <Route path="audit" element={<AuditPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

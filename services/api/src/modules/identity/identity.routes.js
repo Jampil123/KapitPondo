@@ -69,7 +69,7 @@ router.get('/admin/verifications', requireAuth, requireSystemAdmin, async (req, 
 // Inspect one member's full record
 router.get('/admin/verifications/:id', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
-    const member = await service.getMember(req.params.id);
+    const member = await service.getMember(req.params.id, req.authUser.id);
     res.json({ member });
   } catch (err) { next(err); }
 });
@@ -80,6 +80,7 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireSystemAdmin,
     const member = await service.approveMember({
       memberId: req.params.id,
       reviewerId: req.member.id,
+      actorAuthId: req.authUser.id,
     });
     if (!member) {
       return res.status(409).json({ error: 'Member is not pending verification' });
@@ -91,7 +92,11 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireSystemAdmin,
 // Reject
 router.post('/admin/verifications/:id/reject', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
-    const member = await service.rejectMember({ memberId: req.params.id });
+    const member = await service.rejectMember({
+      memberId: req.params.id,
+      actorAuthId: req.authUser.id,
+      reason: req.body?.reason,
+    });
     if (!member) {
       return res.status(409).json({ error: 'Member is not pending verification' });
     }

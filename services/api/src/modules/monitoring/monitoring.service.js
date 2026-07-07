@@ -12,14 +12,16 @@ async function groupsOverview() {
   return data;
 }
 
-// System-wide audit feed, with optional filters
-async function auditFeed({ groupId, action, limit = 100 }) {
+// System-wide (sysadmin) audit feed — account verify/reject/id-view decisions.
+// system_audit_log.actor_id references auth.users(id), not members(id), so it
+// can't be embedded the way group-side audit_log's actor_id can; the admin
+// console only ever displays a truncated raw id, so no join is needed.
+async function auditFeed({ action, limit = 100 }) {
   let q = supabase
-    .from('audit_log')
-    .select('*, members:actor_id(full_name)')
+    .from('system_audit_log')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(limit);
-  if (groupId) q = q.eq('group_id', groupId);
   if (action) q = q.eq('action', action);
   const { data, error } = await q;
   if (error) throw error;
