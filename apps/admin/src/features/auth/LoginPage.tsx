@@ -7,6 +7,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, PieChart, BarChart3, Sparkles } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { TextField } from '../../components/ui/TextField';
+import { ErrorBanner } from '../../components/ui/ErrorBanner';
+import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { Checkbox } from '../../components/ui/Checkbox';
 import leftBackground from '../../assets/images/left-background.png';
 
 const FEATURES = [
@@ -88,39 +92,39 @@ export function LoginPage() {
             <h2 className="text-4xl font-bold text-brand leading-tight">KapitPondo Team</h2>
             <p className="text-secondary mt-3 mb-8">Sign in to continue to the administrator dashboard.</p>
 
-            {err && <div className="mb-4 rounded-lg bg-danger-bg text-danger text-sm px-3 py-2">{err}</div>}
+            {err && <ErrorBanner>{err}</ErrorBanner>}
 
             <label className="block text-xs font-semibold text-secondary mb-1.5">Email Address</label>
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface-alt px-3.5 py-3 focus-within:ring-2 focus-within:ring-brand">
-              <Mail size={18} className="text-muted" />
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required placeholder="you@kapitpondo.ph"
-                     className="flex-1 bg-transparent text-sm text-ink outline-none" />
+            <div className="mb-4">
+              <TextField icon={Mail} value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
+                         placeholder="you@kapitpondo.ph" />
             </div>
 
             <label className="block text-xs font-semibold text-secondary mb-1.5">Password</label>
-            <div className="mb-4 flex items-center gap-2 rounded-xl bg-surface-alt px-3.5 py-3 focus-within:ring-2 focus-within:ring-brand">
-              <Lock size={18} className="text-muted" />
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type={show ? 'text' : 'password'} required placeholder="Enter your password"
-                     className="flex-1 bg-transparent text-sm text-ink outline-none" />
-              <button type="button" onClick={() => setShow((v) => !v)} className="text-muted">
-                {show ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
+            <div className="mb-4">
+              <TextField
+                icon={Lock}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                type={show ? 'text' : 'password'}
+                required
+                placeholder="Enter your password"
+                endAdornment={
+                  <button type="button" onClick={() => setShow((v) => !v)} className="text-muted">
+                    {show ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                }
+              />
             </div>
 
             <div className="flex items-center justify-between mb-6">
-              <button type="button" onClick={() => setRemember((v) => !v)} className="flex items-center gap-2.5 text-sm text-secondary">
-                <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${remember ? 'bg-ink border-ink' : 'border-line-strong'}`}>
-                  {remember && <Check14 />}
-                </span>
-                Remember me
-              </button>
+              <Checkbox checked={remember} onChange={setRemember} label="Remember me" />
               <span className="text-sm font-semibold text-brand-dark cursor-default">Forgot password?</span>
             </div>
 
-            <button disabled={busy}
-                    className="w-full rounded-xl bg-ink py-4 text-base font-semibold text-white hover:opacity-95 disabled:opacity-60 shadow-lg">
-              {busy ? 'Signing in…' : 'Sign in'}
-            </button>
+            <PrimaryButton disabled={busy} busy={busy} busyLabel="Signing in…">
+              Sign in
+            </PrimaryButton>
 
             <div className="flex items-center justify-center gap-2 mt-6">
               <Lock size={14} className="text-muted" />
@@ -130,13 +134,5 @@ export function LoginPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Check14() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="20 6 9 17 4 12" />
-    </svg>
   );
 }

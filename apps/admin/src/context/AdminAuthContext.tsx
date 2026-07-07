@@ -11,7 +11,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { api } from '../lib/api';
 
-type AdminMe = { user_id: string; email?: string };
+export type AdminMe = { user_id: string; email?: string };
 
 type AdminAuthValue = {
   session: Session | null;
@@ -28,6 +28,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [admin, setAdmin] = useState<AdminMe | null>(null);
   const [loading, setLoading] = useState(true);
+  const [resolving, setResolving] = useState(false);
 
   async function resolveAdmin(s: Session | null) {
     if (!s) { setAdmin(null); return; }
@@ -47,8 +48,10 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
     const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
+      setResolving(true);
       setSession(s);
       await resolveAdmin(s);
+      setResolving(false);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -64,7 +67,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ session, admin, loading, isSysadmin: !!admin, signIn, signOut }}>
+    <Ctx.Provider value={{ session, admin, loading: loading || resolving, isSysadmin: !!admin, signIn, signOut }}>
       {children}
     </Ctx.Provider>
   );
