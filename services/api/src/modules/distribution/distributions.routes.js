@@ -41,7 +41,7 @@ router.post(
         period,
         declaredBy: req.member.id,
       });
-      const allocations = await service.getAllocations(distribution.id);
+      const allocations = await service.getAllocations(distribution.id, { role: req.membership.role, membershipId: req.membership.id });
       res.status(201).json({ distribution, allocations });
     } catch (err) {
       if (err.message && err.message.includes('Nothing to distribute')) {
@@ -76,7 +76,7 @@ router.get(
       if (distribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Distribution does not belong to this group' });
       }
-      const allocations = await service.getAllocations(distribution.id);
+      const allocations = await service.getAllocations(distribution.id, { role: req.membership.role, membershipId: req.membership.id });
       res.json({ distribution, allocations });
     } catch (err) { next(err); }
   }

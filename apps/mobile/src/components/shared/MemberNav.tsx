@@ -24,7 +24,7 @@ export function MemberNav() {
         { label: 'Repay a loan', icon: Repeat, route: 'loans/repay' },
       ] }}
       more={{ title: 'More', items: [
-        { label: 'Group members', icon: Users, soon: true },
+        { label: 'Group & officers', icon: Users, route: 'group' },
         { label: 'Switch group', icon: Switch, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}

@@ -35,8 +35,12 @@ export function useLoans(groupId: string, filters: { status?: LoanStatus } = {})
   return useQuery(fn, [groupId, filters.status]);
 }
 
-export function useLoan(groupId: string, loanId: string) {
-  const fn = useCallback(() => getLoan(groupId, loanId), [groupId, loanId]);
+/** Loan + payments. Safe to call with no loanId yet (e.g. still resolving which loan is active). */
+export function useLoan(groupId: string, loanId?: string) {
+  const fn = useCallback(
+    () => (loanId ? getLoan(groupId, loanId) : Promise.resolve(null)),
+    [groupId, loanId],
+  );
   return useQuery(fn, [groupId, loanId]);
 }
 

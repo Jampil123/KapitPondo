@@ -12,6 +12,7 @@ import { useCallback } from 'react';
 import { useQuery } from '../../hooks/useApi';
 import {
   getSummary,
+  getFundSummary,
   getMemberBalances,
   getLedger,
   getMyBalance,
@@ -20,6 +21,12 @@ import {
 
 export function useSummary(groupId: string) {
   const fn = useCallback(() => getSummary(groupId), [groupId]);
+  return useQuery(fn, [groupId]);
+}
+
+/** Member-safe aggregate fund snapshot (any role) — the Fund tile. */
+export function useFundSummary(groupId: string) {
+  const fn = useCallback(() => getFundSummary(groupId), [groupId]);
   return useQuery(fn, [groupId]);
 }
 

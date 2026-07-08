@@ -31,8 +31,12 @@ export function useDistributions(groupId: string) {
   return useQuery(fn, [groupId]);
 }
 
-export function useDistribution(groupId: string, id: string) {
-  const fn = useCallback(() => getDistribution(groupId, id), [groupId, id]);
+/** Safe to call with no id yet (e.g. still resolving which distribution is latest). */
+export function useDistribution(groupId: string, id?: string) {
+  const fn = useCallback(
+    () => (id ? getDistribution(groupId, id) : Promise.resolve(null)),
+    [groupId, id],
+  );
   return useQuery(fn, [groupId, id]);
 }
 

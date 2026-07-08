@@ -10,6 +10,16 @@ async function groupSummary(groupId) {
   return Array.isArray(data) ? data[0] : data;
 }
 
+// Member-safe fund aggregate — same RPC/fields as groupSummary (already
+// aggregate-only: totals + available_cash + counts, no per-member breakdown),
+// kept as its own function so the officer-only groupSummary can grow
+// officer-sensitive fields later without automatically exposing them here.
+async function fundSummary(groupId) {
+  const { data, error } = await supabase.rpc('group_summary', { p_group_id: groupId });
+  if (error) throw error;
+  return Array.isArray(data) ? data[0] : data;
+}
+
 // A single membership's net balance
 async function membershipBalance(membershipId) {
   const { data, error } = await supabase.rpc('membership_balance', {
@@ -23,7 +33,10 @@ async function membershipBalance(membershipId) {
 async function groupLedger({ groupId, membershipId, entryType, limit = 100 }) {
   let q = supabase
     .from('ledger_entries')
-    .select('*')
+    // posted_by is always the approving officer (see approve_contribution /
+    // approve_and_disburse_loan / record_loan_repayment RPCs) — joined so the
+    // member-facing activity feed can show "approved by {name}".
+    .select('*, poster:members!posted_by(full_name)')
     .eq('group_id', groupId)
     .order('posted_at', { ascending: false })
     .limit(limit);
@@ -58,4 +71,4 @@ async function memberBalances(groupId) {
   return results;
 }
 
-module.exports = { groupSummary, membershipBalance, groupLedger, memberBalances };
+module.exports = { groupSummary, fundSummary, membershipBalance, groupLedger, memberBalances };

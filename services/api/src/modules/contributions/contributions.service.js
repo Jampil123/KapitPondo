@@ -21,7 +21,9 @@ async function createContribution(input) {
 }
 
 async function listContributions({ groupId, membershipId, role, status, cycleId }) {
-  let q = supabase.from('contributions').select('*').eq('group_id', groupId);
+  let q = supabase.from('contributions')
+    .select('*, approver:members!approved_by(full_name)')
+    .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   if (status) q = q.eq('status', status);
   if (cycleId) q = q.eq('cycle_id', cycleId);

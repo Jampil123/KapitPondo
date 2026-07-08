@@ -23,7 +23,9 @@ async function applyForLoan(input) {
 }
 
 async function listLoans({ groupId, membershipId, role, status }) {
-  let q = supabase.from('loans').select('*').eq('group_id', groupId);
+  let q = supabase.from('loans')
+    .select('*, approver:members!approved_by(full_name)')
+    .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });
@@ -32,7 +34,10 @@ async function listLoans({ groupId, membershipId, role, status }) {
 }
 
 async function getLoan(id) {
-  const { data, error } = await supabase.from('loans').select('*').eq('id', id).single();
+  const { data, error } = await supabase
+    .from('loans')
+    .select('*, approver:members!approved_by(full_name)')
+    .eq('id', id).single();
   if (error) throw error;
   return data;
 }
@@ -40,7 +45,7 @@ async function getLoan(id) {
 async function getLoanPayments(loanId) {
   const { data, error } = await supabase
     .from('loan_payments')
-    .select('*')
+    .select('*, recorder:members!recorded_by(full_name), verifier:members!approved_by(full_name)')
     .eq('loan_id', loanId)
     .order('created_at', { ascending: true });
   if (error) throw error;

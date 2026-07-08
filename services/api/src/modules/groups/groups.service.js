@@ -34,7 +34,7 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('role, status, groups(*)')
+    .select('role, status, heads, groups(*)')
     .eq('member_id', memberId)
     .in('status', ['active', 'pending']);
   if (error) throw error;
@@ -125,6 +125,33 @@ async function listGroupMembers(groupId) {
   return data;
 }
 
+// Member-safe officers list — any active member may see who runs their group
+// (name + role only, no email/phone), separate from the officer-only full
+// member list. Also returns the group's total active-member count, since that
+// too is an aggregate figure rather than any one member's individual data.
+async function listOfficers(groupId) {
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('role, members!memberships_member_id_fkey(full_name)')
+    .eq('group_id', groupId)
+    .eq('status', 'active')
+    .neq('role', 'member')
+    .order('role', { ascending: true });
+  if (error) throw error;
+
+  const { count, error: countErr } = await supabase
+    .from('memberships')
+    .select('id', { count: 'exact', head: true })
+    .eq('group_id', groupId)
+    .eq('status', 'active');
+  if (countErr) throw countErr;
+
+  return {
+    officers: data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null })),
+    member_count: count ?? 0,
+  };
+}
+
 async function updateMemberRole(groupId, memberId, role) {
   const { data, error } = await supabase
     .from('memberships')
@@ -149,4 +176,4 @@ async function removeMember(groupId, memberId) {
   if (error) throw error;
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, updateMemberRole, removeMember };
+module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, updateMemberRole, removeMember };

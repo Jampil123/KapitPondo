@@ -21,6 +21,21 @@ router.get(
   }
 );
 
+// Member-safe aggregate fund snapshot — deliberately separate from
+// /reports/summary (officer-only) per the transparency doc's "aggregate-only"
+// rule for members; reuses the same group_summary RPC.
+router.get(
+  '/groups/:groupId/reports/fund-summary',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const summary = await service.fundSummary(req.params.groupId);
+      res.json({ summary });
+    } catch (err) { next(err); }
+  }
+);
+
 // Per-member balances across the group (officers)
 router.get(
   '/groups/:groupId/reports/member-balances',

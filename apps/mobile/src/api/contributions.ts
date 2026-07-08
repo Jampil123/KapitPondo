@@ -29,6 +29,8 @@ export interface Contribution {
   proof_url: string | null;
   external_reference: string | null;
   created_at: string;
+  /** Who approved this contribution — null until an officer confirms it. */
+  approver: { full_name: string } | null;
 }
 
 export interface SubmitContributionInput {

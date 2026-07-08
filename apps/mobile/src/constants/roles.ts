@@ -46,7 +46,10 @@ export type Capability =
   | 'finalizeDistribution'
   | 'cancelDistribution'
   // reporting
-  | 'viewReports';
+  | 'viewReports'
+  | 'viewFundSummary'
+  // groups
+  | 'viewOfficers';
 
 /** capability → roles permitted by the live API guards. */
 export const CAPABILITY_ROLES: Record<Capability, GroupRole[]> = {
@@ -77,6 +80,8 @@ export const CAPABILITY_ROLES: Record<Capability, GroupRole[]> = {
   cancelDistribution: ['owner', 'treasurer'],
 
   viewReports: ['owner', 'treasurer', 'auditor'],
+  viewFundSummary: ALL_ROLES,
+  viewOfficers: ALL_ROLES,
 };
 
 /** Does this role have this capability? Use this to gate buttons/screens. */

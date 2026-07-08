@@ -34,12 +34,17 @@ async function getDistribution(id) {
   return data;
 }
 
-async function getAllocations(distributionId) {
-  const { data, error } = await supabase
+// `caller` scopes the result for a plain member to their OWN allocation only —
+// without it, a member could see every other member's name + share, which
+// breaks the "members may not see other members' individual figures" rule.
+async function getAllocations(distributionId, caller = {}) {
+  let q = supabase
     .from('distribution_allocations')
     .select('*, memberships!membership_id(member_id, heads, members!member_id(full_name))')
     .eq('distribution_id', distributionId)
     .order('created_at', { ascending: true });
+  if (caller.role === 'member') q = q.eq('membership_id', caller.membershipId);
+  const { data, error } = await q;
   if (error) throw error;
   return data;
 }

@@ -103,6 +103,19 @@ router.patch('/groups/:groupId/members/:memberId/reject', requireAuth,
   }
 );
 
+// List officers (owner/treasurer/auditor names) + total member count — any
+// active member may see who runs their group. Deliberately separate from the
+// officer-only /members route below (no email/phone exposed to members).
+router.get('/groups/:groupId/officers', requireAuth,
+  requireGroupRole(['member', 'owner', 'treasurer', 'auditor']),
+  async (req, res, next) => {
+    try {
+      const result = await service.listOfficers(req.params.groupId);
+      res.json(result);
+    } catch (err) { next(err); }
+  }
+);
+
 // List all active members of a group (officer+ only)
 router.get('/groups/:groupId/members', requireAuth,
   requireGroupRole(['owner', 'treasurer', 'auditor']),

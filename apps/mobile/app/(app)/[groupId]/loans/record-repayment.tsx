@@ -2,8 +2,15 @@
  * app/(app)/[groupId]/loans/record-repayment.tsx — treasurer records loan
  * repayments (M6). Lists active loans; recording posts via recordRepayment
  * (interest-first allocation happens server-side).
+ *
+ * SEGREGATION OF DUTIES: record_loan_repayment (SQL) throws if approver_id ==
+ * recorded_by. This screen used to never send approver_id, so the API's
+ * fallback (approver_id || req.member.id) made every submission equal the
+ * recorder — the call ALWAYS failed. Now it requires picking a different
+ * officer to verify, same pattern as contributions/confirm.tsx's "record on
+ * behalf still needs a different officer to approve."
  */
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
@@ -14,6 +21,9 @@ import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
+import { useAuth } from '@/context/AuthContext';
+import { useQuery } from '@/hooks/useApi';
+import { listMembers } from '@/api/groups';
 import { useLoans, useRecordRepayment } from '@/features/lending/lending.hooks';
 import type { Loan } from '@/api/lending';
 
@@ -21,20 +31,44 @@ function nameOf(l: any) { return l.borrower_name ?? l.member_name ?? l.members?.
 
 export default function RecordRepayment() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { member } = useAuth();
   const loans = useLoans(groupId!, { status: 'active' });
   const repay = useRecordRepayment(groupId!);
   const [target, setTarget] = useState<Loan | null>(null);
   const [amount, setAmount] = useState('');
+  const [verifierId, setVerifierId] = useState<string | null>(null);
+  const [verifierName, setVerifierName] = useState('Select verifying officer');
 
   const list = loans.data ?? [];
+
+  // Other officers (owner/treasurer/auditor), excluding the caller — the SQL
+  // rejects approver_id == recorded_by, so the picker must exclude self too.
+  const officers = useQuery(() => listMembers(groupId!) as Promise<any[]>, [groupId]);
+  const officerRows = useMemo(() => (Array.isArray(officers.data) ? officers.data : [])
+    .filter((m: any) => m.role !== 'member' && m.member_id !== member?.id)
+    .map((m: any) => ({ id: m.member_id, name: m.members?.full_name ?? m.full_name ?? 'Officer' })),
+    [officers.data, member?.id]);
+
+  function pickVerifier() {
+    if (officerRows.length === 0) {
+      return Alert.alert('No other officers', 'Segregation of duties requires a different officer to verify — add another owner/treasurer/auditor to this group first.');
+    }
+    Alert.alert('Verified by', undefined, [
+      ...officerRows.map((o) => ({ text: o.name, onPress: () => { setVerifierId(o.id); setVerifierName(o.name); } })),
+      { text: 'Cancel', style: 'cancel' as const },
+    ]);
+  }
 
   async function confirm() {
     if (!target) return;
     const amt = toAmountString(amount);
     if (!amt || Number(amt) <= 0) return Alert.alert('Invalid amount', 'Enter a valid repayment amount.');
-    const ok = await repay.run(target.id, { amount: amt });
-    if (ok !== undefined) { setTarget(null); setAmount(''); loans.refetch(); Alert.alert('Recorded', 'Repayment recorded.'); }
-    else if (repay.error) Alert.alert('Could not record', repay.error.message);
+    if (!verifierId) return Alert.alert('Select a verifier', 'Choose a different officer to verify this repayment.');
+    const ok = await repay.run(target.id, { amount: amt, approver_id: verifierId });
+    if (ok !== undefined) {
+      setTarget(null); setAmount(''); setVerifierId(null); setVerifierName('Select verifying officer');
+      loans.refetch(); Alert.alert('Recorded', 'Repayment recorded.');
+    } else if (repay.error) Alert.alert('Could not record', repay.error.message);
   }
 
   return (
@@ -89,6 +123,12 @@ export default function RecordRepayment() {
             <View style={{ gap: 7 }}>
               <Text variant="overline" color="secondary">Amount</Text>
               <TextInput value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="₱0" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, fontFamily: 'Poppins_600SemiBold', fontSize: 16, color: semantic.textPrimary }} />
+            </View>
+            <View style={{ gap: 7 }}>
+              <Text variant="overline" color="secondary">Verified by (a different officer)</Text>
+              <Pressable onPress={pickVerifier} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14 }}>
+                <Text variant="body" style={{ color: verifierId ? semantic.textPrimary : semantic.textMuted }}>{verifierName}</Text>
+              </Pressable>
             </View>
             <Button label="Confirm repayment" onPress={confirm} loading={repay.loading} />
           </View>

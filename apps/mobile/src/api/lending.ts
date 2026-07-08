@@ -32,7 +32,10 @@ export interface Loan {
   status: LoanStatus;
   outstanding_balance: Money;
   applied_at: string;
+  approved_at: string | null;
   created_at: string;
+  /** Who approved (and disbursed — the two are one fused action) this loan. */
+  approver: { full_name: string } | null;
 }
 
 export interface LoanPayment {
@@ -44,7 +47,12 @@ export interface LoanPayment {
   due_date: string | null;
   paid_date: string | null;
   status: LoanPaymentStatus;
+  proof_url: string | null;
   created_at: string;
+  /** Who recorded this repayment. */
+  recorder: { full_name: string } | null;
+  /** The different officer who verified it (segregation of duties). */
+  verifier: { full_name: string } | null;
 }
 
 export interface Liquidity {

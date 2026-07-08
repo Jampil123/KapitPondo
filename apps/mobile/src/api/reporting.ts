@@ -62,11 +62,19 @@ export async function getMemberBalances(groupId: string) {
 
 /** GET — ledger feed. Members see only their own entries; officers can filter. */
 export async function getLedger(groupId: string, filters: LedgerFilters = {}) {
-  const res = await api.get<{ entries: LedgerEntry[] }>(
+  // The route returns { ledger }, not { entries } — this key was wrong, so
+  // every ledger fetch silently came back empty regardless of real data.
+  const res = await api.get<{ ledger: LedgerEntry[] }>(
     `/api/groups/${groupId}/reports/ledger`,
     filters,
   );
-  return res.entries;
+  return res.ledger;
+}
+
+/** GET — member-safe aggregate fund snapshot (any role). Same fields as GroupSummary. */
+export async function getFundSummary(groupId: string) {
+  const res = await api.get<{ summary: GroupSummary }>(`/api/groups/${groupId}/reports/fund-summary`);
+  return res.summary;
 }
 
 /** GET — the caller's own balance in this group (any role). */

@@ -23,6 +23,7 @@ export interface Group {
 export interface MyGroup {
   role: GroupRole;
   status: MembershipStatus;
+  heads: number;
   groups: Group;
 }
 
@@ -40,6 +41,22 @@ export function createGroup(input: { name: string; fund_code: string; descriptio
 /** POST /api/groups/join-by-code — request to join; creates a PENDING membership. */
 export function joinByCode(fund_code: string) {
   return api.post<{ membership?: unknown; group?: Group }>('/api/groups/join-by-code', { fund_code });
+}
+
+/** A group's officer, name + role only (no email/phone) — any active member can see this. */
+export interface Officer {
+  role: GroupRole;
+  full_name: string | null;
+}
+
+export interface OfficersResponse {
+  officers: Officer[];
+  member_count: number;
+}
+
+/** GET /api/groups/:groupId/officers — who runs the group (any active role). */
+export function listOfficers(groupId: string) {
+  return api.get<OfficersResponse>(`/api/groups/${groupId}/officers`);
 }
 
 // --- Member management (officer) — paths per the API reference ---------------

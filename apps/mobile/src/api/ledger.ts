@@ -45,6 +45,9 @@ export interface LedgerEntry {
   source_id: string | null;
   description: string | null;
   posted_at: string;
+  posted_by: string;
+  /** The officer who posted this entry (always the approver — see the SQL RPCs). */
+  poster: { full_name: string } | null;
 }
 
 /**

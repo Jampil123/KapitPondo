@@ -1,29 +1,33 @@
 /**
  * features/dashboard/MemberDashboard.tsx
  * ----------------------------------------------------------------------------
- * The member's dashboard home, matching the design: a personal contributions
- * hero (my contributions this cycle + progress + mini-stats), a quick-actions
- * grid, and a recent-activity list. Rendered inside DashboardShell (shared
- * greeting header + MemberNav bottom bar are wired in [groupId]/index).
+ * The member's dashboard home: a personal contributions hero, a ledger-first
+ * quick-actions grid (destinations that show the full record, not one-shot
+ * verb forms — see MemberDashboard_Transparency_Plan.md), and a recent-activity
+ * preview. Rendered inside DashboardShell (shared greeting header + MemberNav
+ * bottom bar are wired in [groupId]/index).
  *
  * Data status:
  *   my contributions / balance → useMyBalance        ✅ real (member-accessible)
  *   per-period amount + cycle  → useActiveCycle       ✅ real
  *   collection progress        → useContributions     ✅ real (approved/total, proxy)
  *   group fund (officer-only)  → NOT shown (RBAC)      → shows "My balance" instead
- *   recent activity            → NO API yet            ⚠️ empty state
- * Quick actions route to member screens that aren't built yet → "Soon".
+ *   recent activity            → useLedger (real)      last 3 entries, "See all" → Activity
+ * Grid tiles: Contributions/Loans/Fund/Standing/Group/Activity/Reports/More
+ * all route to real pages now (Phases 1–4).
  */
-import { View, Pressable, ActivityIndicator } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowUpCircle, Coins, Repeat, ScrollText, BarChart3 } from 'lucide-react-native';
+import { Alert, View, Pressable, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import {
+  ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Users, History, BarChart3, MoreHorizontal,
+  ArrowUpRight, ArrowDownRight,
+} from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { useMyBalance } from '@/features/reporting/reporting.hooks';
+import { useMyBalance, useLedger } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-
 
 function SectionTitle({ title }: { title: string }) {
   return <Text variant="h3" style={{ fontSize: 15}}>{title}</Text>;
@@ -77,37 +81,97 @@ function Hero({ groupId }: { groupId: string }) {
   );
 }
 
-const ACTIONS: { label: string; icon: any; route: string }[] = [
-  { label: 'Submit Contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
-  { label: 'Request Loan', icon: Coins, route: 'loans/request' },
-  { label: 'Repay Loan', icon: Repeat, route: 'loans/repay' },
-  { label: 'My Ledger', icon: ScrollText, route: 'reports/ledger' },
-  { label: 'Reports', icon: BarChart3, route: 'reports/ledger' },
+function shortDate(iso: string) {
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
+
+function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () => void }) {
+  const ledger = useLedger(groupId, { limit: 3 });
+  const entries = ledger.data ?? [];
+
+  return (
+    <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: entries.length ? 6 : 20 }, shadowToken.card]}>
+      {ledger.loading ? (
+        <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
+      ) : entries.length === 0 ? (
+        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No recent activity yet.</Text>
+      ) : (
+        <>
+          {entries.map((e, i) => {
+            const credit = e.direction === 'credit';
+            const Icon = credit ? ArrowDownRight : ArrowUpRight;
+            return (
+              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 8, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={16} color={credit ? '#3E8E66' : '#C25C5E'} />
+                </View>
+                <View style={{ flex: 1, gap: 1 }}>
+                  <Text variant="label" style={{ fontSize: 12.5 }} numberOfLines={1}>{e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
+                  <Text variant="caption" color="secondary">{shortDate(e.posted_at)}</Text>
+                </View>
+                <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? '#3E8E66' : '#C25C5E' }}>
+                  {credit ? '+' : '-'}{formatPeso(e.amount)}
+                </Text>
+              </View>
+            );
+          })}
+          <Pressable onPress={onSeeAll} style={{ paddingVertical: 10, alignItems: 'center' }}>
+            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '600' }}>See all activity</Text>
+          </Pressable>
+        </>
+      )}
+    </View>
+  );
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+const ACTIONS: ({ label: string; icon: any } & ({ route: string } | { soon: true }))[] = [
+  { label: 'Contributions', icon: ArrowUpCircle, route: 'contributions' },
+  { label: 'Loans', icon: Coins, route: 'loans' },
+  { label: 'Fund', icon: PiggyBank, route: 'fund' },
+  { label: 'My Standing', icon: BadgeCheck, route: 'standing' },
+  { label: 'Group & Officers', icon: Users, route: 'group' },
+  { label: 'Activity', icon: History, route: 'activity' },
+  { label: 'Reports', icon: BarChart3, route: 'reports' },
+  { label: 'More', icon: MoreHorizontal, route: 'more' },
 ];
 
 export function MemberDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
+
+  function onTilePress(a: (typeof ACTIONS)[number]) {
+    if ('soon' in a) return void Alert.alert(a.label, 'Coming soon.');
+    go(a.route);
+  }
+
   return (
     <>
       <Hero groupId={groupId} />
 
-      <SectionTitle title="Quick actions" />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {ACTIONS.map((a) => (
-          <Pressable key={a.label} onPress={() => go(a.route)} style={{ width: '30.5%', alignItems: 'center', gap: 8 }}>
-            <View style={[{ width: 62, height: 62, borderRadius: 16, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }, shadowToken.card]}>
-              <a.icon size={25} color={semantic.brandDark} strokeWidth={1.8} />
-            </View>
-            <Text variant="caption" style={{ textAlign: 'center' }} numberOfLines={2}>{a.label}</Text>
-          </Pressable>
+      <View style={{ gap: 14 }}>
+        {chunk(ACTIONS, 4).map((row, ri) => (
+          <View key={ri} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            {row.map((a) => (
+              <Pressable key={a.label} onPress={() => onTilePress(a)} style={{ width: '22%', alignItems: 'center', gap: 6 }}>
+                <View style={[{ width: 54, height: 54, borderRadius: 16, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }, shadowToken.card]}>
+                  <a.icon size={22} color={semantic.brandDark} strokeWidth={1.8} />
+                </View>
+                <Text variant="caption" style={{ textAlign: 'center', fontSize: 10.5, lineHeight: 13 }} numberOfLines={2}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </View>
         ))}
       </View>
 
       <SectionTitle title="My activity" />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, shadowToken.card]}>
-        <Text variant="body" color="muted">No recent activity yet.</Text>
-      </View>
+      <RecentActivity groupId={groupId} onSeeAll={() => go('activity')} />
     </>
   );
 }
