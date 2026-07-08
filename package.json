@@ -10,7 +10,11 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:api": "npm run dev --workspace=api",
+    "dev:admin": "npm run dev --workspace=admin",
+    "dev:mobile": "npm run dev --workspace=KapitPondo",
+    "dev": "concurrently -n api,admin,mobile -c blue,green,magenta \"npm:dev:api\" \"npm:dev:admin\" \"npm:dev:mobile\""
   },
   "keywords": [],
   "author": "",
@@ -18,5 +22,8 @@
   "type": "commonjs",
   "dependencies": {
     "expo-dev-client": "~56.0.21"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
   }
 }
