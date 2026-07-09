@@ -17,6 +17,7 @@
  * all route to real pages now (Phases 1–4).
  */
 import { Alert, View, Pressable, ActivityIndicator } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Users, History, BarChart3, MoreHorizontal,
@@ -42,7 +43,12 @@ function Hero({ groupId }: { groupId: string }) {
   const pct = rows.length ? Math.round((approved / rows.length) * 100) : 0;
 
   return (
-    <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brand, shadowColor: semantic.brand, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.4, shadowRadius: 30, elevation: 6, gap: 4 }}>
+    <LinearGradient
+      colors={['#7FA6B8', '#6A93A6']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ borderRadius: 20, padding: 18, shadowColor: semantic.brand, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.4, shadowRadius: 30, elevation: 6, gap: 4 }}
+    >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ gap: 3 }}>
           <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>My contributions · this cycle</Text>
@@ -77,7 +83,7 @@ function Hero({ groupId }: { groupId: string }) {
           <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{cycle ? formatPeso(cycle.contribution_amount) : '—'}</Text>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 

@@ -21,7 +21,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "expo-dev-client": "~56.0.21"
+    "expo-dev-client": "~56.0.21",
+    "expo": "~57.0.0-preview.1",
+    "react": "19.2.3",
+    "react-native": "0.86.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"
