@@ -64,6 +64,9 @@ export default function GroupOverview() {
       <View style={{ padding: 16, gap: 14, flex: 1 }}>
         <View style={{ gap: 4 }}>
           <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{group?.name ?? 'Group'}</Text>
+          <Text variant="caption" color="secondary">
+            {officers.loading ? 'Loading members…' : `${officers.data?.member_count ?? 0} active members`}
+          </Text>
         </View>
 
         <Segmented<Tab>
