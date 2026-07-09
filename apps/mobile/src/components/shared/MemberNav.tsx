@@ -4,7 +4,7 @@
  * once they exist; marked "Soon" until then.
  */
 import {
-  ArrowUpCircle, Coins, Repeat, ScrollText, FileText, MessageCircle, Users, LifeBuoy, Repeat as Switch,
+  ArrowUpCircle, Coins, Repeat, MessageCircle, Users, LifeBuoy, Repeat as Switch,
 } from 'lucide-react-native';
 import { GroupSheetNav } from './GroupSheetNav';
 
@@ -13,10 +13,6 @@ export function MemberNav() {
     <GroupSheetNav
       chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
         { label: 'Group feed', icon: MessageCircle, soon: true },
-      ] }}
-      services={{ title: 'My tools', items: [
-        { label: 'My ledger', icon: ScrollText, route: 'reports/ledger' },
-        { label: 'My statements', icon: FileText, soon: true },
       ] }}
       add={{ title: 'What would you like to do?', items: [
         { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },

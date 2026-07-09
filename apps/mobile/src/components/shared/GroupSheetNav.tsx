@@ -1,10 +1,11 @@
 /**
  * components/shared/GroupSheetNav.tsx
  * ----------------------------------------------------------------------------
- * Generic 5-slot bottom nav (Chat · Services · + · Profile · More) with the
+ * Generic 5-slot bottom nav (Chat · Home · + · Profile · More) with the
  * elevated center button and bottom sheets — the zip's pattern. The CHROME is
  * shared; each role passes its own sheet configs, so OrganizerNav and MemberNav
- * are just configs (no duplicated bar code).
+ * are just configs (no duplicated bar code). Home is a direct nav (like
+ * Profile) back to the group's dashboard — no sheet needed.
  *
  * Sheet items route to a group-scoped screen, jump to the groups list
  * ('@groups'), run a callback, or show "Soon".
@@ -13,7 +14,7 @@ import { useState } from 'react';
 import { View, Pressable, Modal, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircle, LayoutGrid, Plus, User, MoreHorizontal, X } from 'lucide-react-native';
+import { MessageCircle, Home, Plus, User, MoreHorizontal, X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic, shadowToken } from '../../theme/colors';
 
@@ -33,7 +34,7 @@ function NavItem({ icon: Icon, label, onPress }: { icon: any; label: string; onP
   );
 }
 
-export function GroupSheetNav({ chat, services, add, more }: { chat: SheetConfig; services: SheetConfig; add: SheetConfig; more: SheetConfig }) {
+export function GroupSheetNav({ chat, add, more }: { chat: SheetConfig; add: SheetConfig; more: SheetConfig }) {
   const insets = useSafeAreaInsets();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [active, setActive] = useState<SheetConfig | null>(null);
@@ -55,8 +56,8 @@ export function GroupSheetNav({ chat, services, add, more }: { chat: SheetConfig
           backgroundColor: 'rgba(247,251,253,0.96)', borderTopWidth: 1, borderColor: '#E2EBF0',
         }}
       >
+        <NavItem icon={Home} label="Home" onPress={() => router.push({ pathname: '/(app)/[groupId]', params: { groupId } })} />
         <NavItem icon={MessageCircle} label="Chat" onPress={() => setActive(chat)} />
-        <NavItem icon={LayoutGrid} label="Services" onPress={() => setActive(services)} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Pressable
             onPress={() => setActive(add)}

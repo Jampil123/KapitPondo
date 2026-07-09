@@ -3,7 +3,7 @@
  */
 import {
   SlidersHorizontal, UserCheck, Coins, Receipt, Users, Repeat, CalendarClock,
-  ArrowUpCircle, FileText, LifeBuoy, MessageCircle,
+  LifeBuoy, MessageCircle,
 } from 'lucide-react-native';
 import { GroupSheetNav } from './GroupSheetNav';
 
@@ -13,12 +13,6 @@ export function OrganizerNav() {
       chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
         { label: 'Officers room', icon: Users, soon: true },
         { label: 'Group feed', icon: MessageCircle, soon: true },
-      ] }}
-      services={{ title: 'Member tools', subtitle: 'Officers are members too', items: [
-        { label: 'Make a contribution', icon: ArrowUpCircle, soon: true },
-        { label: 'Request a loan', icon: Coins, soon: true },
-        { label: 'My repayments', icon: Repeat, soon: true },
-        { label: 'My statements', icon: FileText, soon: true },
       ] }}
       add={{ title: 'Create new', items: [
         { label: 'Configure cycle', icon: SlidersHorizontal, route: 'cycles/configure' },

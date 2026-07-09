@@ -82,7 +82,7 @@ export default function ActivityFeed() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="Activity" subtitle="Member" />
       <View style={{ padding: 16, gap: 14, flex: 1 }}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {FILTERS.map((f) => {
             const active = f.key === filter;
             return (
@@ -102,7 +102,7 @@ export default function ActivityFeed() {
               </Text>
             );
           })}
-        </ScrollView>
+        </View>
 
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />

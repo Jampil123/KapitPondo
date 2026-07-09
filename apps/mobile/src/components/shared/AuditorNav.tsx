@@ -14,9 +14,6 @@ export function AuditorNav() {
       chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
         { label: 'Officers room', icon: MessageCircle, soon: true },
       ] }}
-      services={{ title: 'Audit tools', items: [
-        { label: 'Audit log', icon: FileText, route: 'reports/ledger' },
-      ] }}
       add={{ title: 'Review & verify', items: [
         { label: 'Review postings', icon: ScrollText, route: 'audit/postings' },
         { label: 'Review proofs', icon: Receipt, route: 'audit/proofs' },
@@ -24,6 +21,7 @@ export function AuditorNav() {
         { label: 'Verify reversals', icon: Repeat, soon: true },
       ] }}
       more={{ title: 'More', items: [
+        { label: 'Audit log', icon: FileText, route: 'reports/ledger' },
         { label: 'Year-end preview', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Switch, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },

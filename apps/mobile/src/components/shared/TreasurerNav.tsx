@@ -15,9 +15,6 @@ export function TreasurerNav() {
       chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
         { label: 'Officers room', icon: MessageCircle, soon: true },
       ] }}
-      services={{ title: 'Treasurer tools', items: [
-        { label: 'Ledger', icon: ScrollText, route: 'reports/ledger' },
-      ] }}
       add={{ title: 'Record a transaction', items: [
         { label: 'Record contribution', icon: ArrowUpRight, route: 'contributions/confirm' },
         { label: 'Record repayment', icon: Repeat, route: 'loans/record-repayment' },
@@ -25,6 +22,7 @@ export function TreasurerNav() {
         { label: 'Record expense', icon: Minus, route: 'expenses/record' },
       ] }}
       more={{ title: 'More', items: [
+        { label: 'Ledger', icon: ScrollText, route: 'reports/ledger' },
         { label: 'Reversals', icon: SlidersHorizontal, soon: true },
         { label: 'Year-end preview', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Switch, route: '@groups' },

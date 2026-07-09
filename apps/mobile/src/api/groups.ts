@@ -59,6 +59,18 @@ export function listOfficers(groupId: string) {
   return api.get<OfficersResponse>(`/api/groups/${groupId}/officers`);
 }
 
+/** A group member's name + role only (no email/phone) — any active member can see this. */
+export interface DirectoryEntry {
+  role: GroupRole;
+  full_name: string | null;
+}
+
+/** GET /api/groups/:groupId/members/directory — every active member (any active role). */
+export async function listMemberDirectory(groupId: string) {
+  const res = await api.get<{ members: DirectoryEntry[] }>(`/api/groups/${groupId}/members/directory`);
+  return res.members;
+}
+
 // --- Member management (officer) — paths per the API reference ---------------
 export async function listPendingMembers(groupId: string) {
   const res = await api.get<{ members: unknown[] }>(`/api/groups/${groupId}/members/pending`);

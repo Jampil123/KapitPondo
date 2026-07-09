@@ -152,6 +152,19 @@ async function listOfficers(groupId) {
   };
 }
 
+// Member-safe directory — every active member's name + role (no email/phone),
+// unlike listGroupMembers (officer-only, includes email/verification_status).
+async function listMemberDirectory(groupId) {
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('role, members!memberships_member_id_fkey(full_name)')
+    .eq('group_id', groupId)
+    .eq('status', 'active')
+    .order('joined_at', { ascending: true, nullsFirst: true });
+  if (error) throw error;
+  return data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null }));
+}
+
 async function updateMemberRole(groupId, memberId, role) {
   const { data, error } = await supabase
     .from('memberships')
@@ -176,4 +189,4 @@ async function removeMember(groupId, memberId) {
   if (error) throw error;
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, updateMemberRole, removeMember };
+module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember };

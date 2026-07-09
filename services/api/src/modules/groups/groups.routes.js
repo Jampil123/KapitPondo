@@ -116,6 +116,18 @@ router.get('/groups/:groupId/officers', requireAuth,
   }
 );
 
+// Member-safe directory — every active member's name + role, no email/phone.
+// Any active role may see this (the officer-only /members below has more detail).
+router.get('/groups/:groupId/members/directory', requireAuth,
+  requireGroupRole(['member', 'owner', 'treasurer', 'auditor']),
+  async (req, res, next) => {
+    try {
+      const members = await service.listMemberDirectory(req.params.groupId);
+      res.json({ members });
+    } catch (err) { next(err); }
+  }
+);
+
 // List all active members of a group (officer+ only)
 router.get('/groups/:groupId/members', requireAuth,
   requireGroupRole(['owner', 'treasurer', 'auditor']),
