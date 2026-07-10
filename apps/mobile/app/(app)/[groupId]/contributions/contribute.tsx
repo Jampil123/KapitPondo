@@ -17,6 +17,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useSubmitContribution } from '@/features/contributions/contributions.hooks';
 import type { PaymentMethod } from '@/api/contributions';
@@ -31,8 +32,12 @@ const METHODS: { key: PaymentMethod; label: string }[] = [
 export default function Contribute() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
+  const { membership } = useActiveGroup();
   const { cycle, loading } = useActiveCycle(groupId!);
   const submit = useSubmitContribution(groupId!);
+
+  const heads = membership?.heads ?? 1;
+  const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('gcash');
@@ -41,7 +46,7 @@ export default function Contribute() {
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
-    if (cycle && !amount) setAmount(String(cycle.contribution_amount));
+    if (cycle && !amount) setAmount(String(expected));
   }, [cycle]);
 
   async function pickProof() {
@@ -82,14 +87,19 @@ export default function Contribute() {
           <View style={{ gap: 3 }}>
             <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>This period’s contribution</Text>
             {loading ? <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start' }} /> : (
-              <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{cycle ? formatPeso(cycle.contribution_amount) : '—'}</Text>
+              <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{cycle ? formatPeso(expected) : '—'}</Text>
             )}
-            <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>{cycle ? `${cycle.name} · ${cycle.frequency}` : 'No active cycle'}</Text>
+            <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>
+              {cycle ? `${cycle.name} · ${heads} head${heads === 1 ? '' : 's'} × ${formatPeso(cycle.contribution_amount)}` : 'No active cycle'}
+            </Text>
           </View>
           <CalendarDays size={30} color="rgba(255,255,255,0.85)" />
         </View>
 
         <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+        <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 14, marginLeft: 2 }}>
+          Paying more than expected? That's fine — extra counts as advance credit for future cycles.
+        </Text>
 
         <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 2 }}>Payment method</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 15 }}>

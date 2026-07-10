@@ -2,7 +2,8 @@
  * components/ui/Segmented.tsx
  * ----------------------------------------------------------------------------
  * Pill segmented control / tab bar (the designer's TabBar + SegmentedControl,
- * unified). Active segment = ink fill; optional count badge.
+ * unified). Active segment = brand fill (matches the dashboard's teal accent
+ * throughout — hero cards, tile icons, the nav's "+" button); optional count badge.
  */
 import { View, Pressable } from 'react-native';
 import { Text } from './Text';
@@ -27,7 +28,7 @@ export function Segmented<T extends string>({
           <Pressable
             key={o.key}
             onPress={() => onChange(o.key)}
-            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 9, backgroundColor: active ? semantic.textPrimary : 'transparent' }}
+            style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 9, borderRadius: 9, backgroundColor: active ? semantic.brand : 'transparent' }}
           >
             <Text variant="label" style={{ fontSize: 13, color: active ? '#fff' : semantic.textSecondary }}>{o.label}</Text>
             {o.count ? (

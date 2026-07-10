@@ -22,6 +22,7 @@ import { useRouter } from 'expo-router';
 import { useQuery } from '@/hooks/useApi';
 import {
   Users, Coins, AlertTriangle, SlidersHorizontal, UserCheck, CalendarClock,
+  Wallet, ScrollText, Receipt,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, shadowToken } from '@/theme/colors';
@@ -112,14 +113,23 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
   );
 }
 
-/* ---- Quick-actions grid (their ActionGrid) ---- */
+/* ---- Quick-actions grid (their ActionGrid) ----
+ * Admin-only actions not already covered by "Action required" above (Approve
+ * Members / Loan Decisions / Penalties were dropped from here since they
+ * duplicate those stat tiles — still reachable via the stat tiles, the More
+ * page, and the nav's more-sheet). The Owner's personal/member-facing tiles
+ * (Contributions, Loans, Fund, My Ledger, More) moved to the "Member" switch
+ * tab instead of living here too — see [groupId]/index.tsx's RoleSwitch.
+ * Member Balances / Group Ledger / Expenses are real, already-authorized-for-owner
+ * endpoints/screens that previously had no entry point anywhere in the Owner's UI.
+ */
 const ACTIONS: { label: string; icon: any; key: string }[] = [
   { label: 'Configure Cycle', icon: SlidersHorizontal, key: 'cycles/configure' },
-  { label: 'Approve Members', icon: UserCheck, key: 'members/approvals' },
   { label: 'Manage Officers', icon: Users, key: 'members/officers' },
-  { label: 'Loan Decisions', icon: Coins, key: 'loans/decisions' },
-  { label: 'Penalties', icon: AlertTriangle, key: 'penalties' },
   { label: 'Year-End', icon: CalendarClock, key: 'distribution/year-end' },
+  { label: 'Member Balances', icon: Wallet, key: 'reports/member-balances' },
+  { label: 'Group Ledger', icon: ScrollText, key: 'reports/group-ledger' },
+  { label: 'Expenses', icon: Receipt, key: 'expenses/record' },
 ];
 
 function SectionTitle({ title }: { title: string }) {
@@ -148,7 +158,6 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
         <StatTile icon={AlertTriangle} count={penaltyCount} label="Penalties to review" tone="danger" onPress={() => go('penalties')} />
       </View>
 
-      <SectionTitle title="Quick actions" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {ACTIONS.map((a) => (
           <Pressable key={a.key} onPress={() => go(a.key)} style={{ width: '30.5%', alignItems: 'center', gap: 8 }}>

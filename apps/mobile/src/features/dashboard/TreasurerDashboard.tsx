@@ -81,8 +81,8 @@ function Hero({ groupId }: { groupId: string }) {
   );
 }
 
-const ACTIONS: { label: string; icon: any; route?: string }[] = [
-  { label: 'Record Contribution', icon: ArrowUpRight, route: 'contributions/confirm' },
+const ACTIONS: { label: string; icon: any; route?: string; params?: Record<string, string> }[] = [
+  { label: 'Record Contribution', icon: ArrowUpRight, route: 'contributions/confirm', params: { tab: 'record' } },
   { label: 'Record Repayment', icon: Repeat, route: 'loans/record-repayment' },
   { label: 'Confirm Disbursement', icon: Coins, route: 'loans/disburse' },
   { label: 'Record Expense', icon: Minus, route: 'expenses/record' },
@@ -94,7 +94,8 @@ function txnSign(dir: string) { return dir === 'credit' ? '+' : '-'; }
 
 export function TreasurerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
+  const go = (route: string, extraParams?: Record<string, string>) =>
+    router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...extraParams } });
 
   const pendingContribs = useContributions(groupId, { status: 'submitted' });
   const approvedLoans = useLoans(groupId, { status: 'approved' });
@@ -111,15 +112,14 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
       <SectionTitle title="To do" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <StatTile icon={ArrowUpRight} count={contribCount} label="Contributions to confirm" tone="accent" onPress={() => go('contributions/confirm')} />
+        <StatTile icon={ArrowUpRight} count={contribCount} label="Contributions to confirm" tone="accent" onPress={() => go('contributions/confirm', { tab: 'pending' })} />
         <StatTile icon={Repeat} count={repayCount} label="Repayments to confirm" tone="accent" onPress={() => go('loans/record-repayment')} />
         <StatTile icon={Coins} count={disburseCount} label="Disbursements pending" tone="warn" onPress={() => go('loans/disburse')} />
       </View>
 
-      <SectionTitle title="Quick actions" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {ACTIONS.map((a) => (
-          <Pressable key={a.label} onPress={() => (a.route ? go(a.route) : soon(a.label))} style={{ width: '30.5%', alignItems: 'center', gap: 8 }}>
+          <Pressable key={a.label} onPress={() => (a.route ? go(a.route, a.params) : soon(a.label))} style={{ width: '30.5%', alignItems: 'center', gap: 8 }}>
             <View style={[{ width: 62, height: 62, borderRadius: 16, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }, shadowToken.card]}>
               <a.icon size={25} color={semantic.brandDark} strokeWidth={1.8} />
             </View>

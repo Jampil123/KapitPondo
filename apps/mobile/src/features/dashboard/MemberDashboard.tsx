@@ -25,7 +25,8 @@ import {
 import { Text } from '@/components/ui/Text';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { useMyBalance, useLedger } from '@/features/reporting/reporting.hooks';
+import { useActiveGroup } from '@/context/GroupContext';
+import { useMyBalance, useLedger, useFundSummary } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 
@@ -33,11 +34,31 @@ function SectionTitle({ title }: { title: string }) {
   return <Text variant="h3" style={{ fontSize: 15}}>{title}</Text>;
 }
 
+/** Next occurrence of the cycle's contribution date, derived from start_date + frequency — real, not fabricated (no due_date column exists). */
+function nextDueDate(cycle: { start_date: string; frequency: string } | null): string | null {
+  if (!cycle) return null;
+  const d = new Date(cycle.start_date);
+  if (isNaN(d.getTime())) return null;
+  const now = new Date();
+  while (d < now) {
+    if (cycle.frequency === 'weekly') d.setDate(d.getDate() + 7);
+    else if (cycle.frequency === 'biweekly') d.setDate(d.getDate() + 14);
+    else if (cycle.frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
+    else d.setMonth(d.getMonth() + 1); // monthly
+  }
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
+
 function Hero({ groupId }: { groupId: string }) {
+  const { membership } = useActiveGroup();
   const bal = useMyBalance(groupId);
+  const fund = useFundSummary(groupId);
   const { cycle } = useActiveCycle(groupId);
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
-  const rows = contribs.data ?? [];
+  // listContributions only self-scopes server-side when role === 'member' — for
+  // an officer viewing their own Member tab it returns the whole group's rows,
+  // so filter here to guarantee this only ever reflects the caller's own.
+  const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
   const approved = rows.filter((c) => c.status === 'approved').length;
   const pct = rows.length ? Math.round((approved / rows.length) * 100) : 0;
 
@@ -45,7 +66,7 @@ function Hero({ groupId }: { groupId: string }) {
     <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brand, shadowColor: semantic.brand, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.4, shadowRadius: 30, elevation: 6, gap: 4 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ gap: 3 }}>
-          <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>My contributions · this cycle</Text>
+          <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>Your contributions · this cycle</Text>
           {bal.loading ? (
             <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginTop: 6 }} />
           ) : (
@@ -69,12 +90,16 @@ function Hero({ groupId }: { groupId: string }) {
 
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
         <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 11, gap: 2 }}>
-          <Text style={{ fontSize: 10.5, color: '#fff', opacity: 0.75 }}>My balance</Text>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{formatPeso(bal.data?.balance)}</Text>
+          <Text style={{ fontSize: 10.5, color: '#fff', opacity: 0.75 }}>Group fund</Text>
+          {fund.loading ? (
+            <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start' }} />
+          ) : (
+            <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{formatPeso(fund.data?.available_cash)}</Text>
+          )}
         </View>
         <View style={{ flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 11, gap: 2 }}>
-          <Text style={{ fontSize: 10.5, color: '#fff', opacity: 0.75 }}>Per period</Text>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{cycle ? formatPeso(cycle.contribution_amount) : '—'}</Text>
+          <Text style={{ fontSize: 10.5, color: '#fff', opacity: 0.75 }}>Next due</Text>
+          <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{nextDueDate(cycle) ?? '—'}</Text>
         </View>
       </View>
     </View>
@@ -87,7 +112,11 @@ function shortDate(iso: string) {
 }
 
 function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () => void }) {
-  const ledger = useLedger(groupId, { limit: 3 });
+  const { membership } = useActiveGroup();
+  // The ledger route honors a caller-supplied membership_id for officers (unlike
+  // contributions/loans lists, which ignore it) — pass it explicitly so this
+  // stays "my own activity" instead of the whole group's feed for officers.
+  const ledger = useLedger(groupId, { limit: 3, membership_id: membership?.id });
   const entries = ledger.data ?? [];
 
   return (

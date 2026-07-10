@@ -34,7 +34,7 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('role, status, heads, groups(*)')
+    .select('id, role, status, heads, groups(*)')
     .eq('member_id', memberId)
     .in('status', ['active', 'pending']);
   if (error) throw error;

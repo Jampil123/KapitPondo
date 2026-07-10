@@ -39,7 +39,7 @@ export default function FundOverview() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="Fund" subtitle="Member" />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
-        <View style={[{ backgroundColor: semantic.textPrimary, borderRadius: 18, padding: 18, gap: 6 }]}>
+        <View style={[{ backgroundColor: semantic.brand, borderRadius: 18, padding: 18, gap: 6, shadowColor: semantic.brand, shadowOffset: { width: 0, height: 14 }, shadowOpacity: 0.4, shadowRadius: 30, elevation: 6 }]}>
           <Text variant="caption" style={{ color: '#fff', opacity: 0.7 }}>Available fund balance</Text>
           {summary.loading ? (
             <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start' }} />

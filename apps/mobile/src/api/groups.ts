@@ -21,6 +21,7 @@ export interface Group {
 
 /** A membership row from GET /groups: my role + status + the nested group. */
 export interface MyGroup {
+  id: string;
   role: GroupRole;
   status: MembershipStatus;
   heads: number;

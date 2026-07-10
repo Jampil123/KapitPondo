@@ -1,7 +1,9 @@
 /**
- * app/(app)/[groupId]/expenses/record.tsx — treasurer records a group expense
- * (M7). Wired to recordExpense; lists recent expenses via useExpenses. The
- * auditor confirms it afterward (recorder != approver).
+ * app/(app)/[groupId]/expenses/record.tsx — record a group expense (M7).
+ * Server-side, both treasurer and owner may record/list/approve/reject
+ * expenses (expenses.routes.js) — this screen is shared by whichever officer
+ * opens it, so the subtitle reflects the caller's actual role. The auditor
+ * confirms it afterward (recorder != approver).
  */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
@@ -17,12 +19,15 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useExpenses, useRecordExpense } from '@/features/expenses/expenses.hooks';
 
 const CATEGORIES = ['Meeting', 'Supplies', 'Bank charges', 'Other'];
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 export default function RecordExpense() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { role } = useActiveGroup();
   const list = useExpenses(groupId!, {});
   const record = useRecordExpense(groupId!);
 
@@ -62,7 +67,7 @@ export default function RecordExpense() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Record Expenses" subtitle="Treasurer" />
+      <AppBar title="Record Expenses" subtitle={ROLE_LABEL[role ?? 'treasurer'] ?? 'Treasurer'} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 14, marginBottom: 16 }}>
           <View style={{ gap: 2 }}>

@@ -32,8 +32,8 @@ type Tab = 'pending' | 'record';
 function nameOf(c: any) { return c.member_name ?? c.members?.full_name ?? c.member?.full_name ?? 'Member'; }
 
 export default function ConfirmContributions() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const [tab, setTab] = useState<Tab>('pending');
+  const { groupId, tab: initialTab } = useLocalSearchParams<{ groupId: string; tab?: string }>();
+  const [tab, setTab] = useState<Tab>(initialTab === 'record' ? 'record' : 'pending');
 
   // ---- Pending confirmations ----
   const pending = useContributions(groupId!, { status: 'submitted' });

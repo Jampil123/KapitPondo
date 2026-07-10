@@ -7,7 +7,7 @@
  *   - joined but not yet approved (pending) → "waiting for approval"
  */
 import { useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Clock, Lock } from 'lucide-react-native';
@@ -34,6 +34,42 @@ function Centered({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * PayMaya-style account switcher (Wallet · Savings · Credit · …): auto-width
+ * items with gaps, no surrounding box — active item gets a solid pill, inactive
+ * items are plain text. Kept local/one-off rather than restyling the shared
+ * Segmented control, which other screens use as an equal-width tab bar.
+ */
+function RoleSwitch({ value, onChange }: { value: 'officer' | 'member'; onChange: (v: 'officer' | 'member') => void }) {
+  const options: { key: 'officer' | 'member'; label: string }[] = [
+    { key: 'officer', label: 'Officer' },
+    { key: 'member', label: 'Member' },
+  ];
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <Pressable
+            key={o.key}
+            onPress={() => onChange(o.key)}
+            style={{
+              paddingVertical: 8,
+              paddingHorizontal: active ? 18 : 10,
+              borderRadius: 999,
+              backgroundColor: active ? semantic.brand : 'transparent',
+            }}
+          >
+            <Text variant="label" style={{ fontSize: 13.5, fontWeight: active ? '700' : '500', color: active ? '#fff' : semantic.textSecondary }}>
+              {o.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function GroupDashboard() {
   const router = useRouter();
   const { group, role, groupId, membership } = useActiveGroup();
@@ -41,6 +77,9 @@ export default function GroupDashboard() {
   const { member } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [treasurerView, setTreasurerView] = useState<'officer' | 'member'>('officer');
+  const [ownerView, setOwnerView] = useState<'officer' | 'member'>('officer');
+  const [auditorView, setAuditorView] = useState<'officer' | 'member'>('officer');
 
   // Each dashboard's data hooks live inside its own component tree, so
   // rather than threading refetch callbacks through every nested piece,
@@ -111,13 +150,44 @@ export default function GroupDashboard() {
     <DashboardShell
       group={group}
       role={role}
-      header={<DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />}
+      header={
+        <>
+          <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
+          {role === 'treasurer' && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+              <RoleSwitch value={treasurerView} onChange={setTreasurerView} />
+            </View>
+          )}
+          {role === 'owner' && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+              <RoleSwitch value={ownerView} onChange={setOwnerView} />
+            </View>
+          )}
+          {role === 'auditor' && (
+            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+              <RoleSwitch value={auditorView} onChange={setAuditorView} />
+            </View>
+          )}
+        </>
+      }
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {role === 'owner' && <OwnerDashboard key={refreshKey} groupId={groupId!} />}
-      {role === 'treasurer' && <TreasurerDashboard key={refreshKey} groupId={groupId!} />}
-      {role === 'auditor' && <AuditorDashboard key={refreshKey} groupId={groupId!} />}
+      {role === 'owner' && (
+        ownerView === 'officer'
+          ? <OwnerDashboard key={refreshKey} groupId={groupId!} />
+          : <MemberDashboard key={refreshKey} groupId={groupId!} />
+      )}
+      {role === 'treasurer' && (
+        treasurerView === 'officer'
+          ? <TreasurerDashboard key={refreshKey} groupId={groupId!} />
+          : <MemberDashboard key={refreshKey} groupId={groupId!} />
+      )}
+      {role === 'auditor' && (
+        auditorView === 'officer'
+          ? <AuditorDashboard key={refreshKey} groupId={groupId!} />
+          : <MemberDashboard key={refreshKey} groupId={groupId!} />
+      )}
       {role === 'member' && <MemberDashboard key={refreshKey} groupId={groupId!} />}
     </DashboardShell>
   );

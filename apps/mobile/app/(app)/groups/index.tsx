@@ -62,7 +62,7 @@ export default function GroupsDashboard() {
         <Text variant="h2" style={{ flex: 1, fontSize: 20, marginLeft: 4 }}>KapitPondo</Text>
         <Pressable
           onPress={onMenu}
-          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: semantic.textPrimary, alignItems: 'center', justifyContent: 'center' }}
+          style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}
         >
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{initialsOf(member?.full_name)}</Text>
         </Pressable>
@@ -108,7 +108,7 @@ export default function GroupsDashboard() {
                   paddingVertical: 16,
                 }}
               >
-                <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: semantic.textPrimary, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}>
                   <Users size={24} color="#fff" />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -141,7 +141,7 @@ export default function GroupsDashboard() {
             >
               <Text variant="label">{it.label}</Text>
               <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                <it.icon size={20} color={semantic.textPrimary} />
+                <it.icon size={20} color={semantic.brandDark} />
               </View>
             </Pressable>
           ))}
@@ -151,7 +151,7 @@ export default function GroupsDashboard() {
       {/* FAB */}
       <Pressable
         onPress={() => setFabOpen((o) => !o)}
-        style={[{ position: 'absolute', right: 24, bottom: 102, width: 60, height: 60, borderRadius: 30, backgroundColor: semantic.textPrimary, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
+        style={[{ position: 'absolute', right: 24, bottom: 102, width: 60, height: 60, borderRadius: 30, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
       >
         {fabOpen ? <X size={30} color="#fff" /> : <Plus size={30} color="#fff" />}
       </Pressable>

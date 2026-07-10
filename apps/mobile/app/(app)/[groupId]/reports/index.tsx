@@ -16,6 +16,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useDistributions, useDistribution } from '@/features/distribution/distribution.hooks';
 import { useLedger } from '@/features/reporting/reporting.hooks';
 
@@ -30,13 +31,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 export default function Reports() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { membership } = useActiveGroup();
   const distributions = useDistributions(groupId!);
   // Already newest-first from the API — the most recent distribution (if any).
   const latest = distributions.data?.[0] ?? null;
   const detail = useDistribution(groupId!, latest?.id);
-  const myAllocation = detail.data?.allocations?.[0] ?? null;
+  // getAllocations only scopes to the caller server-side when role === 'member' —
+  // for an officer it returns every member's row, so find our own explicitly
+  // rather than assuming [0] is ours.
+  const myAllocation = detail.data?.allocations?.find((a) => a.membership_id === membership?.id) ?? null;
 
-  const ledger = useLedger(groupId!, {});
+  const ledger = useLedger(groupId!, { membership_id: membership?.id });
   const entries = ledger.data ?? [];
   const totals = useMemo(() => {
     const sum = (type: string) => entries.filter((e) => e.entry_type === type).reduce((s, e) => s + Number(e.amount), 0);

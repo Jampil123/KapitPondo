@@ -2,10 +2,6 @@
  * api/reporting.ts
  * ----------------------------------------------------------------------------
  * Read-only reporting queries (M8). These power dashboards and the ledger feed.
- *
- * The Summary / MemberBalance / MyBalance shapes below are best-guesses from the
- * spec — VERIFY them against your reporting.service responses on first run and
- * adjust the interfaces (they're the most likely to differ from the docs).
  */
 import { api } from './client';
 import type { Money } from '../lib/money';
@@ -23,13 +19,12 @@ export interface GroupSummary {
   pending_loans: number;
 }
 
-/** Per-member balance row (officers). Shape — verify. */
+/** Per-member balance row (officers). Matches reporting.service.js's memberBalances(). */
 export interface MemberBalance {
   membership_id: string;
-  member_name?: string;
-  heads?: number;
-  contributions: Money;
-  loan_outstanding: Money;
+  full_name: string | null;
+  role: string;
+  heads: number;
   balance: Money;
 }
 

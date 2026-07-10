@@ -36,7 +36,9 @@ export default function MyStanding() {
   const allContribs = useContributions(groupId!, {});
   const activeLoans = useLoans(groupId!, { status: 'active' });
 
-  const rows = allContribs.data ?? [];
+  // listContributions only self-scopes server-side when role === 'member' —
+  // filter here so an officer's own Member tab reflects only their own record.
+  const rows = (allContribs.data ?? []).filter((c) => c.membership_id === membership?.id);
   const thisCycleRows = cycle ? rows.filter((c) => c.cycle_id === cycle.id) : [];
   const paidThisCycle = thisCycleRows.some((c) => c.status === 'approved');
 

@@ -18,8 +18,11 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useLoans, useLoan } from '@/features/lending/lending.hooks';
 import type { Loan, LoanPayment } from '@/api/lending';
+
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 function shortDate(iso: string | null) {
   if (!iso) return null;
@@ -61,8 +64,12 @@ function PastLoanRow({ loan }: { loan: Loan }) {
 export default function LoansOverview() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
+  const { membership, role } = useActiveGroup();
   const allLoans = useLoans(groupId!, {});
-  const rows = allLoans.data ?? [];
+  // listLoans only self-scopes server-side when role === 'member' — for
+  // owner/treasurer/auditor it returns the whole group's loans, so filter here
+  // to guarantee this page only ever shows the caller's own loans.
+  const rows = (allLoans.data ?? []).filter((l) => l.membership_id === membership?.id);
   const activeLoan = rows.find((l) => l.status === 'active') ?? null;
   const pastLoans = rows.filter((l) => l.id !== activeLoan?.id);
   const detail = useLoan(groupId!, activeLoan?.id);
@@ -77,7 +84,7 @@ export default function LoansOverview() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Loans" subtitle="Member" />
+      <AppBar title="Loans" subtitle={ROLE_LABEL[role ?? 'member'] ?? 'Member'} />
       <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
         {allLoans.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />

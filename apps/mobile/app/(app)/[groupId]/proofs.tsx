@@ -12,6 +12,7 @@ import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useLoans, useLoan } from '@/features/lending/lending.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
@@ -39,12 +40,16 @@ function shortDate(iso: string | null) {
 
 export default function MyProofs() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { membership } = useActiveGroup();
   const contribs = useContributions(groupId!, {});
   const activeLoans = useLoans(groupId!, { status: 'active' });
-  const activeLoan = activeLoans.data?.[0] ?? null;
+  // Both lists only self-scope server-side for role === 'member' — filter to our
+  // own membership so an officer's "My Proofs" doesn't mix in other members'.
+  const myLoans = (activeLoans.data ?? []).filter((l) => l.membership_id === membership?.id);
+  const activeLoan = myLoans[0] ?? null;
   const loanDetail = useLoan(groupId!, activeLoan?.id);
 
-  const contribProofs = (contribs.data ?? []).filter((c) => c.proof_url);
+  const contribProofs = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id && c.proof_url);
   const paymentProofs = (loanDetail.data?.payments ?? []).filter((p) => p.proof_url);
   const loading = contribs.loading || activeLoans.loading;
 

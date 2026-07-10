@@ -1,8 +1,11 @@
 /**
  * components/shared/OrganizerNav.tsx — owner's bottom nav (config over GroupSheetNav).
+ * The "+" sheet is the owner's own member actions (officers are members too),
+ * same as MemberNav's — admin actions (configure cycle, approve members, loan
+ * decisions, record expense) live under "More" instead.
  */
 import {
-  SlidersHorizontal, UserCheck, Coins, Receipt, Users, Repeat, CalendarClock,
+  ArrowUpCircle, Coins, Repeat, SlidersHorizontal, UserCheck, Receipt, Users, CalendarClock,
   LifeBuoy, MessageCircle,
 } from 'lucide-react-native';
 import { GroupSheetNav } from './GroupSheetNav';
@@ -14,14 +17,16 @@ export function OrganizerNav() {
         { label: 'Officers room', icon: Users, soon: true },
         { label: 'Group feed', icon: MessageCircle, soon: true },
       ] }}
-      add={{ title: 'Create new', items: [
+      add={{ title: 'What would you like to do?', items: [
+        { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
+        { label: 'Request a loan', icon: Coins, route: 'loans/request' },
+        { label: 'Repay a loan', icon: Repeat, route: 'loans/repay' },
+      ] }}
+      more={{ title: 'More', subtitle: 'Manage & account', items: [
         { label: 'Configure cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
         { label: 'Approve members', icon: UserCheck, route: 'members/approvals' },
         { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
         { label: 'Record expense', icon: Receipt, soon: true },
-      ] }}
-      more={{ title: 'More', subtitle: 'Manage & account', items: [
-        { label: 'Group settings', icon: SlidersHorizontal, route: 'cycles/configure' },
         { label: 'Manage officers', icon: Users, route: 'members/officers' },
         { label: 'Year-end distribution', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Repeat, route: '@groups' },

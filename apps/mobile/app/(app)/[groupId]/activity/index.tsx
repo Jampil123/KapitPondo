@@ -17,6 +17,7 @@ import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useLedger } from '@/features/reporting/reporting.hooks';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
@@ -73,8 +74,11 @@ function ActivityRow({ e }: { e: LedgerEntry }) {
 
 export default function ActivityFeed() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { membership } = useActiveGroup();
   const [filter, setFilter] = useState<Filter>('all');
-  const ledger = useLedger(groupId!, {});
+  // Officer callers must pass membership_id explicitly, or the ledger route
+  // returns the whole group's feed instead of the caller's own activity.
+  const ledger = useLedger(groupId!, { membership_id: membership?.id });
   const entries = ledger.data ?? [];
   const filtered = useMemo(() => entries.filter((e) => matchesFilter(filter, e.entry_type)), [entries, filter]);
 

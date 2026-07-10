@@ -75,8 +75,8 @@ router.get(
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
-      const balance = await service.membershipBalance(req.membership.id);
-      res.json({ balance });
+      const balance = await service.myBalance(req.membership.id);
+      res.json(balance);
     } catch (err) { next(err); }
   }
 );

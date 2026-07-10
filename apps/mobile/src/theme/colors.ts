@@ -75,7 +75,7 @@ export const semantic = {
   textMuted: '#9DB2BE',
   textOnBrand: '#FFFFFF',
 
-  brand: '#7FA6B8',
+  brand: '#6A93A6',
   brandDark: '#5E8497',
   accent: '#5E8497',
 } as const;

@@ -29,6 +29,22 @@ async function membershipBalance(membershipId) {
   return data;
 }
 
+// The caller's own balance breakdown — membership_balance() only returns the
+// net figure, but the client shows contributions/loan_outstanding separately,
+// so compute those directly rather than fabricating them.
+async function myBalance(membershipId) {
+  const [contribRes, loanRes, balance] = await Promise.all([
+    supabase.from('ledger_entries').select('amount').eq('membership_id', membershipId).eq('entry_type', 'contribution'),
+    supabase.from('loans').select('outstanding_balance').eq('membership_id', membershipId).eq('status', 'active'),
+    membershipBalance(membershipId),
+  ]);
+  if (contribRes.error) throw contribRes.error;
+  if (loanRes.error) throw loanRes.error;
+  const contributions = (contribRes.data ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
+  const loan_outstanding = (loanRes.data ?? []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
+  return { contributions, loan_outstanding, balance };
+}
+
 // The ledger feed for a group, with optional filters
 async function groupLedger({ groupId, membershipId, entryType, limit = 100 }) {
   let q = supabase
@@ -71,4 +87,4 @@ async function memberBalances(groupId) {
   return results;
 }
 
-module.exports = { groupSummary, fundSummary, membershipBalance, groupLedger, memberBalances };
+module.exports = { groupSummary, fundSummary, membershipBalance, myBalance, groupLedger, memberBalances };
