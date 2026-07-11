@@ -31,6 +31,16 @@ export function LogoMark({ size = 28 }: { size?: number }) {
   );
 }
 
+/** The "KapitPondo" wordmark — "Kapit" in black, "Pondo" in the brand's dark blue. */
+export function Wordmark({ fontSize = 17 }: { fontSize?: number }) {
+  return (
+    <Text variant="h3" style={{ fontSize, letterSpacing: -0.2 }}>
+      <Text variant="h3" color="inherit" style={{ fontSize, color: '#000000' }}>Kapit</Text>
+      <Text variant="h3" color="inherit" style={{ fontSize, color: semantic.brandDark }}>Pondo</Text>
+    </Text>
+  );
+}
+
 export function ScreenHeader({ back = false }: { back?: boolean }) {
   const router = useRouter();
   return (
@@ -62,9 +72,7 @@ export function ScreenHeader({ back = false }: { back?: boolean }) {
         }}
       >
         <LogoMark size={28} />
-        <Text variant="h3" style={{ fontSize: 17, letterSpacing: -0.2 }}>
-          KapitPondo
-        </Text>
+        <Wordmark fontSize={17} />
       </View>
       <View style={{ width: 30 }} />
     </View>

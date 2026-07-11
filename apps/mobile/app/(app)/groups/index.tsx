@@ -7,10 +7,11 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Menu, Plus, X, Users, UserPlus, ChevronRight } from 'lucide-react-native';
+import { Plus, X, Users, UserPlus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { BottomNav } from '@/components/shared/BottomNav';
+import { GroupCard } from '@/components/shared/GroupCard';
+import { Wordmark } from '@/components/shared/ScreenHeader';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
@@ -59,7 +60,9 @@ export default function GroupsDashboard() {
           borderBottomColor: semantic.border,
         }}
       >
-        <Text variant="h2" style={{ flex: 1, fontSize: 20, marginLeft: 4 }}>KapitPondo</Text>
+        <View style={{ flex: 1, marginLeft: 4 }}>
+          <Wordmark fontSize={20} />
+        </View>
         <Pressable
           onPress={onMenu}
           style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}
@@ -93,35 +96,7 @@ export default function GroupsDashboard() {
           <Text variant="overline" color="secondary" style={{ marginBottom: 12 }}>My Groups</Text>
           <View style={{ gap: 12 }}>
             {groups.map((item) => (
-              <Pressable
-                key={item.groups.id}
-                onPress={() => openGroup(item)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 12,
-                  backgroundColor: semantic.background,
-                  borderWidth: 1,
-                  borderColor: semantic.borderStrong,
-                  borderRadius: 16,
-                  paddingHorizontal: 16,
-                  paddingVertical: 16,
-                }}
-              >
-                <View style={{ width: 48, height: 48, borderRadius: 12, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}>
-                  <Users size={24} color="#fff" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text variant="label" style={{ fontSize: 16 }} numberOfLines={1}>{item.groups.name}</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 2, letterSpacing: 1 }}>{item.groups.fund_code}</Text>
-                </View>
-                {item.status === 'pending' ? (
-                  <StatusBadge entity="membership" value="pending" />
-                ) : (
-                  <StatusBadge entity="role" value={item.role} />
-                )}
-                <ChevronRight size={18} color={semantic.textMuted} />
-              </Pressable>
+              <GroupCard key={item.groups.id} item={item} onPress={() => openGroup(item)} />
             ))}
           </View>
         </ScrollView>

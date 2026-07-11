@@ -17,6 +17,7 @@ export interface Group {
   fund_code: string;
   description: string | null;
   status: GroupStatus;
+  owner: { full_name: string | null } | null;
 }
 
 /** A membership row from GET /groups: my role + status + the nested group. */
