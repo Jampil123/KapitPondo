@@ -37,7 +37,7 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
 function Hero({ groupId }: { groupId: string }) {
   const { data, loading } = useSummary(groupId);
   return (
-    <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brandDark, gap: 16 }}>
+    <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.dashCard, gap: 16 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ gap: 3 }}>
           <Text variant="caption" style={{ color: '#fff', opacity: 0.65 }}>Group cash balance</Text>

@@ -7,7 +7,7 @@ import { Text } from '@/components/ui/Text';
 import { LogoMark } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
 
-function Dots() {
+export function Dots() {
   const a = [useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current, useRef(new Animated.Value(0)).current];
   useEffect(() => {
     const loops = a.map((v, i) =>

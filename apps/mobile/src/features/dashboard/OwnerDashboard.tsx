@@ -30,7 +30,7 @@ function FundHero({ groupId }: { groupId: string }) {
         paddingHorizontal: 18,
         paddingTop: 18,
         paddingBottom: 16,
-        backgroundColor: semantic.brandDark,
+        backgroundColor: semantic.dashCard,
         shadowColor: semantic.brandDark,
         shadowOffset: { width: 0, height: 14 },
         shadowOpacity: 0.4,

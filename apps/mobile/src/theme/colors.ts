@@ -75,6 +75,7 @@ export const semantic = {
   textMuted: '#9DB2BE',
   textOnBrand: '#FFFFFF',
 
+  dashCard: '#2A3E4B',
   brand: '#6A93A6',
   brandDark: '#5E8497',
   accent: '#5E8497',

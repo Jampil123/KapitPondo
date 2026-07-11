@@ -60,7 +60,7 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
   return (
     <>
       {/* Integrity hero */}
-      <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brandDark, gap: 16 }}>
+      <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.dashCard, gap: 16 }}>
         <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
           <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
             <ShieldCheck size={24} color="#fff" />

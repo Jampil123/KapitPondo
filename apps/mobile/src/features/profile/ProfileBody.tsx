@@ -7,12 +7,13 @@
  * and the group-scoped one ([groupId]/profile.tsx, the group's own nav bar).
  */
 import { useState } from 'react';
-import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingState } from '@/components/shared/LoadingState';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
@@ -57,11 +58,7 @@ export function ProfileBody() {
   }
 
   if (signingOut) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color={semantic.brand} />
-      </View>
-    );
+    return <LoadingState label="Signing you out…" />;
   }
 
   return (
