@@ -16,6 +16,7 @@ import { ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { Segmented } from '@/components/ui/Segmented';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
@@ -70,14 +71,15 @@ export default function MembersOfficers() {
         <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />
       ) : (
         <View style={{ flex: 1, padding: 16, gap: 14 }}>
-          {/* Segmented filter */}
-          <View style={{ flexDirection: 'row', backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 4 }}>
-            {(['all', 'officers', 'members'] as Filter[]).map((f) => (
-              <Pressable key={f} onPress={() => setFilter(f)} style={{ flex: 1, paddingVertical: 9, borderRadius: 9, alignItems: 'center', backgroundColor: filter === f ? semantic.surface : 'transparent' }}>
-                <Text variant="label" style={{ fontSize: 13, color: filter === f ? semantic.textPrimary : semantic.textSecondary, textTransform: 'capitalize' }}>{f}</Text>
-              </Pressable>
-            ))}
-          </View>
+          <Segmented<Filter>
+            options={[
+              { key: 'all', label: 'All' },
+              { key: 'officers', label: 'Officers' },
+              { key: 'members', label: 'Members' },
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
 
           {/* Officer slots */}
           {filter !== 'members' ? (

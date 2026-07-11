@@ -73,12 +73,12 @@ export default function LoanDecisions() {
       <AppBar title="Loan Decisions" subtitle="Organizer" />
       <View style={{ flex: 1, padding: 16, gap: 14 }}>
         {/* Fund balance */}
-        <View style={{ backgroundColor: semantic.textPrimary, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ gap: 2 }}>
-            <Text variant="caption" style={{ color: '#fff', opacity: 0.7 }}>Available fund balance</Text>
-            {liquidity.loading ? <ActivityIndicator color="#fff" /> : <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(available)}</Text>}
+            <Text variant="caption" style={{ opacity: 0.7, color: semantic.textSecondary }}>Available fund balance</Text>
+            {liquidity.loading ? <ActivityIndicator /> : <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold' }}>{formatPeso(available)}</Text>}
           </View>
-          <Wallet size={26} color="rgba(255,255,255,0.8)" />
+          <Wallet size={26} color={semantic.brandDark} />
         </View>
 
         <TabBar<LoanStatus>
