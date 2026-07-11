@@ -22,7 +22,7 @@ export function TreasurerNav() {
         { label: 'Record expense', icon: Minus, route: 'expenses/record' },
       ] }}
       more={{ title: 'More', items: [
-        { label: 'Ledger', icon: ScrollText, route: 'reports/ledger' },
+        { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },
         { label: 'Reversals', icon: SlidersHorizontal, soon: true },
         { label: 'Year-end preview', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Switch, route: '@groups' },

@@ -1,18 +1,3 @@
-/**
- * features/dashboard/AuditorDashboard.tsx
- * ----------------------------------------------------------------------------
- * Auditor dashboard home (design's au-home), wired to our API. Rendered in
- * DashboardShell (shared header "Auditor" + AuditorNav bottom bar wired in
- * [groupId]/index).
- *
- * Data status:
- *   postings to verify  → submitted contributions + expenses  ✅ real
- *   open discrepancies  → NO flags API                        ⚠️ 0
- *   reversals to verify → reversal is owner-only, no verify    ⚠️ 0
- *   recent verifications→ useLedger                            ✅ real
- * Year-End + Audit Log route to real screens; postings/proofs are built next
- * ("Soon" until then).
- */
 import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ShieldCheck, ScrollText, Flag, Repeat, Receipt, CalendarClock, FileText, Check, ArrowUpRight, ArrowDownRight } from 'lucide-react-native';
@@ -53,10 +38,10 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
 const ACTIONS: { label: string; icon: any; route?: string }[] = [
   { label: 'Review Postings', icon: ScrollText, route: 'audit/postings' },
   { label: 'Review Proofs', icon: Receipt, route: 'audit/proofs' },
-  { label: 'Flag Discrepancy', icon: Flag },
+  { label: 'Flag Discrepancies', icon: Flag },
   { label: 'Verify Reversals', icon: Repeat },
-  { label: 'Year-End Preview', icon: CalendarClock, route: 'distribution/year-end' },
-  { label: 'Audit Log', icon: FileText, route: 'reports/ledger' },
+  { label: 'Verify Year-End', icon: CalendarClock, route: 'distribution/year-end' },
+  { label: 'Audit Log', icon: FileText, route: 'reports/group-ledger' },
 ];
 
 export function AuditorDashboard({ groupId }: { groupId: string }) {
@@ -75,7 +60,7 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
   return (
     <>
       {/* Integrity hero */}
-      <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.textPrimary, gap: 16 }}>
+      <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brandDark, gap: 16 }}>
         <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
           <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>
             <ShieldCheck size={24} color="#fff" />
@@ -95,14 +80,12 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
         </View>
       </View>
 
-      <SectionTitle title="Awaiting review" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <StatTile icon={ScrollText} count={postings} label="Postings to verify" tone="warn" onPress={() => go('audit/postings')} />
         <StatTile icon={Flag} count={flags} label="Open discrepancies" tone="danger" onPress={() => soon('Flag Discrepancy')} />
         <StatTile icon={Repeat} count={reversals} label="Reversals to verify" tone="accent" onPress={() => soon('Verify Reversals')} />
       </View>
 
-      <SectionTitle title="Audit actions" />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
         {ACTIONS.map((a) => (
           <Pressable key={a.label} onPress={() => (a.route ? go(a.route) : soon(a.label))} style={{ width: '30.5%', alignItems: 'center', gap: 8 }}>

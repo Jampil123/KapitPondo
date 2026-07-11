@@ -1,31 +1,22 @@
 /**
- * app/(app)/[groupId]/more.tsx — the dashboard grid's "More" tile.
- * Owner content is the original designer layout (also reachable from
- * OwnerDashboard's quick actions). Member content is the overflow menu from
- * MemberDashboard's "More" tile — this file was previously unreferenced by
- * any nav for any role, so branching by role here (instead of adding a
- * colliding more/index.tsx) reuses it rather than duplicating the shell.
+ * app/(app)/[groupId]/more.tsx — the shared Member dashboard's "More" tile.
+ * Per spec §0/§3, the member dashboard (and everything on it, including this
+ * screen) is IDENTICAL for plain members and for officers viewing their own
+ * "Member" tab — a governance action must never appear here, even for an
+ * Owner/Treasurer/Auditor. Every one of those governance items already has a
+ * real entry point on the officer's own governance dashboard (see
+ * OwnerDashboard's quick actions / stat tiles), so this screen renders
+ * MEMBER_ITEMS unconditionally regardless of the caller's role.
  */
 import { View, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  SlidersHorizontal, UserCheck, Users, Coins, AlertTriangle, CalendarClock,
-  ScrollText, Image as ImageIcon, History, Bell, LifeBuoy, UserCircle,
+  Users, ScrollText, Image as ImageIcon, History, Bell, LifeBuoy, UserCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
-import { useActiveGroup } from '@/context/GroupContext';
-
-const OWNER_ITEMS = [
-  { icon: SlidersHorizontal, label: 'Configure Cycle', key: 'cycles/configure', section: 'Cycle & money' },
-  { icon: Coins, label: 'Loan Decisions', key: 'loans/decisions', section: 'Cycle & money' },
-  { icon: AlertTriangle, label: 'Penalties', key: 'penalties', section: 'Cycle & money' },
-  { icon: CalendarClock, label: 'Year-End', key: 'distribution/year-end', section: 'Cycle & money' },
-  { icon: UserCheck, label: 'Membership Approvals', key: 'members/approvals', section: 'Members' },
-  { icon: Users, label: 'Members & Officers', key: 'members/officers', section: 'Members' },
-];
 
 const MEMBER_ITEMS = [
   { icon: ScrollText, label: 'My Ledger & Reports', key: 'reports/ledger', section: 'My records' },
@@ -67,8 +58,7 @@ function Tile({ icon: Icon, label, onPress }: { icon: any; label: string; onPres
 export default function More() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { role } = useActiveGroup();
-  const items = role === 'member' ? MEMBER_ITEMS : OWNER_ITEMS;
+  const items = MEMBER_ITEMS;
 
   function go(item: (typeof items)[number]) {
     if ('soon' in item && item.soon) return void Alert.alert(item.label, 'Coming soon.');

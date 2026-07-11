@@ -1,22 +1,3 @@
-/**
- * features/dashboard/OwnerDashboard.tsx
- * ----------------------------------------------------------------------------
- * The Owner's dashboard home — rebuilt to match the designer's Organizer app
- * (fund hero + "action required" stat tiles + quick-actions grid + recent
- * activity), wired to OUR real API hooks instead of the mock store.
- *
- * Rendered inside DashboardShell (which supplies the back header + group name +
- * role badge), so this file is just the content.
- *
- * Data status:
- *   balance / capital / loans-out  → useSummary            ✅ real
- *   loan decisions count           → useLoans(pending)     ✅ real
- *   membership requests count      → listPendingMembers    ✅ real
- *   penalties count                → NO API yet (M5.4)     ⚠️ shows 0
- *   recent activity                → NO API yet            ⚠️ empty state
- * Sub-screens (configure-cycle, approvals, etc.) are built next; tiles alert
- * "coming next" until their routes exist.
- */
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@/hooks/useApi';
@@ -49,8 +30,8 @@ function FundHero({ groupId }: { groupId: string }) {
         paddingHorizontal: 18,
         paddingTop: 18,
         paddingBottom: 16,
-        backgroundColor: semantic.brand,
-        shadowColor: semantic.brand,
+        backgroundColor: semantic.brandDark,
+        shadowColor: semantic.brandDark,
         shadowOffset: { width: 0, height: 14 },
         shadowOpacity: 0.4,
         shadowRadius: 30,
@@ -126,7 +107,7 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
 const ACTIONS: { label: string; icon: any; key: string }[] = [
   { label: 'Configure Cycle', icon: SlidersHorizontal, key: 'cycles/configure' },
   { label: 'Manage Officers', icon: Users, key: 'members/officers' },
-  { label: 'Year-End', icon: CalendarClock, key: 'distribution/year-end' },
+  { label: 'Year-End Finalize', icon: CalendarClock, key: 'distribution/year-end' },
   { label: 'Member Balances', icon: Wallet, key: 'reports/member-balances' },
   { label: 'Group Ledger', icon: ScrollText, key: 'reports/group-ledger' },
   { label: 'Expenses', icon: Receipt, key: 'expenses/record' },
@@ -151,7 +132,6 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
     <>
       <FundHero groupId={groupId} />
 
-      <SectionTitle title="Action required" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <StatTile icon={UserCheck} count={memberCount} label="Membership requests" tone="accent" onPress={() => go('members/approvals')} />
         <StatTile icon={Coins} count={loanCount} label="Loan decisions" tone="warn" onPress={() => go('loans/decisions')} />

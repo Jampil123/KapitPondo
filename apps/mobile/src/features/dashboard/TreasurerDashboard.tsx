@@ -1,22 +1,6 @@
-/**
- * features/dashboard/TreasurerDashboard.tsx
- * ----------------------------------------------------------------------------
- * Treasurer dashboard home (design's tr-home), wired to our API. Rendered in
- * DashboardShell (shared header "Treasurer" + TreasurerNav bottom bar wired in
- * [groupId]/index).
- *
- * Data status:
- *   group cash balance          → useSummary.available_cash   ✅ real (officer)
- *   contributions to confirm    → useContributions(submitted) ✅ real
- *   disbursements pending       → useLoans(approved)          ✅ real (≈0: approve+disburse fused)
- *   repayments to confirm       → NO aggregate API            ⚠️ shows 0
- *   recent transactions         → useLedger                   ✅ real
- * Quick actions route to treasurer sub-screens that aren't built yet → "Soon"
- * (Year-End Preview routes to the real distribution screen).
- */
 import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Wallet, ArrowUpRight, Repeat, Coins, Minus, SlidersHorizontal, CalendarClock, ArrowDownRight } from 'lucide-react-native';
+import { Wallet, ArrowUpRight, Repeat, Coins, Minus, BarChart3, CalendarClock, ArrowDownRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -53,7 +37,7 @@ function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; coun
 function Hero({ groupId }: { groupId: string }) {
   const { data, loading } = useSummary(groupId);
   return (
-    <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.textPrimary, gap: 16 }}>
+    <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brandDark, gap: 16 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ gap: 3 }}>
           <Text variant="caption" style={{ color: '#fff', opacity: 0.65 }}>Group cash balance</Text>
@@ -86,8 +70,8 @@ const ACTIONS: { label: string; icon: any; route?: string; params?: Record<strin
   { label: 'Record Repayment', icon: Repeat, route: 'loans/record-repayment' },
   { label: 'Confirm Disbursement', icon: Coins, route: 'loans/disburse' },
   { label: 'Record Expense', icon: Minus, route: 'expenses/record' },
-  { label: 'Reversals', icon: SlidersHorizontal },
   { label: 'Year-End Preview', icon: CalendarClock, route: 'distribution/year-end' },
+  { label: 'Reports', icon: BarChart3, route: 'reports/group-ledger' },
 ];
 
 function txnSign(dir: string) { return dir === 'credit' ? '+' : '-'; }
@@ -110,7 +94,6 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
     <>
       <Hero groupId={groupId} />
 
-      <SectionTitle title="To do" />
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <StatTile icon={ArrowUpRight} count={contribCount} label="Contributions to confirm" tone="accent" onPress={() => go('contributions/confirm', { tab: 'pending' })} />
         <StatTile icon={Repeat} count={repayCount} label="Repayments to confirm" tone="accent" onPress={() => go('loans/record-repayment')} />

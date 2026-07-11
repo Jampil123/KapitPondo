@@ -66,7 +66,7 @@ export function DashboardShell({
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 16 }}
+        contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 40, gap: 16 }}
         refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
       >
         {children}
