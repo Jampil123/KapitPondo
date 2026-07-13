@@ -12,8 +12,8 @@ import { GroupSheetNav } from './GroupSheetNav';
 export function TreasurerNav() {
   return (
     <GroupSheetNav
-      chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
-        { label: 'Officers room', icon: MessageCircle, soon: true },
+      chat={{ title: 'Group chats', items: [
+        { label: 'Officers room', icon: MessageCircle, route: 'chat/officers' },
       ] }}
       add={{ title: 'Record a transaction', items: [
         { label: 'Record contribution', icon: ArrowUpRight, route: 'contributions/confirm' },

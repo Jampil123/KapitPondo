@@ -14,8 +14,8 @@ import { GroupSheetNav } from './GroupSheetNav';
 export function AuditorNav() {
   return (
     <GroupSheetNav
-      chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
-        { label: 'Officers room', icon: MessageCircle, soon: true },
+      chat={{ title: 'Group chats', items: [
+        { label: 'Officers room', icon: MessageCircle, route: 'chat/officers' },
       ] }}
       add={{ title: 'What would you like to do?', items: [
         { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },

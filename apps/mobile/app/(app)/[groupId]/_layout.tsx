@@ -7,7 +7,7 @@
  * so it never slides/remounts when navigating between index/profile/etc.
  */
 import { View } from 'react-native';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import { semantic } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
 import { OrganizerNav } from '@/components/shared/OrganizerNav';
@@ -17,6 +17,11 @@ import { MemberNav } from '@/components/shared/MemberNav';
 
 export default function GroupLayout() {
   const { role } = useActiveGroup();
+  const pathname = usePathname();
+  // Chat is a full-page screen (its own composer sits at the true bottom of
+  // the screen) — the role nav bar is suppressed there instead of stacking
+  // on top of it.
+  const hideNav = pathname.includes('/chat/');
 
   return (
     <View style={{ flex: 1 }}>
@@ -28,10 +33,10 @@ export default function GroupLayout() {
           }}
         />
       </View>
-      {role === 'owner' && <OrganizerNav />}
-      {role === 'treasurer' && <TreasurerNav />}
-      {role === 'auditor' && <AuditorNav />}
-      {role === 'member' && <MemberNav />}
+      {!hideNav && role === 'owner' && <OrganizerNav />}
+      {!hideNav && role === 'treasurer' && <TreasurerNav />}
+      {!hideNav && role === 'auditor' && <AuditorNav />}
+      {!hideNav && role === 'member' && <MemberNav />}
     </View>
   );
 }

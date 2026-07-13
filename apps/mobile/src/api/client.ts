@@ -94,15 +94,21 @@ export async function apiFetch<T = unknown>(path: string, options: ApiOptions = 
   }
 
   let res: Response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
   try {
     res = await fetch(buildUrl(path, query), {
       ...rest,
       headers: finalHeaders,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
   } catch (e) {
-    // Network-level failure (server down, wrong LAN IP, no connection).
+    // Network-level failure (server down, wrong LAN IP, no connection, or a
+    // cold-start hang that hit the timeout above).
     throw new ApiError(0, 'Network request failed. Check your connection and API URL.', 'NETWORK', e);
+  } finally {
+    clearTimeout(timer);
   }
 
   const text = await res.text();

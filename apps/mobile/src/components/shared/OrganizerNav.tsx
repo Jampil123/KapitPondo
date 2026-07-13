@@ -13,9 +13,9 @@ import { GroupSheetNav } from './GroupSheetNav';
 export function OrganizerNav() {
   return (
     <GroupSheetNav
-      chat={{ title: 'Group chats', subtitle: 'Messaging isn’t enabled yet', items: [
-        { label: 'Officers room', icon: Users, soon: true },
-        { label: 'Group feed', icon: MessageCircle, soon: true },
+      chat={{ title: 'Group chats', items: [
+        { label: 'Officers room', icon: Users, route: 'chat/officers' },
+        { label: 'Group feed', icon: MessageCircle, route: 'chat/general' },
       ] }}
       add={{ title: 'What would you like to do?', items: [
         { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
