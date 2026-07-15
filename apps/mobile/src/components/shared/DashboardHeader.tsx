@@ -34,7 +34,7 @@ export function DashboardHeader({
 }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: semantic.background }}>
-      <Avatar name={member?.full_name} size={46} />
+      <Avatar name={member?.full_name} uri={member?.avatar_url} size={46} />
 
       <View style={{ flex: 1, gap: 3 }}>
         <Text variant="h3" style={{ fontSize: 17 }}>Kumusta, {firstName(member?.full_name)}</Text>

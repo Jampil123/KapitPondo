@@ -9,19 +9,18 @@
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut } from 'lucide-react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut, UserPen, Camera } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
+import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingState } from '@/components/shared/LoadingState';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
-
-function initialsOf(name?: string | null) {
-  if (!name) return 'K';
-  return name.trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase() || 'K';
-}
+import { updateProfile } from '@/api/members';
+import { uploadAvatar } from '@/lib/upload';
 
 function Row({ icon: Icon, label, onPress }: { icon: any; label: string; onPress?: () => void }) {
   return (
@@ -35,9 +34,36 @@ function Row({ icon: Icon, label, onPress }: { icon: any; label: string; onPress
 
 export function ProfileBody() {
   const router = useRouter();
-  const { member, signOut } = useAuth();
+  const { member, signOut, refreshMember } = useAuth();
   const verified = member?.verification_status === 'verified';
   const [signingOut, setSigningOut] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  async function pickAvatar() {
+    if (!member) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to change your profile picture.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (res.canceled) return;
+    setUploadingAvatar(true);
+    try {
+      const avatarUrl = await uploadAvatar(member.id, res.assets[0].uri);
+      await updateProfile({ avatar_url: avatarUrl });
+      await refreshMember();
+    } catch (e) {
+      Alert.alert('Upload failed', (e as Error).message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
 
   function confirmSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -64,9 +90,18 @@ export function ProfileBody() {
   return (
     <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40, gap: 20 }}>
       <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 20, alignItems: 'center', gap: 6 }, shadowToken.card]}>
-        <View style={{ width: 72, height: 72, borderRadius: 36, backgroundColor: semantic.textPrimary, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 24 }}>{initialsOf(member?.full_name)}</Text>
-        </View>
+        <Pressable onPress={pickAvatar} disabled={uploadingAvatar} style={{ marginBottom: 6 }}>
+          <Avatar name={member?.full_name} uri={member?.avatar_url} size={72} />
+          <View
+            style={{
+              position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: 13,
+              backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center',
+              borderWidth: 2, borderColor: semantic.surface,
+            }}
+          >
+            {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <Camera size={13} color="#fff" />}
+          </View>
+        </Pressable>
         <Text variant="h2" style={{ fontSize: 19 }}>{member?.full_name ?? 'Your account'}</Text>
         {member?.phone ? <Text variant="body" color="secondary">{formatPH(member.phone)}</Text> : null}
         <View style={{ marginTop: 8 }}>
@@ -88,6 +123,8 @@ export function ProfileBody() {
       )}
 
       <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+        <Row icon={UserPen} label="Edit Profile" onPress={() => router.push('/(app)/edit-profile' as any)} />
+        <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
         <Row icon={Bell} label="Notifications" onPress={() => {}} />
         <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
         <Row icon={Lock} label="Privacy & Security" onPress={() => {}} />

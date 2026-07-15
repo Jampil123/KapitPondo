@@ -35,4 +35,5 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 export const api = {
   get: <T>(p: string) => apiFetch<T>(p),
   post: <T>(p: string, b?: unknown) => apiFetch<T>(p, { method: 'POST', body: b ? JSON.stringify(b) : undefined }),
+  put: <T>(p: string, b?: unknown) => apiFetch<T>(p, { method: 'PUT', body: b ? JSON.stringify(b) : undefined }),
 };

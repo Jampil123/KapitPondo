@@ -1,5 +1,11 @@
 const supabase = require('../../config/supabase');
 
+// `id_document_url` is actually a PATH inside the private `id-documents`
+// bucket (see apps/mobile/src/lib/upload.ts) — it must be exchanged for a
+// short-lived signed URL before the admin console can render it.
+const ID_DOCUMENT_BUCKET = 'id-documents';
+const SIGNED_URL_TTL = 300; // seconds
+
 // One immutable row per sysadmin decision (system_audit_log — migration 0017).
 async function writeAudit(actorId, action, targetId, metadata) {
   await supabase.from('system_audit_log').insert({
@@ -60,6 +66,47 @@ async function submitDocument({
   return data;
 }
 
+// Member edits their own personal info — unlike submitDocument, not gated by
+// verification_status and never touches id_document_url/selfie_url/id_type/
+// verification_status (those are the KYC flow's job, not this one's).
+async function updateProfile({
+  memberId, fullName, firstName, middleName, lastName, email, birthday,
+  nationality, region, province, city, barangay, streetAddress, zipCode,
+  sourceOfFunds, employmentStatus, occupation, avatarUrl,
+}) {
+  const update = { updated_at: new Date().toISOString() };
+  if (avatarUrl !== undefined) update.avatar_url = avatarUrl;
+  if (email !== undefined) update.email = email;
+  if (firstName !== undefined) update.first_name = firstName;
+  if (middleName !== undefined) update.middle_name = middleName;
+  if (lastName !== undefined) update.last_name = lastName;
+  if (birthday !== undefined) update.birthday = birthday;
+  if (firstName || lastName) {
+    update.full_name = [firstName, middleName, lastName].filter(Boolean).join(' ') || fullName;
+  } else if (fullName !== undefined) {
+    update.full_name = fullName;
+  }
+  if (nationality !== undefined) update.nationality = nationality;
+  if (region !== undefined) update.region = region;
+  if (province !== undefined) update.province = province;
+  if (city !== undefined) update.city = city;
+  if (barangay !== undefined) update.barangay = barangay;
+  if (streetAddress !== undefined) update.street_address = streetAddress;
+  if (zipCode !== undefined) update.zip_code = zipCode;
+  if (sourceOfFunds !== undefined) update.source_of_funds = sourceOfFunds;
+  if (employmentStatus !== undefined) update.employment_status = employmentStatus;
+  if (occupation !== undefined) update.occupation = occupation;
+
+  const { data, error } = await supabase
+    .from('members')
+    .update(update)
+    .eq('id', memberId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // Sysadmin: list members by verification status (default: pending queue).
 // status === 'all' returns every member regardless of verification status.
 async function listForReview(status = 'pending') {
@@ -82,7 +129,15 @@ async function getMember(id, actorAuthId) {
     .from('members').select('*').eq('id', id).single();
   if (error) throw error;
   if (actorAuthId) await writeAudit(actorAuthId, 'account.id_viewed', id, null);
-  return data;
+
+  let id_document_signed_url = null;
+  if (data?.id_document_url) {
+    const { data: signed } = await supabase.storage
+      .from(ID_DOCUMENT_BUCKET)
+      .createSignedUrl(data.id_document_url, SIGNED_URL_TTL);
+    id_document_signed_url = signed?.signedUrl ?? null;
+  }
+  return { ...data, id_document_signed_url };
 }
 
 // Sysadmin approves a member. `reviewerId` (members.id) fills the members
@@ -126,6 +181,6 @@ async function getMyProfile(memberId) {
 }
 
 module.exports = {
-  submitDocument, listForReview, getMember,
+  submitDocument, updateProfile, listForReview, getMember,
   approveMember, rejectMember, getMyProfile,
 };
