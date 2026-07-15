@@ -14,6 +14,38 @@ router.get('/me/profile', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Update my own personal info (not the KYC document/selfie/status)
+router.patch('/me/profile', requireAuth, async (req, res, next) => {
+  try {
+    const {
+      full_name, first_name, middle_name, last_name, email, birthday,
+      nationality, region, province, city, barangay, street_address, zip_code,
+      source_of_funds, employment_status, occupation, avatar_url,
+    } = req.body;
+    const member = await service.updateProfile({
+      memberId: req.member.id,
+      fullName: full_name,
+      firstName: first_name,
+      middleName: middle_name,
+      lastName: last_name,
+      email,
+      birthday,
+      avatarUrl: avatar_url,
+      nationality,
+      region,
+      province,
+      city,
+      barangay,
+      streetAddress: street_address,
+      zipCode: zip_code,
+      sourceOfFunds: source_of_funds,
+      employmentStatus: employment_status,
+      occupation,
+    });
+    res.json({ message: 'Profile updated', member });
+  } catch (err) { next(err); }
+});
+
 // Submit / resubmit identity document
 router.post('/me/identity', requireAuth, async (req, res, next) => {
   try {

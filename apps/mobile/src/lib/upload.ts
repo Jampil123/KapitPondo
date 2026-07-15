@@ -9,9 +9,10 @@
  *   npx expo install expo-file-system
  *   npm i base64-arraybuffer
  *
- * Buckets to create in Supabase Storage (private):
- *   - id-documents   (KYC IDs)
- *   - proofs         (payment / expense proof images)
+ * Buckets to create in Supabase Storage:
+ *   - id-documents   (KYC IDs, private)
+ *   - proofs         (payment / expense proof images, private)
+ *   - avatars        (profile pictures, PUBLIC — see migration 0019)
  */
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
@@ -38,4 +39,28 @@ export async function uploadImage(
 
   if (error) throw error;
   return path;
+}
+
+/**
+ * Upload a profile picture to the public `avatars` bucket and return its
+ * public URL (not a path — unlike uploadImage's private buckets, avatars
+ * are rendered directly by the app, so the caller needs the real URL).
+ */
+export async function uploadAvatar(memberId: string, localUri: string): Promise<string> {
+  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${memberId}/${Date.now()}.${ext}`;
+
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, decode(base64), {
+      contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
+      upsert: true,
+    });
+
+  if (error) throw error;
+  return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
 }

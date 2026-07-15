@@ -13,6 +13,8 @@ const distributionsRoutes = require('./modules/distribution/distributions.routes
 const monitoringRoutes = require('./modules/monitoring/monitoring.routes');
 const reportsRoutes = require('./modules/reporting/reporting.routes');
 const ledgerRoutes = require('./modules/ledger/ledger.routes');
+const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
+const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
@@ -33,6 +35,8 @@ app.use('/api', distributionsRoutes);
 app.use('/api', monitoringRoutes);
 app.use('/api', reportsRoutes);
 app.use('/api', ledgerRoutes);
+app.use('/api', adminSecurityRoutes);
+app.use('/api', recoveryRoutes);
 
 // Error handler stays last.
 app.use(errorHandler);

@@ -5,12 +5,13 @@
  */
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, PieChart, BarChart3, Sparkles } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ShieldCheck, Users, PieChart, BarChart3 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { TextField } from '../../components/ui/TextField';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { Checkbox } from '../../components/ui/Checkbox';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 import leftBackground from '../../assets/images/left-background.png';
 import kpLogo from '../../assets/images/KP-Logo.png';
 
@@ -30,6 +31,7 @@ export function LoginPage() {
   const [remember, setRemember] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -76,12 +78,6 @@ export function LoginPage() {
 
       {/* Right — form */}
       <div className="w-full md:w-1/2 bg-surface flex flex-col">
-        <div className="flex justify-end p-8">
-          <div className="flex items-center gap-2 rounded-full border border-line-strong bg-surface-alt px-4 py-2">
-            <ShieldCheck size={16} className="text-brand-dark" />
-            <span className="text-xs font-semibold text-brand-dark">Secure Admin Access</span>
-          </div>
-        </div>
         <div className="flex-1 flex items-center justify-center px-10">
           <form onSubmit={onSubmit} className="w-full max-w-md">
             <h2 className="text-4xl font-bold text-ink leading-tight">Welcome back,</h2>
@@ -115,7 +111,13 @@ export function LoginPage() {
 
             <div className="flex items-center justify-between mb-6">
               <Checkbox checked={remember} onChange={setRemember} label="Remember me" />
-              <span className="text-sm font-semibold text-brand-dark cursor-default">Forgot password?</span>
+              <button
+                type="button"
+                onClick={() => setForgotOpen(true)}
+                className="text-sm font-semibold text-brand-dark hover:opacity-80"
+              >
+                Forgot password?
+              </button>
             </div>
 
             <PrimaryButton disabled={busy} busy={busy} busyLabel="Signing in…">
@@ -129,6 +131,8 @@ export function LoginPage() {
           </form>
         </div>
       </div>
+
+      {forgotOpen && <ForgotPasswordModal onClose={() => setForgotOpen(false)} />}
     </div>
   );
 }

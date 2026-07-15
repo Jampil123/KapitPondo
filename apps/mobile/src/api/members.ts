@@ -19,6 +19,7 @@ export interface Member {
   email: string | null;
   phone: string | null;
   is_system_admin: boolean;
+  avatar_url: string | null;
   verification_status: VerificationStatus;
   id_document_url: string | null;
   id_type: string | null;
@@ -43,6 +44,32 @@ export interface Member {
 /** GET /api/me/profile — the signed-in member + verification status. */
 export async function getMyProfile() {
   const res = await api.get<{ member: Member }>('/api/me/profile');
+  return res.member;
+}
+
+export interface UpdateProfileInput {
+  avatar_url?: string;
+  full_name?: string;
+  first_name?: string;
+  middle_name?: string;
+  last_name?: string;
+  email?: string;
+  birthday?: string;
+  nationality?: string;
+  region?: string;
+  province?: string;
+  city?: string;
+  barangay?: string;
+  street_address?: string;
+  zip_code?: string;
+  source_of_funds?: string;
+  employment_status?: string;
+  occupation?: string;
+}
+
+/** PATCH /api/me/profile — update my own personal info (not the KYC document/status). */
+export async function updateProfile(input: UpdateProfileInput) {
+  const res = await api.patch<{ message: string; member: Member }>('/api/me/profile', input);
   return res.member;
 }
 

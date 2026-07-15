@@ -21,9 +21,8 @@ type Applicant = {
   province?: string;
   reject_reason?: string;
   id_document_url?: string;
+  id_document_signed_url?: string;
 };
-// The real backend (services/api identity.routes.js) returns the raw member
-// row, not a signed preview URL — there's no signed-URL endpoint wired up yet.
 type Detail = { member: Applicant };
 
 const TABS: { key: AccountStatus; label: string }[] = [
@@ -229,14 +228,20 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted document</div>
               <div className="bg-surface-alt rounded-2xl p-3.5">
-                {/* No signed-URL preview endpoint exists on the backend yet — show an
-                    honest on-file / not-on-file state instead of faking a download link. */}
-                <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                     style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                  <span className="text-sm font-medium">
-                    {a?.id_document_url ? 'Document on file — preview coming soon' : 'No document on file'}
-                  </span>
-                </div>
+                {a?.id_document_signed_url ? (
+                  <img
+                    src={a.id_document_signed_url}
+                    alt="Submitted ID document"
+                    className="w-full h-64 object-contain rounded-lg bg-surface"
+                  />
+                ) : (
+                  <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+                       style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+                    <span className="text-sm font-medium">
+                      {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {err && <div className="mt-4 rounded-lg bg-danger-bg text-danger text-sm px-3 py-2">{err}</div>}
