@@ -2,32 +2,22 @@
  * components/shared/ScreenHeader.tsx
  * ----------------------------------------------------------------------------
  * The prototype's header: optional back chevron, centered (or left) logo +
- * "KapitPondo" wordmark. LogoMark is the accent rounded-square peso badge.
+ * "KapitPondo" wordmark. LogoMark renders the KP brand logo image.
  */
 import { View, Pressable } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '../ui/Text';
-import { semantic, shadowToken } from '../../theme/colors';
+import { semantic } from '../../theme/colors';
 
 export function LogoMark({ size = 28 }: { size?: number }) {
   return (
-    <View
-      style={[
-        {
-          width: size,
-          height: size,
-          borderRadius: size * 0.32,
-          backgroundColor: semantic.brand,
-          alignItems: 'center',
-          justifyContent: 'center',
-        },
-        shadowToken.button,
-      ]}
-    >
-      {/* simple peso glyph; swap for an SVG/icon later if desired */}
-      <Text style={{ color: '#fff', fontSize: size * 0.5, fontWeight: '700' }}>₱</Text>
-    </View>
+    <Image
+      source={require('../../../assets/images/KP-Logo.png')}
+      style={{ width: size, height: size }}
+      contentFit="contain"
+    />
   );
 }
 
@@ -41,7 +31,7 @@ export function Wordmark({ fontSize = 17 }: { fontSize?: number }) {
   );
 }
 
-export function ScreenHeader({ back = false }: { back?: boolean }) {
+export function ScreenHeader({ back = false, showBrand = true }: { back?: boolean; showBrand?: boolean }) {
   const router = useRouter();
   return (
     <View
@@ -71,8 +61,12 @@ export function ScreenHeader({ back = false }: { back?: boolean }) {
           justifyContent: back ? 'flex-start' : 'center',
         }}
       >
-        <LogoMark size={28} />
-        <Wordmark fontSize={17} />
+        {showBrand ? (
+          <>
+            <LogoMark size={28} />
+            <Wordmark fontSize={17} />
+          </>
+        ) : null}
       </View>
       <View style={{ width: 30 }} />
     </View>

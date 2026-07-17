@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
+import { LogoMark } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
 
 const BG        = '#0C1318';
@@ -31,9 +32,11 @@ export default function LandingScreen() {
       <View style={{ flex: 1, paddingHorizontal: 22, justifyContent: 'space-between', paddingVertical: 32 }}>
 
         {/* Brand header */}
-        <View style={{ alignItems: 'center', paddingTop: 8 }}>
-          <Text variant="h1" style={{ fontSize: 22, color: semantic.brand, letterSpacing: -0.5 }}>
-            KapitPondo
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingTop: 8 }}>
+          <LogoMark size={34} />
+          <Text variant="h1" style={{ fontSize: 22, letterSpacing: -0.5 }}>
+            <Text variant="h1" color="inherit" style={{ fontSize: 22, color: '#B8CCD4' }}>Kapit</Text>
+            <Text variant="h1" color="inherit" style={{ fontSize: 22, color: semantic.brand }}>Pondo</Text>
           </Text>
         </View>
 
@@ -109,9 +112,10 @@ export default function LandingScreen() {
           </Animated.View>
 
           {/* Headline */}
-          <Text variant="h1" style={{ textAlign: 'center', fontSize: 26, lineHeight: 34, paddingHorizontal: 4, color: '#E8F2F7' }}>
+          <Text variant="h1" style={{ textAlign: 'center', fontSize: 26, lineHeight: 34, paddingHorizontal: 4, color: '#D6E4EA' }}>
             Grow your community wealth with{' '}
-            <Text variant="h1" style={{ color: semantic.brand, fontSize: 26 }}>KapitPondo</Text>
+            <Text variant="h1" style={{ color: '#B8CCD4', fontSize: 26 }}>Kapit</Text>
+            <Text variant="h1" style={{ color: semantic.brand, fontSize: 26 }}>Pondo</Text>
           </Text>
           <Text variant="body" style={{ textAlign: 'center', marginTop: 12, paddingHorizontal: 16, color: '#7FA6B8CC' }}>
             A secure platform for shared savings and community-driven financial growth.

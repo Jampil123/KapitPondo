@@ -10,7 +10,7 @@ import { Phone, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { ScreenHeader } from '@/components/shared/ScreenHeader';
+import { ScreenHeader, LogoMark, Wordmark } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 
@@ -50,10 +50,13 @@ export default function SignIn() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
-      <ScreenHeader back />
+      <ScreenHeader back showBrand={false} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32, flexGrow: 1 }}>
-        <View style={{ gap: 3, marginTop: 10, marginBottom: 22 }}>
-          <Text variant="h1" style={{ fontSize: 23 }}>Welcome back</Text>
+        <View style={{ gap: 6, marginTop: 10, marginBottom: 22 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <LogoMark size={32} />
+            <Wordmark fontSize={20} />
+          </View>
           <Text variant="body" color="secondary">Sign in to manage your group funds.</Text>
         </View>
 
