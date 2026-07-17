@@ -12,6 +12,9 @@ router.get('/me/profile', requireAuth, (req, res) => {
 // Create a group — the calling member becomes its owner
 router.post('/groups', requireAuth, async (req, res, next) => {
   try {
+    if (req.member.verification_status !== 'verified') {
+      return res.status(403).json({ error: 'Only verified members can create a group' });
+    }
     const { name, fund_code, description } = req.body;
     if (!name || !fund_code) {
       return res.status(400).json({ error: 'name and fund_code are required' });
@@ -97,8 +100,8 @@ router.patch('/groups/:groupId/members/:memberId/reject', requireAuth,
   requireGroupRole(['owner', 'treasurer']),
   async (req, res, next) => {
     try {
-      await service.rejectMember(req.params.groupId, req.params.memberId);
-      res.json({ ok: true });
+      const membership = await service.rejectMember(req.params.groupId, req.params.memberId, req.body?.reason);
+      res.json({ membership });
     } catch (err) { next(err); }
   }
 );

@@ -45,7 +45,7 @@ export function AuditPage() {
   }), [entries]);
 
   return (
-    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
+    <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[['Total events', stats.total], ['Verifications', stats.verified], ['Rejections', stats.rejected], ['ID views', stats.idviews]].map(([l, v]) => (
           <div key={String(l)} className="rounded-2xl bg-surface border border-line p-4">

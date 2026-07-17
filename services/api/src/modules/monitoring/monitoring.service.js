@@ -39,4 +39,42 @@ async function recentLedger({ limit = 50 }) {
   return data;
 }
 
-module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger };
+// Wraps a user-supplied term for interpolation into a PostgREST or()/ilike()
+// filter string. Quoting the value stops embedded commas, parens, or dots in
+// the search term from being parsed as extra filter syntax.
+function toIlikeTerm(q) {
+  return `"%${q.replace(/"/g, '\\"')}%"`;
+}
+
+// Cross-entity search for the admin dashboard's search bar — looks up
+// members, groups, and audit log entries in parallel.
+async function search(q, limit = 5) {
+  const term = toIlikeTerm(q);
+
+  const [membersRes, groupsRes, auditRes] = await Promise.all([
+    supabase
+      .from('members')
+      .select('id, full_name, email, phone, verification_status')
+      .or(`full_name.ilike.${term},email.ilike.${term},phone.ilike.${term}`)
+      .limit(limit),
+    supabase
+      .from('groups')
+      .select('id, name, fund_code, status')
+      .or(`name.ilike.${term},fund_code.ilike.${term}`)
+      .limit(limit),
+    supabase
+      .from('system_audit_log')
+      .select('id, action, target_type, target_id, created_at')
+      .or(`action.ilike.${term},target_type.ilike.${term}`)
+      .order('created_at', { ascending: false })
+      .limit(limit),
+  ]);
+
+  if (membersRes.error) throw membersRes.error;
+  if (groupsRes.error) throw groupsRes.error;
+  if (auditRes.error) throw auditRes.error;
+
+  return { members: membersRes.data, groups: groupsRes.data, audit: auditRes.data };
+}
+
+module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search };

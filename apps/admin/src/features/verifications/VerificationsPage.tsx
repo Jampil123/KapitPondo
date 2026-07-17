@@ -90,7 +90,7 @@ export function VerificationsPage() {
   }, [rows, query]);
 
   return (
-    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
+    <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
       <div className="inline-flex items-center gap-1 bg-surface-alt rounded-xl p-1 mb-4">
         <button onClick={() => setView('verification')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${view === 'verification' ? 'bg-surface text-ink shadow-sm' : 'text-muted'}`}>

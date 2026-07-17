@@ -53,7 +53,7 @@ export function GroupsPage() {
   }), [groups]);
 
   return (
-    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
+    <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
       {error && <div className="mb-4 rounded-lg bg-danger-bg text-danger text-sm px-3 py-2">{error}</div>}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

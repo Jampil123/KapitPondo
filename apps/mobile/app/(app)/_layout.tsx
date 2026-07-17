@@ -3,17 +3,20 @@
  */
 import { Stack } from 'expo-router';
 import { GroupProvider } from '@/context/GroupContext';
+import { NotificationsProvider } from '@/context/NotificationsContext';
 import { semantic } from '@/theme/colors';
 
 export default function AppLayout() {
   return (
-    <GroupProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: semantic.background },
-        }}
-      />
-    </GroupProvider>
+    <NotificationsProvider>
+      <GroupProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: semantic.background },
+          }}
+        />
+      </GroupProvider>
+    </NotificationsProvider>
   );
 }

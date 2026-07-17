@@ -7,6 +7,7 @@ import { User, Phone, Lock, ShieldCheck, Mail, Calendar, Info, ChevronLeft } fro
 import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { semantic } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 
@@ -32,9 +33,10 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(PREFIX);
   const [password, setPassword] = useState('');
+  const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = firstName.trim() && lastName.trim() && phone.trim() && password.length >= 8;
+  const canSubmit = firstName.trim() && lastName.trim() && phone.trim() && password.length >= 8 && agreed;
 
   async function onCreate() {
     if (!canSubmit) return;
@@ -48,6 +50,7 @@ export default function SignUp() {
         lastName: lastName.trim(),
         birthday: birthday.trim() || undefined,
         email: email.trim() || undefined,
+        consentAccepted: agreed,
       });
       router.push({ pathname: '/(auth)/otp', params: { phone } });
     } catch (e) {
@@ -163,6 +166,14 @@ export default function SignUp() {
           <Text variant="caption" color="secondary" style={{ flex: 1 }}>
             Your details are encrypted and never shared.
           </Text>
+        </View>
+
+        <View style={{ marginBottom: 18 }}>
+          <Checkbox
+            checked={agreed}
+            onToggle={() => setAgreed((a) => !a)}
+            label="I agree to KapitPondo's Terms of Service and Privacy Policy."
+          />
         </View>
 
         <Button label="Create Account" onPress={onCreate} loading={loading} disabled={!canSubmit} />

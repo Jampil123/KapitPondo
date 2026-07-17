@@ -54,8 +54,8 @@ export async function listMembers(groupId: string) {
 export function approveMember(groupId: string, memberId: string) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/approve`);
 }
-export function rejectMember(groupId: string, memberId: string) {
-  return api.patch(`/api/groups/${groupId}/members/${memberId}/reject`);
+export function rejectMember(groupId: string, memberId: string, reason?: string) {
+  return api.patch(`/api/groups/${groupId}/members/${memberId}/reject`, { reason });
 }
 export function setMemberRole(groupId: string, memberId: string, role: GroupRole) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/role`, { role });

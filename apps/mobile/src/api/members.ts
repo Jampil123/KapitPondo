@@ -21,6 +21,7 @@ export interface Member {
   is_system_admin: boolean;
   avatar_url: string | null;
   verification_status: VerificationStatus;
+  verification_rejection_reason: string | null;
   id_document_url: string | null;
   id_type: string | null;
   selfie_url: string | null;

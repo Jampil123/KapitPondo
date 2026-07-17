@@ -17,6 +17,10 @@ const TOPBAR_META: Record<string, { title: string; subtitle: string }> = {
   '/groups': { title: 'Groups', subtitle: 'Active savings groups and their fund health.' },
   '/audit': { title: 'Activity', subtitle: 'System activity monitor — every admin action.' },
   '/settings': { title: 'Settings', subtitle: 'Your admin account and console preferences.' },
+  '/system/database': { title: 'Database', subtitle: 'Database health & performance.' },
+  '/system/auth-service': { title: 'Auth Service', subtitle: 'Authentication service health.' },
+  '/system/storage': { title: 'Storage', subtitle: 'File storage health & usage.' },
+  '/system/background-jobs': { title: 'Background Jobs', subtitle: 'Scheduled & queued job health.' },
 };
 
 export function AppLayout() {
@@ -24,6 +28,7 @@ export function AppLayout() {
   const nav = useNavigate();
   const location = useLocation();
   const [pending, setPending] = useState<number | null>(null);
+  const [sidebarPinned, setSidebarPinned] = useState(false);
   const meta = TOPBAR_META[location.pathname] ?? TOPBAR_META['/'];
 
   useEffect(() => {
@@ -36,7 +41,7 @@ export function AppLayout() {
 
   return (
     <div className="flex h-full min-h-screen">
-      <Sidebar pending={pending} />
+      <Sidebar pending={pending} pinned={sidebarPinned} />
 
       <main className="flex-1 overflow-auto bg-bg">
         <Topbar
@@ -44,6 +49,7 @@ export function AppLayout() {
           subtitle={meta.subtitle}
           admin={admin}
           onSignOut={async () => { await signOut(); nav('/login'); }}
+          onMenuClick={() => setSidebarPinned((v) => !v)}
         />
         <Outlet />
       </main>

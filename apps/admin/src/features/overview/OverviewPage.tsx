@@ -1,18 +1,24 @@
 /**
  * apps/admin/src/features/overview/OverviewPage.tsx — the admin dashboard.
  * KPI cards + pending-verifications + recent activity from the real API.
- * Honest placeholders: growth chart (needs a time-series endpoint) and system
- * health (needs infra checks) — labelled, not faked.
+ * Honest placeholder: growth chart (needs a time-series endpoint) — labelled,
+ * not faked. System health now lives under its own sidebar section.
  */
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useRef, useState, type ComponentType } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, Boxes, ShieldCheck, Flag, Check, X, ChevronRight } from 'lucide-react';
+import { Users, Boxes, ShieldCheck, Flag, Check, X, ChevronRight, Search, Activity } from 'lucide-react';
 import { api } from '../../lib/api';
 
 // Mirrors the real platform_overview() SQL function (services/api monitoring.service.js).
 type Overview = { total_members: number; verified_members: number; total_groups: number; active_cycles: number };
 type Applicant = { id: string; full_name?: string; email?: string; phone?: string };
 type AuditEntry = { id: string; action: string; target_type: string; created_at: string; metadata?: Record<string, unknown> };
+
+// Matches services/api monitoring.service.js `search()`.
+type SearchMember = { id: string; full_name?: string; email?: string; phone?: string; verification_status?: string };
+type SearchGroupHit = { id: string; name: string; fund_code?: string; status?: string };
+type SearchAuditHit = { id: string; action: string; target_type?: string; created_at: string };
+type SearchResults = { members: SearchMember[]; groups: SearchGroupHit[]; audit: SearchAuditHit[] };
 
 const TONE: Record<string, string> = {
   accent: 'bg-surface-alt text-brand-dark',
@@ -58,6 +64,45 @@ export function OverviewPage() {
   const [activity, setActivity] = useState<AuditEntry[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<SearchResults | null>(null);
+  const searchRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    function onClick(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) setSearchOpen(false);
+    }
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [searchOpen]);
+
+  // Debounced global search — scans members, groups, and the audit log via
+  // GET /admin/search (services/api monitoring.service.js `search()`).
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setResults(null);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const r = await api.get<SearchResults>(`/admin/search?q=${encodeURIComponent(term)}`);
+        setResults(r);
+      } catch {
+        setResults({ members: [], groups: [], audit: [] });
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+  }, [query]);
+
   async function load() {
     const [overview, verifs, audit] = await Promise.allSettled([
       api.get<{ overview: Overview }>('/admin/monitoring/overview'),
@@ -87,7 +132,81 @@ export function OverviewPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
+    <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
+
+      <div className="relative max-w-[380px] mb-5" ref={searchRef}>
+        <div className="flex items-center gap-2.5 bg-surface-alt rounded-xl px-3.5 py-2.5">
+          <Search size={18} className="text-muted shrink-0" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setSearchOpen(true)}
+            placeholder="Search users, groups, activity…"
+            className="w-full bg-transparent text-sm text-ink placeholder:text-muted outline-none"
+          />
+        </div>
+
+        {searchOpen && query.trim().length >= 2 ? (
+          <div className="absolute left-0 right-0 top-full mt-2 rounded-xl bg-surface border border-line shadow-lg overflow-hidden z-20 max-h-96 overflow-y-auto">
+            {searching ? (
+              <div className="px-4 py-6 text-center text-sm text-muted">Searching…</div>
+            ) : !results || (results.members.length === 0 && results.groups.length === 0 && results.audit.length === 0) ? (
+              <div className="px-4 py-6 text-center text-sm text-muted">No results for "{query.trim()}".</div>
+            ) : (
+              <>
+                {results.members.length > 0 && (
+                  <div>
+                    <div className="px-4 pt-3 pb-1 text-[11px] font-semibold text-muted uppercase tracking-wide">Users</div>
+                    {results.members.map((r) => (
+                      <button key={r.id} onClick={() => { setSearchOpen(false); nav('/verifications'); }}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-alt">
+                        <div className="w-8 h-8 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-[11px] font-semibold shrink-0">{initials(r.full_name)}</div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] text-ink truncate">{r.full_name ?? 'Unnamed'}</div>
+                          <div className="text-[11px] text-muted truncate">{r.email ?? r.phone ?? ''}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {results.groups.length > 0 && (
+                  <div>
+                    <div className="px-4 pt-3 pb-1 text-[11px] font-semibold text-muted uppercase tracking-wide border-t border-line">Groups</div>
+                    {results.groups.map((r) => (
+                      <button key={r.id} onClick={() => { setSearchOpen(false); nav('/groups'); }}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-alt">
+                        <div className="w-8 h-8 rounded-lg bg-surface-alt text-brand-dark flex items-center justify-center shrink-0"><Boxes size={15} /></div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] text-ink truncate">{r.name}</div>
+                          <div className="text-[11px] text-muted truncate">{r.fund_code ?? ''}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {results.audit.length > 0 && (
+                  <div>
+                    <div className="px-4 pt-3 pb-1 text-[11px] font-semibold text-muted uppercase tracking-wide border-t border-line">Activity</div>
+                    {results.audit.map((r) => (
+                      <button key={r.id} onClick={() => { setSearchOpen(false); nav('/audit'); }}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-surface-alt">
+                        <div className="w-8 h-8 rounded-lg bg-surface-alt text-brand-dark flex items-center justify-center shrink-0"><Activity size={15} /></div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13px] text-ink truncate">{r.action.replace(/[._]/g, ' ')}</div>
+                          <div className="text-[11px] text-muted truncate">{new Date(r.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric' })}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : null}
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {kpis.map((k) => <Kpi key={k.label} {...k} />)}
       </div>
@@ -122,21 +241,6 @@ export function OverviewPage() {
         </div>
 
         <div className="space-y-6">
-          <Card title="System health">
-            <div className="p-2">
-              {['Database', 'Auth service', 'Storage', 'Background jobs'].map((r, i, a) => (
-                <div key={r} className={`flex items-center justify-between px-3 py-3 ${i < a.length - 1 ? 'border-b border-line' : ''}`}>
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-muted" />
-                    <span className="text-[13px] text-ink">{r}</span>
-                  </div>
-                  <span className="text-[12px] text-muted">Not monitored</span>
-                </div>
-              ))}
-            </div>
-            <div className="px-4 pb-4 text-[11px] text-muted">Connect real health checks to populate.</div>
-          </Card>
-
           <Card title="Recent activity"
                 action={<button onClick={() => nav('/audit')} className="text-muted"><ChevronRight size={16} /></button>}>
             {activity.length === 0 ? (
