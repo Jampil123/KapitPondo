@@ -17,10 +17,13 @@
     "expo-font": "~56.0.7",
     "expo-glass-effect": "~56.0.4",
     "expo-image": "~56.0.11",
-    "expo-image-picker": "~56.0.21",
-    "expo-linking": "~56.0.15",
-    "expo-router": "~56.2.15",
-    "expo-splash-screen": "~56.0.13",
+
+    "expo-image-picker": "~56.0.19",
+    "expo-linking": "~56.0.14",
+    "expo-notifications": "~56.0.21",
+    "expo-router": "~56.2.12",
+    "expo-splash-screen": "~56.0.11",
+
     "expo-status-bar": "~56.0.4",
     "expo-symbols": "~56.0.6",
     "expo-system-ui": "~56.0.5",

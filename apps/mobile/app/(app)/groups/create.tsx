@@ -5,16 +5,17 @@
  * [groupId] route (role-switched).
  */
 import { useState } from 'react';
-import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
+import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, RefreshCw, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { semantic } from '@/theme/colors';
+import { semantic, shadowToken } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { createGroup, type Group } from '@/api/groups';
 import { useGroups } from '@/context/GroupContext';
+import { useAuth } from '@/context/AuthContext';
 
 function generateCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -40,6 +41,8 @@ const inputStyle = {
 export default function CreateGroup() {
   const router = useRouter();
   const { refresh } = useGroups();
+  const { member } = useAuth();
+  const verified = member?.verification_status === 'verified';
   const [name, setName] = useState('');
   const [fundCode, setFundCode] = useState('');
   const [description, setDescription] = useState('');
@@ -49,6 +52,7 @@ export default function CreateGroup() {
 
   async function handleCreate() {
     setError('');
+    if (!verified) return Alert.alert('Verification required', 'You need a verified account to create a group.');
     if (!name.trim()) { setError('Please enter a group name.'); return; }
     setLoading(true);
     try {
@@ -104,6 +108,16 @@ export default function CreateGroup() {
             <Text variant="body" color="secondary">Fill in the details to create your communal savings group.</Text>
           </View>
 
+          {!verified && (
+            <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 8, marginBottom: 20 }, shadowToken.card]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+                <ShieldCheck size={18} color="#A87C2C" />
+                <Text variant="label" style={{ fontSize: 13, color: '#A87C2C' }}>Verify your identity to create a group</Text>
+              </View>
+              <Button label="Verify now" variant="ghost" onPress={() => router.push('/(app)/identity' as any)} />
+            </View>
+          )}
+
           <Label>Group Name</Label>
           <TextInput
             value={name}
@@ -144,7 +158,7 @@ export default function CreateGroup() {
 
           {error ? <Text variant="bodySmall" style={{ color: '#C25C5E', marginBottom: 12 }}>{error}</Text> : null}
 
-          <Button label="Create Group" onPress={handleCreate} loading={loading} disabled={!name.trim()} />
+          <Button label="Create Group" onPress={handleCreate} loading={loading} disabled={!name.trim() || !verified} />
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>

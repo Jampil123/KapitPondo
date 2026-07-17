@@ -3,19 +3,21 @@
  * ----------------------------------------------------------------------------
  * Reusable greeting header for ALL role dashboards: rounded-square avatar +
  * "Kumusta, {name}" + group name + a neutral role pill, with grid + bell (unread
- * dot) icons. Grid -> back to the groups list; bell -> notifications placeholder.
+ * dot) icons. Grid -> back to the groups list; bell -> Notification Center,
+ * dot reflects NotificationsContext's live (realtime-updated) unread count.
  *
  * The role pill is a prop so each dashboard shows the right label
  * (Organizer / Treasurer / Auditor / Member) using one component.
  *
  *   <DashboardHeader group={group} member={member} roleLabel="Organizer" />
  */
-import { View, Pressable, Alert } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import { LayoutGrid, Bell } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { Avatar } from '../ui/Avatar';
 import { semantic } from '../../theme/colors';
+import { useNotifications } from '../../context/NotificationsContext';
 import type { Group } from '../../api/groups';
 import type { Member } from '../../api/members';
 
@@ -32,6 +34,9 @@ export function DashboardHeader({
   member: Member | null;
   roleLabel: string;
 }) {
+  const { unreadCount } = useNotifications();
+  const hasUnread = unreadCount > 0;
+
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: semantic.background }}>
       <Avatar name={member?.full_name} uri={member?.avatar_url} size={46} />
@@ -50,9 +55,11 @@ export function DashboardHeader({
         <LayoutGrid size={22} color={semantic.textPrimary} />
       </Pressable>
 
-      <Pressable onPress={() => Alert.alert('Notifications', 'Coming soon.')} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable onPress={() => router.push('/(app)/notifications' as any)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
         <Bell size={22} color={semantic.textPrimary} />
-        <View style={{ position: 'absolute', top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.background }} />
+        {hasUnread ? (
+          <View style={{ position: 'absolute', top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.background }} />
+        ) : null}
       </Pressable>
     </View>
   );

@@ -3,12 +3,14 @@
  * dropdown with the "Sign out" action. Closes on outside click.
  */
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, LogOut } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronDown, LogOut, Settings } from 'lucide-react';
 import type { AdminMe } from '../../context/AdminAuthContext';
 
 export function AccountMenu({ admin, onSignOut }: { admin: AdminMe | null; onSignOut: () => void | Promise<void> }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const nav = useNavigate();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -40,8 +42,15 @@ export function AccountMenu({ admin, onSignOut }: { admin: AdminMe | null; onSig
       {menuOpen ? (
         <div className="absolute right-0 top-full mt-2 w-48 rounded-xl bg-surface border border-line shadow-lg overflow-hidden z-20">
           <button
+            onClick={() => { setMenuOpen(false); nav('/settings'); }}
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-ink hover:bg-surface-alt"
+          >
+            <Settings size={16} />
+            Settings
+          </button>
+          <button
             onClick={async () => { setMenuOpen(false); await onSignOut(); }}
-            className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-danger hover:bg-danger-bg"
+            className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-danger hover:bg-danger-bg border-t border-line"
           >
             <LogOut size={16} />
             Sign out

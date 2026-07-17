@@ -185,7 +185,7 @@ export function SettingsPage() {
   const { admin } = useAdminAuth();
 
   return (
-    <div className="mx-auto max-w-3xl px-8 pt-6 pb-8">
+    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
       <Section icon={User} title="Account" subtitle="This admin's identity">
         <div className="px-5 py-4">
           <div className="text-xs text-muted mb-1">Signed in as</div>

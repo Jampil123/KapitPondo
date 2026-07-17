@@ -1,8 +1,9 @@
 /**
- * apps/admin/src/components/layout/Topbar.tsx — page title/subtitle, search
- * box, notification bell, and the account dropdown.
+ * apps/admin/src/components/layout/Topbar.tsx — page title/subtitle,
+ * notification bell, and the account dropdown. (Search lives on the
+ * Dashboard page itself — see features/overview/OverviewPage.tsx.)
  */
-import { Search, Bell } from 'lucide-react';
+import { Bell, Menu } from 'lucide-react';
 import type { AdminMe } from '../../context/AdminAuthContext';
 import { AccountMenu } from './AccountMenu';
 
@@ -11,22 +12,19 @@ type TopbarProps = {
   subtitle: string;
   admin: AdminMe | null;
   onSignOut: () => void | Promise<void>;
+  onMenuClick: () => void;
 };
 
-export function Topbar({ title, subtitle, admin, onSignOut }: TopbarProps) {
+export function Topbar({ title, subtitle, admin, onSignOut, onMenuClick }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-5 h-[70px] px-7 bg-surface border-b border-line">
+    <header className="sticky top-0 z-10 flex items-center gap-5 h-[80px] px-7 bg-surface border-b border-line">
+      <button onClick={onMenuClick} className="shrink-0 p-1.5 text-muted hover:text-ink" aria-label="Toggle sidebar">
+        <Menu size={22} />
+      </button>
+
       <div className="shrink-0 leading-tight">
         <h1 className="text-xl font-bold text-ink">{title}</h1>
         <p className="text-[13px] text-muted">{subtitle}</p>
-      </div>
-
-      <div className="flex items-center gap-2.5 flex-1 max-w-[380px] bg-surface-alt rounded-xl px-3.5 py-2.5">
-        <Search size={18} className="text-muted shrink-0" />
-        <input
-          placeholder="Search users, groups, activity…"
-          className="w-full bg-transparent text-sm text-ink placeholder:text-muted outline-none"
-        />
       </div>
 
       <div className="flex-1" />

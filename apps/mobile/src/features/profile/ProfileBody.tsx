@@ -36,6 +36,7 @@ export function ProfileBody() {
   const router = useRouter();
   const { member, signOut, refreshMember } = useAuth();
   const verified = member?.verification_status === 'verified';
+  const rejected = member?.verification_status === 'rejected';
   const [signingOut, setSigningOut] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -112,20 +113,32 @@ export function ProfileBody() {
       {!verified && (
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, gap: 12 }, shadowToken.card]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <ShieldCheck size={22} color={semantic.brandDark} />
+            <ShieldCheck size={22} color={rejected ? '#C25C5E' : semantic.brandDark} />
             <View style={{ flex: 1 }}>
-              <Text variant="label">Verify your identity</Text>
-              <Text variant="caption" color="secondary">Unlock creating groups, requesting loans, and officer roles.</Text>
+              <Text variant="label">{rejected ? 'Verification rejected' : 'Verify your identity'}</Text>
+              <Text variant="caption" color="secondary">
+                {rejected
+                  ? 'Your ID was not accepted. Review the reason below and resubmit.'
+                  : 'Unlock creating groups, requesting loans, and officer roles.'}
+              </Text>
             </View>
           </View>
-          <Button label="Verify now" onPress={() => router.push('/(app)/identity' as any)} />
+          {rejected && member?.verification_rejection_reason ? (
+            <View style={{ backgroundColor: '#FBEAE9', borderRadius: 12, padding: 12 }}>
+              <Text variant="caption" style={{ color: '#C25C5E' }}>{member.verification_rejection_reason}</Text>
+            </View>
+          ) : null}
+          <Button
+            label={rejected ? 'Resubmit ID' : 'Verify now'}
+            onPress={() => router.push('/(app)/identity' as any)}
+          />
         </View>
       )}
 
       <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
         <Row icon={UserPen} label="Edit Profile" onPress={() => router.push('/(app)/edit-profile' as any)} />
         <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
-        <Row icon={Bell} label="Notifications" onPress={() => {}} />
+        <Row icon={Bell} label="Notifications" onPress={() => router.push('/(app)/notifications' as any)} />
         <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />
         <Row icon={Lock} label="Privacy & Security" onPress={() => {}} />
         <View style={{ height: 1, backgroundColor: semantic.border, marginLeft: 48 }} />

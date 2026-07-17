@@ -35,6 +35,10 @@ import { API_BASE_URL } from '../api/client';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
+// Bump when the Terms/Privacy Policy meaningfully changes — stored on the
+// member row so we know which version someone actually agreed to.
+export const CONSENT_VERSION = '2026-01-v1';
+
 export interface SignUpInput {
   phone: string;
   password: string;
@@ -43,6 +47,8 @@ export interface SignUpInput {
   lastName: string;
   birthday?: string;
   email?: string;
+  /** Must be true — the sign-up screen requires the terms checkbox. */
+  consentAccepted: boolean;
 }
 
 export interface AuthContextValue {
@@ -130,7 +136,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [loadMember]);
 
-  const signUp = useCallback(async ({ phone, password, firstName, middleName, lastName, birthday, email }: SignUpInput) => {
+  // The member row loaded above is a snapshot — without this, an admin
+  // approving/rejecting identity verification never reaches an already-open
+  // app (the "Rejected" banner, verify-now gates, etc. would stay stale until
+  // sign-out/sign-in or a manual refetch). RLS already lets a member read
+  // their own row (migration 0007); migration 0023 adds it to the realtime
+  // publication so it can stream. Every field on the row merges in live —
+  // verification_status is the main one, but this covers all of them.
+  useEffect(() => {
+    const authId = session?.user?.id;
+    if (!authId) return;
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    (async () => {
+      const { data: { session: fresh } } = await supabase.auth.getSession();
+      if (cancelled || !fresh) return;
+      supabase.realtime.setAuth(fresh.access_token);
+
+      channel = supabase
+        .channel(`members:${authId}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'members', filter: `auth_id=eq.${authId}` },
+          (payload) => {
+            setMember((prev) => ({ ...(prev ?? ({} as Member)), ...(payload.new as Member) }));
+          },
+        )
+        .subscribe();
+    })();
+
+    return () => {
+      cancelled = true;
+      if (channel) supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+  const signUp = useCallback(async ({ phone, password, firstName, middleName, lastName, birthday, email, consentAccepted }: SignUpInput) => {
+    if (!consentAccepted) throw new Error('You must agree to the Terms & Privacy Policy to continue.');
     const e164 = toE164PH(phone);
     if (!e164) throw new Error('Enter a valid Philippine mobile number.');
     const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
@@ -138,7 +181,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       phone: e164,
       password,
       options: {
-        data: { full_name: fullName, first_name: firstName, middle_name: middleName ?? null, last_name: lastName, birthday: birthday ?? null, email: email ?? null },
+        data: {
+          full_name: fullName, first_name: firstName, middle_name: middleName ?? null, last_name: lastName,
+          birthday: birthday ?? null, email: email ?? null,
+          consent_version: CONSENT_VERSION,
+        },
       },
     });
     if (error) throw error;

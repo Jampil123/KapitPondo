@@ -49,4 +49,14 @@ router.get('/admin/monitoring/activity', requireAuth, requireSystemAdmin, async 
   } catch (err) { next(err); }
 });
 
+// Cross-entity search (members, groups, audit log) for the dashboard search bar
+router.get('/admin/search', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.json({ members: [], groups: [], audit: [] });
+    const results = await service.search(q);
+    res.json(results);
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

@@ -37,6 +37,17 @@ async function approveMembership({ membershipId, approverId }) {
 
 // Change a member's role (owner only)
 async function setRole({ membershipId, role }) {
+  if (role === 'treasurer' || role === 'auditor') {
+    const { data: membership, error: mErr } = await supabase
+      .from('memberships').select('member_id').eq('id', membershipId).single();
+    if (mErr) throw mErr;
+    const { data: member, error: memberErr } = await supabase
+      .from('members').select('verification_status').eq('id', membership.member_id).single();
+    if (memberErr) throw memberErr;
+    if (member.verification_status !== 'verified') {
+      throw Object.assign(new Error('Member must be verified before being appointed an officer'), { status: 409 });
+    }
+  }
   const { data, error } = await supabase
     .from('memberships')
     .update({ role })

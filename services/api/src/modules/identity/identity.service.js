@@ -1,4 +1,5 @@
 const supabase = require('../../config/supabase');
+const { notify } = require('../../lib/notifications');
 
 // `id_document_url` is actually a PATH inside the private `id-documents`
 // bucket (see apps/mobile/src/lib/upload.ts) — it must be exchanged for a
@@ -27,6 +28,7 @@ async function submitDocument({
   const update = {
     id_document_url: idDocumentUrl,
     verification_status: 'pending',
+    verification_rejection_reason: null, // clear any prior rejection now that they've resubmitted
     updated_at: new Date().toISOString(),
   };
   if (fullName) update.full_name = fullName;
@@ -148,6 +150,7 @@ async function approveMember({ memberId, reviewerId, actorAuthId }) {
     .from('members')
     .update({
       verification_status: 'verified',
+      verification_rejection_reason: null,
       verified_by: reviewerId,
       verified_at: new Date().toISOString(),
     })
@@ -156,22 +159,41 @@ async function approveMember({ memberId, reviewerId, actorAuthId }) {
     .select()
     .single();
   if (error) throw error;
-  if (data) await writeAudit(actorAuthId, 'account.verified', memberId, { before: 'pending', after: 'verified' });
+  if (data) {
+    await writeAudit(actorAuthId, 'account.verified', memberId, { before: 'pending', after: 'verified' });
+    await notify({
+      memberId,
+      type: 'identity.verified',
+      title: 'Account verified',
+      message: 'Your identity has been verified. You can now create groups, request loans, and be appointed an officer.',
+    });
+  }
   return data;
 }
 
-// Sysadmin rejects a member (they may resubmit). `reason` has no dedicated
-// column on members (none exists), so it's recorded on the audit row instead.
+// Sysadmin rejects a member (they may resubmit). `reason` is stored on the
+// member row (so the member can see it) and on the audit row (admin history).
 async function rejectMember({ memberId, actorAuthId, reason }) {
   const { data, error } = await supabase
     .from('members')
-    .update({ verification_status: 'rejected' })
+    .update({
+      verification_status: 'rejected',
+      verification_rejection_reason: reason ?? null,
+    })
     .eq('id', memberId)
     .eq('verification_status', 'pending')
     .select()
     .single();
   if (error) throw error;
-  if (data) await writeAudit(actorAuthId, 'account.rejected', memberId, { reason: reason ?? null });
+  if (data) {
+    await writeAudit(actorAuthId, 'account.rejected', memberId, { reason: reason ?? null });
+    await notify({
+      memberId,
+      type: 'identity.rejected',
+      title: 'Verification rejected',
+      message: reason ? `Your ID verification was rejected: ${reason}` : 'Your ID verification was rejected. You may resubmit.',
+    });
+  }
   return data;
 }
 

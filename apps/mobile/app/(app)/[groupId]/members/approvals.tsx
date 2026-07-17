@@ -19,6 +19,7 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AppBar } from '@/components/shared/AppBar';
+import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listPendingMembers, approveMember, rejectMember } from '@/api/groups';
@@ -60,13 +61,14 @@ function SmallButton({ label, kind, icon: Icon, onPress, disabled }: { label: st
 export default function MembershipApprovals() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [query, setQuery] = useState('');
+  const [rejectTarget, setRejectTarget] = useState<PendingRow | null>(null);
 
   const { data, loading, error, refetch } = useQuery(
     () => listPendingMembers(groupId!),
     [groupId],
   );
   const approve = useAction((id: string) => approveMember(groupId!, id));
-  const reject = useAction((id: string) => rejectMember(groupId!, id));
+  const reject = useAction(({ id, reason }: { id: string; reason: string }) => rejectMember(groupId!, id, reason || undefined));
 
   const rows = useMemo(() => (Array.isArray(data) ? data.map(normalize) : []), [data]);
   const filtered = useMemo(
@@ -79,8 +81,10 @@ export default function MembershipApprovals() {
     if (ok !== undefined) refetch();
     else if (approve.error) Alert.alert('Could not approve', approve.error.message);
   }
-  async function onReject(r: PendingRow) {
-    const ok = await reject.run(r.id);
+  async function onRejectConfirm(reason: string) {
+    if (!rejectTarget) return;
+    const ok = await reject.run({ id: rejectTarget.id, reason });
+    setRejectTarget(null);
     if (ok !== undefined) refetch();
     else if (reject.error) Alert.alert('Could not reject', reject.error.message);
   }
@@ -132,13 +136,22 @@ export default function MembershipApprovals() {
                 </View>
                 <View style={{ flexDirection: 'row', gap: 10, marginTop: 13 }}>
                   <SmallButton label="Approve" icon={Check} kind="ok" onPress={() => onApprove(r)} disabled={busy} />
-                  <SmallButton label="Reject" icon={X} kind="danger" onPress={() => onReject(r)} disabled={busy} />
+                  <SmallButton label="Reject" icon={X} kind="danger" onPress={() => setRejectTarget(r)} disabled={busy} />
                 </View>
               </View>
             );
           })}
         </View>
       )}
+
+      <ReasonPrompt
+        visible={!!rejectTarget}
+        title={`Reject ${rejectTarget?.name ?? 'request'}?`}
+        confirmLabel="Reject"
+        destructive
+        onCancel={() => setRejectTarget(null)}
+        onConfirm={onRejectConfirm}
+      />
     </SafeAreaView>
   );
 }
