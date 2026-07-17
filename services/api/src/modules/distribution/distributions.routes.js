@@ -52,6 +52,29 @@ router.post(
   }
 );
 
+// Auditor verifies a previewed distribution (TC-027) — cross-checks against
+// the ledger, proceeds to the Owner for finalization.
+router.post(
+  '/groups/:groupId/distributions/:id/verify',
+  requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      const verified = await service.verifyDistribution({
+        distributionId: req.params.id,
+        verifiedBy: req.member.id,
+        notes: req.body?.notes,
+      });
+      if (!verified) return res.status(409).json({ error: 'Distribution is not in previewed status' });
+      res.json({ message: 'Distribution verified — awaiting Owner finalization', distribution: verified });
+    } catch (err) { next(err); }
+  }
+);
+
 // List distributions (any member of the group)
 router.get(
   '/groups/:groupId/distributions',
@@ -82,7 +105,8 @@ router.get(
   }
 );
 
-// Finalize a previewed distribution (owner only) — posts payouts, fund -> 0
+// Finalize a VERIFIED distribution (owner only) — posts payouts, fund -> 0.
+// Requires an Auditor to have verified it first (see /verify above).
 router.post(
   '/groups/:groupId/distributions/:id/finalize',
   requireAuth,
@@ -99,7 +123,7 @@ router.post(
       });
       res.json({ message: 'Distribution finalized; fund balance is now 0', distribution: finalized });
     } catch (err) {
-      if (err.message && err.message.includes('Fund changed since preview')) {
+      if (err.message && (err.message.includes('Fund changed since preview') || err.message.includes('not verified'))) {
         return res.status(409).json({ error: err.message });
       }
       next(err);
@@ -107,11 +131,12 @@ router.post(
   }
 );
 
-// Cancel a previewed distribution so it can be re-run (owner or treasurer)
+// Cancel a previewed distribution so it can be re-run (owner or treasurer),
+// or an Auditor flagging a discrepancy instead of verifying it (TC-027).
 router.delete(
   '/groups/:groupId/distributions/:id',
   requireAuth,
-  requireGroupRole(['owner', 'treasurer']),
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
   async (req, res, next) => {
     try {
       const distribution = await service.getDistribution(req.params.id);

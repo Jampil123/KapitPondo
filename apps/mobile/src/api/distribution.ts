@@ -3,22 +3,23 @@
  * ----------------------------------------------------------------------------
  * Calls the distribution module of the API (M9) — the year-end close.
  *
- * Flow: set heads (owner) -> preview (owner/treasurer) -> finalize (owner).
- * Finalize is IMMUTABLE: it posts payout ledger entries, drives the fund to 0,
- * and the distribution can't be reopened.
+ * Flow: set heads (owner) -> preview (owner/treasurer) -> VERIFY (auditor) ->
+ * finalize (owner). Finalize is IMMUTABLE: it posts payout ledger entries,
+ * drives the fund to 0, and the distribution can't be reopened. Finalize is
+ * blocked with a 409 until an Auditor has verified the preview.
  *
  * Formula (server-side): capital is returned; net income = interest + penalties
  * − expenses; net income is shared BY HEADS. Outstanding debts are deducted per
  * member.
  *
- * SPEC-DIVERGENCE: M9.1 wanted the Auditor to VERIFY the preview before the
- * Owner finalizes. The live API goes previewed -> finalized with no verify
- * state. If you add that step later, add a status + route and update this file.
+ * Unverified members are paid out the same as everyone else — verification
+ * gates privileges (creating groups, borrowing, officer roles), not
+ * ownership of capital already contributed to the fund.
  */
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-export type DistributionStatus = 'draft' | 'previewed' | 'finalized';
+export type DistributionStatus = 'draft' | 'previewed' | 'verified' | 'finalized';
 
 export interface Distribution {
   id: string;
@@ -56,6 +57,14 @@ export function setHeads(groupId: string, membershipId: string, heads: number) {
 /** POST — build a year-end preview (status: previewed) + allocations. */
 export function previewDistribution(groupId: string, period: string) {
   return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/preview`, { period });
+}
+
+/** POST — Auditor verifies a previewed distribution; proceeds to the Owner for finalization. */
+export function verifyDistribution(groupId: string, id: string, notes?: string) {
+  return api.post<{ message: string; distribution: Distribution }>(
+    `/api/groups/${groupId}/distributions/${id}/verify`,
+    { notes },
+  );
 }
 
 /** GET — list all distributions for the group. */

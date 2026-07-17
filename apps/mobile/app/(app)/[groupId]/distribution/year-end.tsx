@@ -1,21 +1,23 @@
 /**
  * app/(app)/[groupId]/year-end.tsx
  * ----------------------------------------------------------------------------
- * Owner runs the year-end distribution (M9). Designer's layout, wired to API:
+ * Year-end distribution (M9). Designer's layout, wired to API:
  *   summary numbers → useSummary
  *   build preview   → usePreviewDistribution(period)  (owner/treasurer)
+ *   verify          → useVerifyDistribution(id)        (auditor)
  *   finalize        → useFinalizeDistribution(id)      (owner; immutable)
  *
- * DEVIATION: the designer shows a Treasurer✓ / Auditor✓ two-step lock. Our API
- * goes preview → finalize with NO auditor-verify state, so the lock here is
- * simply "preview built? → ready to finalize." Note this gap for the panel.
- * Finalize handles the 409 "fund changed since preview" case.
+ * The Treasurer✓ / Auditor✓ two-step lock is real now: a preview must be
+ * verified by an Auditor before the Owner can finalize it (the server
+ * enforces this — finalize 409s otherwise). This one screen surfaces both
+ * the Preview and Verify actions; each is still gated server-side to the
+ * right role regardless of who's looking at it.
  */
 import { useState } from 'react';
 import { View, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Lock, Unlock } from 'lucide-react-native';
+import { Lock, Unlock, ShieldCheck } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -23,7 +25,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useSummary } from '@/features/reporting/reporting.hooks';
-import { usePreviewDistribution, useFinalizeDistribution } from '@/features/distribution/distribution.hooks';
+import { usePreviewDistribution, useVerifyDistribution, useFinalizeDistribution } from '@/features/distribution/distribution.hooks';
 import type { Distribution, DistributionAllocation } from '@/api/distribution';
 
 function allocName(a: any): string {
@@ -34,6 +36,7 @@ export default function YearEnd() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const summary = useSummary(groupId!);
   const preview = usePreviewDistribution(groupId!);
+  const verify = useVerifyDistribution(groupId!);
   const finalize = useFinalizeDistribution(groupId!);
 
   const [period, setPeriod] = useState(String(new Date().getFullYear()));
@@ -47,7 +50,8 @@ export default function YearEnd() {
   const netIncome = 0 - Number(s?.total_expenses ?? 0);
   const distributable = Number(s?.total_contributions ?? 0) + netIncome;
 
-  const ready = !!dist && dist.status === 'previewed';
+  const awaitingVerification = !!dist && dist.status === 'previewed';
+  const ready = !!dist && dist.status === 'verified';
   const finalized = dist?.status === 'finalized';
   const LockIcon = ready || finalized ? Unlock : Lock;
 
@@ -55,6 +59,13 @@ export default function YearEnd() {
     const res = await preview.run(period.trim());
     if (res) { setDist(res.distribution); setAllocs(res.allocations ?? []); }
     else if (preview.error) Alert.alert('Preview failed', preview.error.message);
+  }
+
+  async function onVerify() {
+    if (!dist) return;
+    const res = await verify.run(dist.id);
+    if (res) setDist(res.distribution);
+    else if (verify.error) Alert.alert('Could not verify', verify.error.message);
   }
 
   function onFinalize() {
@@ -115,9 +126,20 @@ export default function YearEnd() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: ready || finalized ? '#E2F0E8' : '#F8EFDA', borderRadius: 14, padding: 14 }}>
           <LockIcon size={20} color={ready || finalized ? '#3E8E66' : '#A87C2C'} />
           <Text variant="label" style={{ flex: 1, color: ready || finalized ? '#3E8E66' : '#A87C2C' }}>
-            {finalized ? 'Finalized' : ready ? 'Preview ready — you can finalize' : 'Build a preview first'}
+            {finalized ? 'Finalized' : ready ? 'Verified — Owner can finalize' : awaitingVerification ? 'Awaiting Auditor verification' : 'Build a preview first'}
           </Text>
         </View>
+
+        {/* Auditor verification step */}
+        {awaitingVerification && (
+          <Button
+            label="Verify preview (Auditor)"
+            variant="ghost"
+            onPress={onVerify}
+            loading={verify.loading}
+            leading={<ShieldCheck size={18} color={semantic.brandDark} />}
+          />
+        )}
 
         {/* Allocations */}
         {allocs.length > 0 && (

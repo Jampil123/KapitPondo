@@ -1,6 +1,19 @@
 const supabase = require('../../config/supabase');
 
+// A cycle created while the group has no other active cycle becomes Active
+// immediately (TC-011: one "Save" step, not a separate activate call). If one
+// is already active, this one is created as `draft` instead of erroring
+// (TC-012: "forces the new cycle into Setup until the current one is Closed")
+// — the unique index on cycles(group_id) where status='active' still backstops
+// this against a race between the check and the insert.
 async function createCycle(input) {
+  const { data: existingActive } = await supabase
+    .from('cycles')
+    .select('id')
+    .eq('group_id', input.groupId)
+    .eq('status', 'active')
+    .maybeSingle();
+
   const { data, error } = await supabase
     .from('cycles')
     .insert({
@@ -12,7 +25,11 @@ async function createCycle(input) {
       penalty_type: input.penaltyType || 'fixed',
       start_date: input.startDate,
       end_date: input.endDate || null,
-      status: 'draft',
+      contribution_due_day: input.contributionDueDay ?? null,
+      default_interest_rate: input.defaultInterestRate ?? null,
+      minimum_loan_amount: input.minimumLoanAmount ?? null,
+      early_termination_penalty: input.earlyTerminationPenalty ?? null,
+      status: existingActive ? 'draft' : 'active',
     })
     .select()
     .single();

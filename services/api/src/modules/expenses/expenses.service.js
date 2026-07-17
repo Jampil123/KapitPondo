@@ -2,6 +2,7 @@
 // KapitPondo — Expenses service (M7, FINAL)
 
 const supabase = require('../../config/supabase');
+const { withSignedProof } = require('../../lib/proofUrl');
 
 async function createExpense(input) {
   const { data, error } = await supabase
@@ -26,7 +27,7 @@ async function listExpenses({ groupId, status }) {
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+  return withSignedProof(data);
 }
 
 async function getExpense(id) {

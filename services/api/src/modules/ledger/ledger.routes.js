@@ -8,11 +8,12 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./ledger.service');
 
-// Reverse a ledger entry (owner only — sensitive). Requires a reason.
+// Initiate a reversal request (Treasurer or Owner). Requires a reason. Does
+// NOT touch the ledger yet — see /verify and /finalize below (TC-021).
 router.post(
   '/groups/:groupId/ledger/:entryId/reverse',
   requireAuth,
-  requireGroupRole(['owner']),
+  requireGroupRole(['treasurer', 'owner']),
   async (req, res, next) => {
     try {
       const { reason } = req.body;
@@ -23,17 +24,87 @@ router.post(
       if (entry.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Ledger entry does not belong to this group' });
       }
-      const reversal = await service.reverseEntry({
+      const request = await service.initiateReversal({
         entryId: req.params.entryId,
+        groupId: req.params.groupId,
         reason: reason.trim(),
-        postedBy: req.member.id,
+        initiatedBy: req.member.id,
       });
-      res.json({ message: 'Entry reversed', reversal });
+      res.status(201).json({ message: 'Reversal requested — awaiting Auditor verification', request });
     } catch (err) {
-      if (err.message && (err.message.includes('already been reversed') ||
-                          err.message.includes('Cannot reverse'))) {
+      if (err.status === 409 || (err.message && err.message.includes('Cannot reverse'))) {
         return res.status(409).json({ error: err.message });
       }
+      next(err);
+    }
+  }
+);
+
+// List reversal requests (officers)
+router.get(
+  '/groups/:groupId/reversal-requests',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const requests = await service.listReversalRequests({ groupId: req.params.groupId, status: req.query.status });
+      res.json({ requests });
+    } catch (err) { next(err); }
+  }
+);
+
+// Auditor verifies a pending reversal request (TC-026) — proceeds to the
+// Owner for final approval.
+router.post(
+  '/groups/:groupId/reversal-requests/:id/verify',
+  requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const request = await service.verifyReversal({
+        requestId: req.params.id,
+        verifiedBy: req.member.id,
+        notes: req.body?.notes,
+      });
+      if (!request) return res.status(409).json({ error: 'Request is not pending verification' });
+      res.json({ message: 'Reversal verified — awaiting Owner approval', request });
+    } catch (err) { next(err); }
+  }
+);
+
+// Auditor rejects a reversal request (discrepancy found, etc.)
+router.post(
+  '/groups/:groupId/reversal-requests/:id/reject',
+  requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const request = await service.rejectReversal({
+        requestId: req.params.id,
+        verifiedBy: req.member.id,
+        notes: req.body?.notes,
+      });
+      if (!request) return res.status(409).json({ error: 'Request is not pending verification' });
+      res.json({ message: 'Reversal request rejected', request });
+    } catch (err) { next(err); }
+  }
+);
+
+// Owner finalizes a verified reversal — this is the only step that actually
+// posts the reversing ledger entry.
+router.post(
+  '/groups/:groupId/reversal-requests/:id/finalize',
+  requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const { request, reversalEntry } = await service.finalizeReversal({
+        requestId: req.params.id,
+        finalizedBy: req.member.id,
+      });
+      res.json({ message: 'Reversal finalized', request, reversalEntry });
+    } catch (err) {
+      if (err.status === 409) return res.status(409).json({ error: err.message });
       next(err);
     }
   }

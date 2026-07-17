@@ -4,7 +4,9 @@
  * Calls the cycles module of the API (M4). A cycle is a group's contribution
  * period; contributions attach to the ACTIVE cycle.
  *
- * Lifecycle: create (draft) -> activate (active) -> close (closed).
+ * Lifecycle: create — becomes Active immediately unless the group already has
+ * an active cycle, in which case it's created as `draft` ("Setup") until that
+ * one is closed. Activate/close remain available for that draft case.
  * The DB enforces one active cycle per group via a partial unique index, so
  * activating a second one fails — surface that error to the user.
  */
@@ -25,6 +27,10 @@ export interface Cycle {
   penalty_type: PenaltyType | null;
   start_date: string;
   end_date: string | null;
+  contribution_due_day: number | null;
+  default_interest_rate: number | null;
+  minimum_loan_amount: Money | null;
+  early_termination_penalty: Money | null;
   status: CycleStatus;
 }
 
@@ -36,6 +42,10 @@ export interface CreateCycleInput {
   penalty_amount?: string;
   penalty_type?: PenaltyType; // default: fixed
   end_date?: string;
+  contribution_due_day?: number; // day of the month, 1-31
+  default_interest_rate?: string; // monthly rate, e.g. "0.03" for 3% — a default; the officer can still set a different rate per loan at approval
+  minimum_loan_amount?: string;
+  early_termination_penalty?: string;
 }
 
 /** GET — all cycles for the group, newest first. */

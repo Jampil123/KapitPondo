@@ -2,14 +2,40 @@
 // KapitPondo — Distributions service (M9, FINAL)
 
 const supabase = require('../../config/supabase');
+const { notify } = require('../../lib/notifications');
 
-// Preview a year-end distribution (computes the split; no money moves yet)
+// Preview a year-end distribution (computes the split; no money moves yet).
+// Every ACTIVE membership is included by heads regardless of
+// verification_status — see the comment on preview_distribution() in
+// migration 0028 for why (QA TC-038: verification gates privileges, not
+// ownership of contributed capital).
 async function previewDistribution({ groupId, period, declaredBy }) {
   const { data, error } = await supabase.rpc('preview_distribution', {
     p_group_id: groupId,
     p_period: period,
     p_declared_by: declaredBy,
   });
+  if (error) throw error;
+  return data;
+}
+
+// Auditor verifies a previewed distribution — proceeds to the Owner for
+// final approval (TC-027). finalize_distribution (migration 0028) requires
+// this status, not just 'previewed'.
+async function verifyDistribution({ distributionId, verifiedBy, notes }) {
+  const { data, error } = await supabase
+    .from('distributions')
+    .update({
+      status: 'verified',
+      verified_by: verifiedBy,
+      verified_at: new Date().toISOString(),
+      verify_notes: notes ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', distributionId)
+    .eq('status', 'previewed')
+    .select()
+    .single();
   if (error) throw error;
   return data;
 }
@@ -49,13 +75,29 @@ async function getAllocations(distributionId, caller = {}) {
   return data;
 }
 
-// Finalize: posts payouts, fund goes to 0
+// Finalize: posts payouts, fund goes to 0. Requires status 'verified' (see
+// migration 0028) — an Auditor must have signed off first (TC-015).
 async function finalizeDistribution({ distributionId, finalizedBy }) {
   const { data, error } = await supabase.rpc('finalize_distribution', {
     p_distribution_id: distributionId,
     p_finalized_by: finalizedBy,
   });
   if (error) throw error;
+
+  // TC-015: "all members are notified"
+  const allocations = await getAllocations(distributionId);
+  for (const alloc of allocations) {
+    const memberId = alloc.memberships?.member_id;
+    if (!memberId) continue;
+    await notify({
+      memberId,
+      groupId: data.group_id,
+      type: 'distribution.finalized',
+      title: 'Year-end distribution finalized',
+      message: `Your share of ${data.period}'s year-end distribution (${alloc.amount}) has been posted.`,
+    });
+  }
+
   return data;
 }
 
@@ -87,6 +129,7 @@ async function setHeads({ membershipId, heads }) {
 
 module.exports = {
   previewDistribution,
+  verifyDistribution,
   listDistributions,
   getDistribution,
   getAllocations,

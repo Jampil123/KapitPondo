@@ -1,16 +1,20 @@
 /**
  * app/(app)/[groupId]/configure-cycle.tsx
  * ----------------------------------------------------------------------------
- * Owner creates/manages fund cycles (M4). Designer's form, wired to our API —
- * but ONLY the fields our cycle schema actually stores:
- *   name, contribution_amount, start_date, end_date, frequency, penalty_amount.
+ * Owner creates/manages fund cycles (M4). Designer's form, wired to our API:
+ *   name, contribution_amount, start_date, end_date, frequency, penalty_amount,
+ *   contribution_due_day, default_interest_rate, minimum_loan_amount,
+ *   early_termination_penalty.
  *
- * The designer's extra fields (interest rate, max loan, loan term limit, grace
- * period, number of cycles, cover photo) have NO column yet — shown as a note,
- * not faked. Add them to the cycles schema later, then extend this form.
+ * default_interest_rate is a suggested default only — the officer can still
+ * set a different rate per loan at approval time (lending module is
+ * unchanged); loan term limit, grace period, number of cycles, and cover
+ * photo remain unimplemented (no column, no note faked here either).
  *
- * Also lists existing cycles with Activate / Close (one active cycle enforced
- * by the DB — activating a second fails, surfaced as an alert).
+ * Creating a cycle activates it immediately unless the group already has an
+ * active one, in which case it's created in "Setup" (draft) until that one
+ * is closed — Activate / Close below cover that case (one active cycle
+ * enforced by the DB — activating a second fails, surfaced as an alert).
  */
 import { useState } from 'react';
 import { View, ScrollView, TextInput, Alert } from 'react-native';
@@ -44,10 +48,19 @@ export default function ConfigureCycle() {
   const [end, setEnd] = useState('');
   const [freq, setFreq] = useState<Frequency>('monthly');
   const [penalty, setPenalty] = useState('');
+  const [dueDay, setDueDay] = useState('');
+  const [interestRate, setInterestRate] = useState('');
+  const [minLoan, setMinLoan] = useState('');
+  const [earlyTermPenalty, setEarlyTermPenalty] = useState('');
 
   async function onCreate() {
     if (!name.trim() || !toAmountString(amount) || !start.trim()) {
       Alert.alert('Missing info', 'Name, contribution amount, and start date are required.');
+      return;
+    }
+    const day = dueDay ? Number(dueDay) : undefined;
+    if (day != null && (day < 1 || day > 31)) {
+      Alert.alert('Invalid due day', 'Enter a day of the month between 1 and 31.');
       return;
     }
     const ok = await create.run({
@@ -58,9 +71,14 @@ export default function ConfigureCycle() {
       frequency: freq,
       penalty_amount: penalty ? toAmountString(penalty) ?? undefined : undefined,
       penalty_type: 'fixed',
+      contribution_due_day: day,
+      default_interest_rate: interestRate ? String(Number(interestRate) / 100) : undefined,
+      minimum_loan_amount: minLoan ? toAmountString(minLoan) ?? undefined : undefined,
+      early_termination_penalty: earlyTermPenalty ? toAmountString(earlyTermPenalty) ?? undefined : undefined,
     });
     if (ok !== undefined) {
       setName(''); setAmount(''); setStart(''); setEnd(''); setPenalty('');
+      setDueDay(''); setInterestRate(''); setMinLoan(''); setEarlyTermPenalty('');
       cycles.refetch();
     } else if (create.error) {
       Alert.alert('Could not create cycle', create.error.message);
@@ -120,11 +138,19 @@ export default function ConfigureCycle() {
               onChange={setFreq}
             />
           </View>
-          <View><Label>Late penalty (fixed ₱)</Label><TextInput value={penalty} onChangeText={setPenalty} keyboardType="numeric" placeholder="e.g. 150" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}><Label>Late penalty (fixed ₱)</Label><TextInput value={penalty} onChangeText={setPenalty} keyboardType="numeric" placeholder="e.g. 150" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
+            <View style={{ flex: 1 }}><Label>Contribution due day</Label><TextInput value={dueDay} onChangeText={setDueDay} keyboardType="number-pad" placeholder="e.g. 5" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}><Label>Default loan interest (% / month)</Label><TextInput value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" placeholder="e.g. 3" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
+            <View style={{ flex: 1 }}><Label>Minimum loan amount</Label><TextInput value={minLoan} onChangeText={setMinLoan} keyboardType="numeric" placeholder="₱" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
+          </View>
+          <View><Label>Early-termination penalty (₱)</Label><TextInput value={earlyTermPenalty} onChangeText={setEarlyTermPenalty} keyboardType="numeric" placeholder="e.g. 500" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
 
           <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }}>
             <Text variant="caption" color="secondary">
-              Interest rate, max loan, loan term limit, grace period, and number of cycles aren't stored yet — they need schema columns before this form can save them.
+              The default loan interest rate is a starting suggestion — the organizer can still set a different rate per loan when approving it. Loan term limit, grace period, and number of cycles aren't stored yet.
             </Text>
           </View>
 

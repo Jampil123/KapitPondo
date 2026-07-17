@@ -22,6 +22,8 @@ export interface Expense {
   category: string | null;
   description: string | null;
   proof_url: string | null;
+  /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
+  proof_signed_url: string | null;
   status: ExpenseStatus;
   recorded_by: string | null; // membership id of recorder
   approved_by: string | null; // membership id of approver (set on approve)

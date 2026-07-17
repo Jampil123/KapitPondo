@@ -3,19 +3,36 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
+const { checkLatePenalties } = require('../penalties/penalties.service');
 
-// Submit a contribution (any active member, for themselves)
+// Submit a contribution. Members record only their own; officers may record
+// on behalf of any active member of the group (e.g. cash/GCash paid outside
+// the app) by passing membership_id — TC-018.
 router.post('/groups/:groupId/contributions',
   requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
-      const { cycle_id, amount, payment_method, proof_url, external_reference } = req.body;
+      const { cycle_id, amount, payment_method, proof_url, external_reference, membership_id } = req.body;
       if (!cycle_id || amount == null) {
         return res.status(400).json({ error: 'cycle_id and amount are required' });
       }
+
+      let targetMembershipId = req.membership.id;
+      const isOfficer = ['treasurer', 'auditor', 'owner'].includes(req.membership.role);
+      if (membership_id && membership_id !== req.membership.id) {
+        if (!isOfficer) {
+          return res.status(403).json({ error: 'Only officers can record a contribution for another member' });
+        }
+        const target = await service.getActiveMembership(membership_id);
+        if (!target || target.group_id !== req.params.groupId) {
+          return res.status(400).json({ error: 'membership_id is not an active member of this group' });
+        }
+        targetMembershipId = membership_id;
+      }
+
       const contribution = await service.createContribution({
-        membershipId: req.membership.id,
+        membershipId: targetMembershipId,
         cycleId: cycle_id,
         groupId: req.params.groupId,
         amount,
@@ -35,6 +52,12 @@ router.get('/groups/:groupId/contributions',
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
+      // Officers viewing the list is the trigger for lazy late-penalty
+      // detection (no cron in this stack) — from their point of view this
+      // just happens; nothing needs to be clicked (TC-039).
+      if (req.membership.role !== 'member') {
+        await checkLatePenalties(req.params.groupId).catch((e) => console.error('[penalties] check failed:', e.message));
+      }
       const contributions = await service.listContributions({
         groupId: req.params.groupId,
         membershipId: req.membership.id,
@@ -69,7 +92,7 @@ router.post('/groups/:groupId/contributions/:id/approve',
   }
 );
 
-// Reject a contribution (officers only)
+// Reject a contribution, with a reason the member can see (TC-025)
 router.post('/groups/:groupId/contributions/:id/reject',
   requireAuth,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
@@ -79,7 +102,7 @@ router.post('/groups/:groupId/contributions/:id/reject',
       if (contribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
-      const updated = await service.rejectContribution({ contributionId: req.params.id });
+      const updated = await service.rejectContribution({ contributionId: req.params.id, reason: req.body?.reason });
       res.json({ message: 'Contribution rejected', contribution: updated });
     } catch (err) { next(err); }
   }

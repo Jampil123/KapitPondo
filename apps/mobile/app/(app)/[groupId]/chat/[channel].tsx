@@ -53,7 +53,7 @@ export default function Chat() {
     // keyboardVerticalOffset needed (matches groups/create.tsx, join.tsx).
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: semantic.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <AppBar title={title} />

@@ -22,7 +22,9 @@ import {
   listLoans,
   getLoan,
   getLiquidity,
+  getLoanEligibility,
   approveLoan,
+  disburseLoan,
   rejectLoan,
   recordRepayment,
   type ApplyLoanInput,
@@ -54,11 +56,25 @@ export function useApplyLoan(groupId: string) {
   return useAction((input: ApplyLoanInput) => applyLoan(groupId, input));
 }
 
-/** approve(loanId, monthlyRate) — e.g. approve(id, 0.03) for 3% monthly. */
-export function useApproveLoan(groupId: string) {
-  return useAction((loanId: string, interestRate: number) =>
-    approveLoan(groupId, loanId, interestRate),
+/** What the Owner should review before deciding. Safe to call with no loanId yet. */
+export function useLoanEligibility(groupId: string, loanId?: string) {
+  const fn = useCallback(
+    () => (loanId ? getLoanEligibility(groupId, loanId) : Promise.resolve(null)),
+    [groupId, loanId],
   );
+  return useQuery(fn, [groupId, loanId]);
+}
+
+/** approve(loanId, monthlyRate, approvedPrincipal?) — e.g. approve(id, 0.03) for 3% monthly. Does NOT disburse. */
+export function useApproveLoan(groupId: string) {
+  return useAction((loanId: string, interestRate: number, approvedPrincipal?: string) =>
+    approveLoan(groupId, loanId, interestRate, approvedPrincipal),
+  );
+}
+
+/** disburse(loanId) — separate step after approval, Treasurer or Owner. */
+export function useDisburseLoan(groupId: string) {
+  return useAction((loanId: string) => disburseLoan(groupId, loanId));
 }
 
 export function useRejectLoan(groupId: string) {

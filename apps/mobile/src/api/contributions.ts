@@ -27,6 +27,8 @@ export interface Contribution {
   status: ContributionStatus;
   payment_method: PaymentMethod | null;
   proof_url: string | null;
+  /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
+  proof_signed_url: string | null;
   external_reference: string | null;
   created_at: string;
   /** Who approved this contribution — null until an officer confirms it. */

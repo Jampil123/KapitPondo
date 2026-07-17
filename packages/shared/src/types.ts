@@ -50,6 +50,10 @@ export interface Cycle {
   penalty_type: string;
   start_date: string;
   end_date: string | null;
+  contribution_due_day: number | null;
+  default_interest_rate: number | null;
+  minimum_loan_amount: number | null;
+  early_termination_penalty: number | null;
   status: CycleStatus;
 }
 

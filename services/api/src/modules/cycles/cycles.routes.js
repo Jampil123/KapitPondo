@@ -22,6 +22,10 @@ router.post('/groups/:groupId/cycles', requireAuth,
         penaltyType: req.body.penalty_type,
         startDate: start_date,
         endDate: req.body.end_date,
+        contributionDueDay: req.body.contribution_due_day,
+        defaultInterestRate: req.body.default_interest_rate,
+        minimumLoanAmount: req.body.minimum_loan_amount,
+        earlyTerminationPenalty: req.body.early_termination_penalty,
       });
       res.status(201).json({ cycle });
     } catch (err) { next(err); }

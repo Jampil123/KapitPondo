@@ -21,6 +21,7 @@ import {
   listDistributions,
   getDistribution,
   previewDistribution,
+  verifyDistribution,
   finalizeDistribution,
   cancelDistribution,
   setHeads,
@@ -42,6 +43,11 @@ export function useDistribution(groupId: string, id?: string) {
 
 export function usePreviewDistribution(groupId: string) {
   return useAction((period: string) => previewDistribution(groupId, period));
+}
+
+/** Auditor: verify a previewed distribution before the Owner can finalize it. */
+export function useVerifyDistribution(groupId: string) {
+  return useAction((id: string, notes?: string) => verifyDistribution(groupId, id, notes));
 }
 
 /** finalize(id) — returns the finalized detail, or sets error.status 409 if the fund moved. */

@@ -3,12 +3,17 @@
  * Combines submitted contributions + expenses into one queue; the auditor
  * approves or rejects each (recorder != approver). Flagged tab has no backend
  * yet, so it's empty.
+ *
+ * Proof images render from proof_signed_url — proof_url itself is just a
+ * path inside the private `proofs` bucket (like an ID document), not
+ * something any client can load directly. The API signs it fresh on every
+ * list fetch (short TTL), so this always uses whatever came back most recently.
  */
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Modal, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpRight, Minus, Receipt, X, Check } from 'lucide-react-native';
+import { ArrowUpRight, Minus, Receipt, X, Check, ImageOff } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -21,7 +26,7 @@ import { useExpenses, useApproveExpense, useRejectExpense } from '@/features/exp
 
 type Tab = 'pending' | 'approved' | 'flagged';
 type Kind = 'contribution' | 'expense';
-type Posting = { id: string; kind: Kind; who: string; date: string; amount: string | number; proof: boolean; status: string };
+type Posting = { id: string; kind: Kind; who: string; date: string; amount: string | number; proof: boolean; proofUrl: string | null; status: string };
 
 function cName(c: any) { return c.member_name ?? c.members?.full_name ?? c.member?.full_name ?? 'Member'; }
 
@@ -29,6 +34,7 @@ export default function ReviewPostings() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [tab, setTab] = useState<Tab>('pending');
   const [target, setTarget] = useState<Posting | null>(null);
+  const [zoom, setZoom] = useState<string | null>(null);
 
   const contribs = useContributions(groupId!, {});
   const expenses = useExpenses(groupId!, {});
@@ -38,8 +44,8 @@ export default function ReviewPostings() {
   const rejectE = useRejectExpense(groupId!);
 
   const postings = useMemo<Posting[]>(() => {
-    const c: Posting[] = (contribs.data ?? []).map((x: any) => ({ id: x.id, kind: 'contribution', who: cName(x), date: x.created_at ?? x.submitted_at ?? '', amount: x.amount, proof: !!x.proof_url, status: x.status }));
-    const e: Posting[] = (expenses.data ?? []).map((x: any) => ({ id: x.id, kind: 'expense', who: x.description ?? 'Expense', date: x.created_at ?? '', amount: x.amount, proof: !!x.proof_url, status: x.status }));
+    const c: Posting[] = (contribs.data ?? []).map((x: any) => ({ id: x.id, kind: 'contribution', who: cName(x), date: x.created_at ?? x.submitted_at ?? '', amount: x.amount, proof: !!x.proof_url, proofUrl: x.proof_signed_url ?? null, status: x.status }));
+    const e: Posting[] = (expenses.data ?? []).map((x: any) => ({ id: x.id, kind: 'expense', who: x.description ?? 'Expense', date: x.created_at ?? '', amount: x.amount, proof: !!x.proof_url, proofUrl: x.proof_signed_url ?? null, status: x.status }));
     return [...c, ...e];
   }, [contribs.data, expenses.data]);
 
@@ -123,12 +129,37 @@ export default function ReviewPostings() {
                 <Text variant="caption" color="secondary">{target.kind}{target.proof ? ' · proof attached' : ' · no proof'}</Text>
               </View>
             )}
+
+            {target?.proof ? (
+              target.proofUrl ? (
+                <Pressable onPress={() => setZoom(target.proofUrl)}>
+                  <Image source={{ uri: target.proofUrl }} style={{ width: '100%', height: 220, borderRadius: 14, backgroundColor: semantic.surfaceAlt }} resizeMode="cover" />
+                  <Text variant="caption" color="secondary" style={{ textAlign: 'center', marginTop: 6 }}>Tap to view full size</Text>
+                </Pressable>
+              ) : (
+                <View style={{ height: 120, borderRadius: 14, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <ImageOff size={24} color={semantic.textMuted} />
+                  <Text variant="caption" color="secondary">Couldn't load the proof image</Text>
+                </View>
+              )
+            ) : null}
+
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button label="Reject" variant="ghost" onPress={() => target && decide(target, false)} style={{ flex: 1 }} />
               <Button label="Approve" leading={<Check size={16} color="#fff" />} onPress={() => target && decide(target, true)} loading={approveC.loading || approveE.loading} style={{ flex: 1 }} />
             </View>
           </View>
         </View>
+      </Modal>
+
+      {/* Full-size proof viewer */}
+      <Modal visible={!!zoom} transparent animationType="fade" onRequestClose={() => setZoom(null)}>
+        <Pressable onPress={() => setZoom(null)} style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', alignItems: 'center', justifyContent: 'center' }}>
+          {zoom ? <Image source={{ uri: zoom }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
+          <Pressable onPress={() => setZoom(null)} hitSlop={12} style={{ position: 'absolute', top: 50, right: 20 }}>
+            <X size={28} color="#fff" />
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );

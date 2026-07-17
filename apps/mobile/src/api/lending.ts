@@ -3,16 +3,18 @@
  * ----------------------------------------------------------------------------
  * Calls the lending module of the API (M6).
  *
- * Flow: apply (member) -> check liquidity -> approve+disburse (officer) ->
- * loan active -> repayments (interest-first allocation, server-side).
+ * Flow: apply (member, verified only) -> Owner reviews eligibility -> Owner
+ * approves (the lending decision — sets the rate, optionally a partial
+ * amount if liquidity is short) -> Treasurer or Owner disburses (separate
+ * step, posts the ledger entry) -> loan active -> repayments (interest-first
+ * allocation, server-side).
  *
- * TWO CONTROL NOTES (both from the spec, both worth knowing for the panel):
- *  - approve() is APPROVE *and* DISBURSE fused into one call (approve_and_disburse_loan
- *    RPC). Spec §1.2 wanted authorization (Owner's decision) SEPARATE from
- *    disbursement (Treasurer's execution); the live API merges them and lets
- *    either treasurer or owner do both. See SPEC-DIVERGENCE in constants/roles.ts.
- *  - The server blocks an officer from approving their OWN loan; approve() will
- *    throw an ApiError in that case.
+ * approve() and disburse() are deliberately two separate calls: the Owner's
+ * decision is segregated from the actual disbursement, matching §1.2 — a
+ * Treasurer alone can no longer both approve and disburse a loan.
+ *
+ * The server blocks an officer from approving their OWN loan; approve() will
+ * throw an ApiError in that case.
  */
 import { api } from './client';
 import type { Money } from '../lib/money';
@@ -26,6 +28,7 @@ export interface Loan {
   membership_id: string;
   group_id: string;
   principal: Money;
+  approved_principal: Money | null; // may be less than principal — TC-040 partial approval
   interest_rate: Money | null; // monthly decimal, e.g. "0.03" = 3%; null until approved
   term_months: number;
   purpose: string | null;
@@ -33,9 +36,18 @@ export interface Loan {
   outstanding_balance: Money;
   applied_at: string;
   approved_at: string | null;
+  disbursed_at: string | null;
+  rejection_reason: string | null;
   created_at: string;
-  /** Who approved (and disbursed — the two are one fused action) this loan. */
+  /** Who made the lending decision (approve/reject) — not necessarily who disbursed it. */
   approver: { full_name: string } | null;
+}
+
+export interface LoanEligibility {
+  eligible: boolean;
+  reasons: string[];
+  available_cash: Money;
+  requested_principal: Money;
 }
 
 export interface LoanPayment {
@@ -48,6 +60,8 @@ export interface LoanPayment {
   paid_date: string | null;
   status: LoanPaymentStatus;
   proof_url: string | null;
+  /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
+  proof_signed_url: string | null;
   created_at: string;
   /** Who recorded this repayment. */
   recorder: { full_name: string } | null;
@@ -88,17 +102,33 @@ export function getLiquidity(groupId: string) {
   return api.get<Liquidity>(`/api/groups/${groupId}/liquidity`);
 }
 
+/** GET — what the Owner should review before deciding: verified status, an existing active loan, a missed contribution on file, and current liquidity. */
+export function getLoanEligibility(groupId: string, loanId: string) {
+  return api.get<LoanEligibility>(`/api/groups/${groupId}/loans/${loanId}/eligibility`);
+}
+
 // --- Decision / disbursement / repayment ------------------------------------
 
 /**
- * POST — approve AND disburse a loan in one step. `interestRate` is the MONTHLY
- * decimal rate (0.03 = 3%). Posts the disbursement ledger entry; loan -> active.
- * Throws if the caller is the borrower (own-loan guard).
+ * POST — the Owner's lending decision. `interestRate` is the MONTHLY decimal
+ * rate (0.03 = 3%). `approvedPrincipal` lets the Owner approve less than
+ * requested when liquidity is short (TC-040) — defaults to the full amount.
+ * Does NOT disburse — loan moves to 'approved', awaiting disburseLoan().
+ * Throws if the caller is the borrower (own-loan guard), or if the loan is
+ * ineligible (unverified borrower, an existing active loan, a missed
+ * contribution on file, or insufficient liquidity for the approved amount).
  */
-export function approveLoan(groupId: string, loanId: string, interestRate: number) {
-  return api.post<{ loan: Loan; ledger_entry?: unknown }>(
+export function approveLoan(groupId: string, loanId: string, interestRate: number, approvedPrincipal?: string) {
+  return api.post<{ loan: Loan }>(
     `/api/groups/${groupId}/loans/${loanId}/approve`,
-    { interest_rate: interestRate },
+    { interest_rate: interestRate, approved_principal: approvedPrincipal },
+  );
+}
+
+/** POST — disburse an already-approved loan (Treasurer or Owner). Posts the disbursement ledger entry; loan -> active. */
+export function disburseLoan(groupId: string, loanId: string) {
+  return api.post<{ message: string; ledgerEntry: unknown }>(
+    `/api/groups/${groupId}/loans/${loanId}/disburse`,
   );
 }
 

@@ -8,13 +8,18 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./lending.service');
 
-// Apply for a loan — member supplies amount, term, purpose (NOT the rate)
+// Apply for a loan — member supplies amount, term, purpose (NOT the rate).
+// Verified members only (TC-035) — the mobile UI already gated this
+// client-side, but nothing stopped a direct API call before.
 router.post(
   '/groups/:groupId/loans',
   requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
+      if (req.member.verification_status !== 'verified') {
+        return res.status(403).json({ error: 'Only verified members can request a loan' });
+      }
       const { principal, term_months, purpose } = req.body;
       if (principal == null || term_months == null) {
         return res.status(400).json({ error: 'principal and term_months are required' });
@@ -75,6 +80,23 @@ router.get(
   }
 );
 
+// What the Owner reviews before approving/rejecting (TC-013, TC-014, TC-034)
+router.get(
+  '/groups/:groupId/loans/:id/eligibility',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const { eligible, reasons, loan } = await service.checkEligibility(req.params.id);
+      if (loan.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      const availableCash = await service.availableCash(req.params.groupId);
+      res.json({ eligible, reasons, available_cash: availableCash, requested_principal: loan.principal });
+    } catch (err) { next(err); }
+  }
+);
+
 // Check available fund cash (officers)
 router.get(
   '/groups/:groupId/liquidity',
@@ -90,14 +112,17 @@ router.get(
   }
 );
 
-// Approve & disburse — officer (not the applicant) sets the monthly interest rate
+// The lending decision — Owner only (not Treasurer). Sets the interest rate
+// and, per TC-040, may approve LESS than the requested principal
+// (approved_principal) when liquidity can't cover the full amount instead of
+// only being able to block/reject. Does not disburse — see /disburse below.
 router.post(
   '/groups/:groupId/loans/:id/approve',
   requireAuth,
-  requireGroupRole(['treasurer', 'owner']),
+  requireGroupRole(['owner']),
   async (req, res, next) => {
     try {
-      const { interest_rate } = req.body;
+      const { interest_rate, approved_principal } = req.body;
       if (interest_rate == null) {
         return res.status(400).json({ error: 'interest_rate (monthly) is required to approve' });
       }
@@ -108,12 +133,38 @@ router.post(
       if (loan.membership_id === req.membership.id) {
         return res.status(403).json({ error: 'You cannot approve your own loan' });
       }
-      const ledgerEntry = await service.approveAndDisburse({
+      const approvedLoan = await service.approveLoan({
         loanId: req.params.id,
         approverId: req.member.id,
         interestRate: interest_rate,
+        approvedPrincipal: approved_principal,
       });
-      res.json({ message: 'Loan approved and disbursed', ledgerEntry });
+      res.json({ message: 'Loan approved — awaiting disbursement', loan: approvedLoan });
+    } catch (err) {
+      if (err.message && (err.message.includes('liquidity') || err.status === 409)) {
+        return res.status(409).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
+
+// Disburse an already-approved loan — Treasurer or Owner (TC-019).
+router.post(
+  '/groups/:groupId/loans/:id/disburse',
+  requireAuth,
+  requireGroupRole(['treasurer', 'owner']),
+  async (req, res, next) => {
+    try {
+      const loan = await service.getLoan(req.params.id);
+      if (loan.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      const ledgerEntry = await service.disburseLoan({
+        loanId: req.params.id,
+        disburserId: req.member.id,
+      });
+      res.json({ message: 'Loan disbursed', ledgerEntry });
     } catch (err) {
       if (err.message && err.message.includes('liquidity')) {
         return res.status(409).json({ error: err.message });
@@ -123,14 +174,14 @@ router.post(
   }
 );
 
-// Reject a pending loan (officers)
+// Reject a pending loan, with a reason (owner only — mirrors the approve gate)
 router.post(
   '/groups/:groupId/loans/:id/reject',
   requireAuth,
-  requireGroupRole(['treasurer', 'owner']),
+  requireGroupRole(['owner']),
   async (req, res, next) => {
     try {
-      const loan = await service.rejectLoan(req.params.id);
+      const loan = await service.rejectLoan(req.params.id, req.body?.reason);
       res.json({ message: 'Loan rejected', loan });
     } catch (err) {
       next(err);
