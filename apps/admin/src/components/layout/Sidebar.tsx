@@ -14,7 +14,7 @@ import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import { LayoutDashboard, Users, Boxes, Activity, Database, Shield, HardDrive, Cog } from 'lucide-react';
-import kapitlogo from '../../assets/images/KapitLogo.png';
+import kapitlogo from '../../assets/images/KapitPondoL.png';
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: 'pending_verifications' };
 

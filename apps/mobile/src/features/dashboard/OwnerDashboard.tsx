@@ -44,7 +44,7 @@ function FundHero({ groupId }: { groupId: string }) {
           {loading ? (
             <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginTop: 6 }} />
           ) : (
-            <Text style={{ fontSize: 30, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>
+            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>
               {formatPeso(data?.available_cash)}
             </Text>
           )}

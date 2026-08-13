@@ -42,7 +42,7 @@ function Hero({ groupId }: { groupId: string }) {
         <View style={{ gap: 3 }}>
           <Text variant="caption" style={{ color: '#fff', opacity: 0.65 }}>Group cash balance</Text>
           {loading ? <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginTop: 6 }} /> : (
-            <Text style={{ fontSize: 30, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(data?.available_cash)}</Text>
+            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(data?.available_cash)}</Text>
           )}
         </View>
         <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' }}>

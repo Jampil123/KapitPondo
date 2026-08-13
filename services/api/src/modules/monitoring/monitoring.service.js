@@ -39,6 +39,20 @@ async function recentLedger({ limit = 50 }) {
   return data;
 }
 
+// Infra-level DB health for the System Health > Database admin page. Doesn't
+// throw on failure — an unreachable database is a status this should report,
+// not a 500 that takes the page down.
+async function databaseHealth() {
+  const start = Date.now();
+  try {
+    const { data, error } = await supabase.rpc('database_health');
+    if (error) throw error;
+    return { reachable: true, latency_ms: Date.now() - start, ...data };
+  } catch (err) {
+    return { reachable: false, latency_ms: Date.now() - start, error: err.message };
+  }
+}
+
 // Wraps a user-supplied term for interpolation into a PostgREST or()/ilike()
 // filter string. Quoting the value stops embedded commas, parens, or dots in
 // the search term from being parsed as extra filter syntax.
@@ -77,4 +91,4 @@ async function search(q, limit = 5) {
   return { members: membersRes.data, groups: groupsRes.data, audit: auditRes.data };
 }
 
-module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search };
+module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search, databaseHealth };

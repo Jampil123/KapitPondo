@@ -70,7 +70,7 @@ function Hero({ groupId }: { groupId: string }) {
           {bal.loading ? (
             <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginTop: 6 }} />
           ) : (
-            <Text style={{ fontSize: 30, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>{formatPeso(bal.data?.contributions)}</Text>
+            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>{formatPeso(bal.data?.contributions)}</Text>
           )}
         </View>
         <View style={{ backgroundColor: 'rgba(255,255,255,0.18)', paddingVertical: 5, paddingHorizontal: 11, borderRadius: 999 }}>

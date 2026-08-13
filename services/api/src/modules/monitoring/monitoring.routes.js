@@ -49,6 +49,14 @@ router.get('/admin/monitoring/activity', requireAuth, requireSystemAdmin, async 
   } catch (err) { next(err); }
 });
 
+// Database infra health — size, connections, cache hit ratio, largest tables
+router.get('/admin/monitoring/database', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const database = await service.databaseHealth();
+    res.json({ database });
+  } catch (err) { next(err); }
+});
+
 // Cross-entity search (members, groups, audit log) for the dashboard search bar
 router.get('/admin/search', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {

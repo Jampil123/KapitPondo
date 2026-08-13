@@ -82,7 +82,7 @@ export function LoginPage() {
           <form onSubmit={onSubmit} className="w-full max-w-md">
             <h2 className="text-4xl font-bold text-ink leading-tight">Welcome back,</h2>
             <h2 className="text-4xl font-bold text-brand leading-tight"style={{ color: '#4f7595' }}>KapitPondo Team</h2>
-            <p className="text-secondary mt-3 mb-8">Sign in to continue to the administrator dashboard.</p>
+            <p className="text-secondary mt-3 mb-8"></p>
 
             {err && <ErrorBanner>{err}</ErrorBanner>}
 
