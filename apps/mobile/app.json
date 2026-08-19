@@ -38,7 +38,9 @@
           }
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-image",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
