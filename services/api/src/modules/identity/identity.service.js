@@ -30,6 +30,7 @@ async function submitDocument({
     verification_status: 'pending',
     verification_rejection_reason: null, // clear any prior rejection now that they've resubmitted
     updated_at: new Date().toISOString(),
+    submitted_at: new Date().toISOString(), // distinct from updated_at, which later approve/reject calls overwrite
   };
   if (fullName) update.full_name = fullName;
   if (phone) update.phone = phone;

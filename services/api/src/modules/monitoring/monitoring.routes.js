@@ -57,6 +57,14 @@ router.get('/admin/monitoring/database', requireAuth, requireSystemAdmin, async 
   } catch (err) { next(err); }
 });
 
+// ID verification queue health — pending count, oldest item age, 7d turnaround
+router.get('/admin/monitoring/verification-queue', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const queue = await service.verificationQueueHealth();
+    res.json({ queue });
+  } catch (err) { next(err); }
+});
+
 // Cross-entity search (members, groups, audit log) for the dashboard search bar
 router.get('/admin/search', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {

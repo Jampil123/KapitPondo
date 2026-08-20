@@ -6,7 +6,7 @@
  *   - signed in + sysadmin     → the admin console (sidebar + pages)
  */
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Shield, HardDrive, Cog } from 'lucide-react';
+import { Cog } from 'lucide-react';
 import { useAdminAuth } from './context/AdminAuthContext';
 import { AppLayout } from './components/AppLayout';
 import { LoginPage } from './features/auth/LoginPage';
@@ -17,6 +17,9 @@ import { GroupsPage } from './features/groups/GroupsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { SystemHealthPage } from './features/system-health/SystemHealthPage';
 import { DatabasePage } from './features/system-health/DatabasePage';
+import { DatabaseHealthPage } from './features/system-health/DatabaseHealthPage';
+import { AuthServicesHealthPage } from './features/system-health/AuthServicesHealthPage';
+import { StorageHealthPage } from './features/system-health/StorageHealthPage';
 
 function Loader() {
   return <div className="flex h-full items-center justify-center text-muted text-sm">Loading…</div>;
@@ -66,8 +69,9 @@ export default function App() {
         <Route path="audit" element={<AuditPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="system/database" element={<DatabasePage />} />
-        <Route path="system/auth-service" element={<SystemHealthPage icon={Shield} title="Auth Service" />} />
-        <Route path="system/storage" element={<SystemHealthPage icon={HardDrive} title="Storage" />} />
+        <Route path="system/database-health" element={<DatabaseHealthPage />} />
+        <Route path="system/auth-service" element={<AuthServicesHealthPage />} />
+        <Route path="system/storage" element={<StorageHealthPage />} />
         <Route path="system/background-jobs" element={<SystemHealthPage icon={Cog} title="Background Jobs" />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,19 +1,7 @@
-/**
- * apps/admin/src/components/layout/Sidebar.tsx — dark sidebar shell, grouped
- * into HOME (Dashboard · Users · Groups · Activity) and SYSTEM HEALTH
- * (Database · Auth Service · Storage · Background Jobs), with a pending
- * badge on Users (from /admin/verifications?status=pending).
- *
- * Collapsed by default (icons only) to leave more room for the main
- * content. Expands to show labels when pinned open via the Topbar's
- * hamburger button, or while the pointer is hovering over it. Stays in
- * the normal document flow (not an overlay) and sticks in place while
- * the main content scrolls.
- */
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, Boxes, Activity, Database, Shield, HardDrive, Cog } from 'lucide-react';
+import { LayoutDashboard, Users, Boxes, Activity, Database, Shield, HardDrive, Cog, HeartPulse } from 'lucide-react';
 import kapitlogo from '../../assets/images/KapitPondoL.png';
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: 'pending_verifications' };
@@ -27,8 +15,9 @@ const HOME_NAV: NavItem[] = [
 
 const SYSTEM_HEALTH_NAV: NavItem[] = [
   { to: '/system/database', label: 'Database', icon: Database },
-  { to: '/system/auth-service', label: 'Auth Service', icon: Shield },
-  { to: '/system/storage', label: 'Storage', icon: HardDrive },
+  { to: '/system/database-health', label: 'Database Health', icon: HeartPulse },
+  { to: '/system/auth-service', label: 'Auth Services', icon: Shield },
+  { to: '/system/storage', label: 'Storage Health', icon: HardDrive },
   { to: '/system/background-jobs', label: 'Background Jobs', icon: Cog },
 ];
 
@@ -106,7 +95,7 @@ export function Sidebar({ pending, pinned }: { pending: number | null; pinned: b
 
       <nav className="flex-1 px-3.5 overflow-y-auto overflow-x-hidden">
         <NavSection title="Home" items={HOME_NAV} pending={pending} expanded={expanded} />
-        <NavSection title="System Health" items={SYSTEM_HEALTH_NAV} pending={pending} expanded={expanded} />
+        <NavSection title="Platform Health" items={SYSTEM_HEALTH_NAV} pending={pending} expanded={expanded} />
       </nav>
     </aside>
   );

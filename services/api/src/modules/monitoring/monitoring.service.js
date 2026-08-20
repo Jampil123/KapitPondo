@@ -47,10 +47,58 @@ async function databaseHealth() {
   try {
     const { data, error } = await supabase.rpc('database_health');
     if (error) throw error;
-    return { reachable: true, latency_ms: Date.now() - start, ...data };
+    return { reachable: true, latency_ms: Date.now() - start, ...enrichDatabaseHealth(data) };
   } catch (err) {
     return { reachable: false, latency_ms: Date.now() - start, error: err.message };
   }
+}
+
+// Configured storage cap for the disk-usage % shown on the Database Health
+// page — Postgres has no built-in notion of provisioned volume size, so this
+// is a manually-set constant (default matches Supabase's free-tier 500MB),
+// not a queried value. Override with DB_STORAGE_CAPACITY_MB in production.
+const STORAGE_CAPACITY_BYTES = Number(process.env.DB_STORAGE_CAPACITY_MB || 500) * 1024 * 1024;
+
+// Rolling in-memory sample of xact_rollback (a real, cumulative Postgres
+// counter) so the Database Health page can show a real "failed transactions"
+// count over a recent window instead of a lifetime total. Resets on API
+// restart; the window widens from 0 up to ROLLBACK_WINDOW_MS as samples
+// accumulate, and the API reports how much of the window it actually has.
+const ROLLBACK_WINDOW_MS = 60 * 60 * 1000; // 1h
+let rollbackSamples = []; // { t: number, xact_rollback: number }[]
+
+function sampleRollbacks(xactRollback) {
+  const now = Date.now();
+  rollbackSamples.push({ t: now, xact_rollback: xactRollback });
+  rollbackSamples = rollbackSamples.filter((s) => now - s.t <= ROLLBACK_WINDOW_MS);
+}
+
+function rollbacksInWindow() {
+  if (rollbackSamples.length < 2) return { count: null, window_ms: 0 };
+  const latest = rollbackSamples[rollbackSamples.length - 1];
+  const earliest = rollbackSamples[0];
+  return { count: latest.xact_rollback - earliest.xact_rollback, window_ms: latest.t - earliest.t };
+}
+
+function enrichDatabaseHealth(data) {
+  const connections = data.connections;
+  const connection_pool_percent = connections && connections.max_connections
+    ? Math.round((connections.total / connections.max_connections) * 1000) / 10
+    : null;
+
+  const disk_usage_percent = Math.round((data.database_size_bytes / STORAGE_CAPACITY_BYTES) * 1000) / 10;
+
+  if (typeof data.xact_rollback === 'number') sampleRollbacks(data.xact_rollback);
+  const { count, window_ms } = rollbacksInWindow();
+
+  return {
+    ...data,
+    connection_pool_percent,
+    disk_usage_percent,
+    storage_capacity_bytes: STORAGE_CAPACITY_BYTES,
+    failed_transactions_recent: count,
+    failed_transactions_window_ms: window_ms,
+  };
 }
 
 // Wraps a user-supplied term for interpolation into a PostgREST or()/ilike()
@@ -91,4 +139,13 @@ async function search(q, limit = 5) {
   return { members: membersRes.data, groups: groupsRes.data, audit: auditRes.data };
 }
 
-module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search, databaseHealth };
+// ID verification queue health for the admin System Health > Auth Services
+// page's "ID Verification Queue" column — pending count, oldest pending
+// item age, and average review turnaround over the last 7 days.
+async function verificationQueueHealth() {
+  const { data, error } = await supabase.rpc('verification_queue_health');
+  if (error) throw error;
+  return data;
+}
+
+module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search, databaseHealth, verificationQueueHealth };
