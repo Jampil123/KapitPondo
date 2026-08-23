@@ -1,22 +1,31 @@
 /**
  * apps/admin/src/features/system-health/StorageHealthPage.tsx
- * Capstone-demo "Storage Health" panel (module M10.2). Fully mock/simulated
- * data that fluctuates over time — a UI/UX prototype, no real storage/cloud
- * provider connection. Proof files back every financial claim in KapitPondo
- * (§0.2), so storage health is treated as a first-class monitoring surface.
+ * "Storage Health" panel (module M10.2) — real data from GET
+ * /admin/monitoring/storage (services/api monitoring.service.js,
+ * storage_health() RPC, migration 0033). Polls periodically plus a manual
+ * refresh, same pattern as Database Health.
+ *
+ * Upload success/failure rate and virus/malformed-file scan failures are not
+ * obtainable in this environment (uploads bypass the backend entirely, and
+ * no scanning step exists) — shown as an honest "not available" state
+ * rather than simulated. Both were the only metrics allowed to reach "Down"
+ * in the original status model, so overall status here caps at "Degraded".
+ * See storageHealthReal.ts.
  */
 import { useEffect, useRef, useState } from 'react';
 import {
   HardDrive, RefreshCw, SlidersHorizontal, ChevronDown, ChevronUp,
-  ArrowUp, ArrowDown, Minus, ShieldAlert, Clock, AlertTriangle, Archive, Sparkles,
+  ArrowUp, ArrowDown, Minus, Clock, AlertTriangle, Info, WifiOff, Archive, Sparkles,
 } from 'lucide-react';
+import { api } from '../../lib/api';
 import {
-  seedSnapshot, tick, sweepOrphans, CATEGORY_ORDER,
-  type StorageHealthSnapshot, type IncidentEntry, type DemoOverride,
-  type MetricKey, type HealthStatus,
-} from './storageHealthMock';
+  mapSnapshot, applyDemoOverride, diffIncidents, UNAVAILABLE_METRICS,
+  CATEGORY_LABELS, CATEGORY_ORDER,
+  type StorageHealthApiResponse, type StorageHealthSnapshot, type IncidentEntry,
+  type DemoOverride, type MetricKey, type HealthStatus, type MetricReading,
+} from './storageHealthReal';
 
-const TICK_MS = 6000;
+const POLL_MS = 20000;
 const MAX_INCIDENTS = 50;
 
 const STATUS_TONE: Record<HealthStatus, string> = {
@@ -24,13 +33,34 @@ const STATUS_TONE: Record<HealthStatus, string> = {
   degraded: 'bg-warning-bg text-warning',
   down: 'bg-danger-bg text-danger',
 };
-const STATUS_STROKE: Record<HealthStatus, string> = {
-  operational: 'var(--color-success)',
-  degraded: 'var(--color-warning)',
-  down: 'var(--color-danger)',
-};
+const STATUS_BAR: Record<HealthStatus, string> = { operational: 'bg-success', degraded: 'bg-warning', down: 'bg-danger' };
 const STATUS_BORDER: Record<HealthStatus, string> = { operational: 'border-l-success', degraded: 'border-l-warning', down: 'border-l-danger' };
 const STATUS_LABEL: Record<HealthStatus, string> = { operational: 'Operational', degraded: 'Degraded', down: 'Down' };
+
+const METRIC_ORDER: MetricKey[] = ['storageCapacity', 'retrievalLatency'];
+const OVERRIDE_LABELS: Record<MetricKey, string> = { storageCapacity: 'Storage Capacity', retrievalLatency: 'Retrieval Latency' };
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = bytes / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+  return `${value.toFixed(1)} ${units[i]}`;
+}
+function formatRelative(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.round(mins / 60)}h ago`;
+}
+function capacityBarColor(v: number) {
+  if (v > 90) return 'bg-danger';
+  if (v > 75) return 'bg-warning';
+  if (v > 60) return 'bg-brand';
+  return 'bg-success';
+}
 
 function StatusBadge({ status, size = 'md' }: { status: HealthStatus; size?: 'md' | 'lg' }) {
   return (
@@ -39,39 +69,48 @@ function StatusBadge({ status, size = 'md' }: { status: HealthStatus; size?: 'md
     </span>
   );
 }
-
-function TrendArrow({ current, previous }: { current: number; previous: number }) {
+function TrendArrow({ current, previous }: { current: number | null; previous: number | null }) {
+  if (current === null || previous === null) return <Minus size={13} className="text-muted" />;
   const diff = current - previous;
-  if (Math.abs(diff) < 0.05) return <Minus size={13} className="text-muted" />;
+  if (Math.abs(diff) < 0.02) return <Minus size={13} className="text-muted" />;
   return diff > 0 ? <ArrowUp size={13} className="text-warning" /> : <ArrowDown size={13} className="text-success" />;
 }
 
-function clamp01(v: number) { return Math.max(0, Math.min(1, v)); }
-
-function Ring({ value, status }: { value: number; status: HealthStatus }) {
-  const size = 60;
-  const stroke = 6;
-  const r = (size - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const pct = clamp01(value / 100);
+function MetricCard({ metric, sub, children }: { metric: MetricReading; sub?: string; children?: React.ReactNode }) {
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={STATUS_STROKE[status]} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c * (1 - pct)} strokeLinecap="round" />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[12px] font-bold text-ink">{value.toFixed(1)}%</span>
+    <div className={`rounded-2xl bg-surface border border-line border-l-4 ${STATUS_BORDER[metric.status]} p-5`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-secondary truncate">{metric.label}</div>
+          <div className="flex items-baseline gap-1.5 mt-1">
+            <span className="text-2xl font-bold text-ink">
+              {metric.collecting || metric.value === null ? '—' : `${metric.value.toFixed(metric.unit === 's' ? 2 : 1)}${metric.unit}`}
+            </span>
+          </div>
+        </div>
+        <div className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${STATUS_TONE[metric.status]}`}>
+          <TrendArrow current={metric.value} previous={metric.previousValue} />
+        </div>
       </div>
+      {children}
+      <div className="text-[11px] text-muted mt-3.5">{sub ?? (metric.status === 'operational' ? 'Within normal range' : `${STATUS_LABEL[metric.status]} — check thresholds`)}</div>
     </div>
   );
 }
 
-function capacityBarColor(v: number) {
-  if (v > 90) return 'bg-danger';
-  if (v > 75) return 'bg-warning';
-  if (v > 60) return 'bg-brand';
-  return 'bg-success';
+function UnavailableCard({ label, reason }: { label: string; reason: string }) {
+  return (
+    <div className="rounded-2xl bg-surface border border-line border-l-4 border-l-line-strong p-5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-xs text-secondary truncate">{label}</div>
+          <div className="text-lg font-bold text-muted mt-1">Not available</div>
+        </div>
+        <div className="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center bg-surface-alt text-muted"><Info size={16} /></div>
+      </div>
+      <div className="text-[11px] text-muted mt-3.5">{reason}</div>
+    </div>
+  );
 }
 
 function Card({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -86,55 +125,31 @@ function Card({ title, action, children }: { title: string; action?: React.React
   );
 }
 
-function formatRelative(iso: string): string {
-  const ms = Date.now() - new Date(iso).getTime();
-  const mins = Math.round(ms / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  return `${Math.round(mins / 60)}h ago`;
-}
-
-const OVERRIDE_METRICS: { key: MetricKey; label: string; allowDown: boolean }[] = [
-  { key: 'uploadFailureRate', label: 'Upload Failure Rate', allowDown: true },
-  { key: 'storageCapacity', label: 'Storage Capacity', allowDown: false },
-  { key: 'retrievalLatency', label: 'Retrieval Latency', allowDown: false },
-  { key: 'scanFailures', label: 'Scan Failures', allowDown: true },
-];
-
 function DemoControls({ override, onSet, onReset }: { override: DemoOverride; onSet: (o: DemoOverride) => void; onReset: () => void }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${override.scope !== 'none' ? 'bg-danger-bg text-danger' : 'bg-surface-alt text-brand-dark'}`}
+        className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold ${override.scope !== 'none' ? 'bg-warning-bg text-warning' : 'bg-surface-alt text-brand-dark'}`}
       >
         <SlidersHorizontal size={14} />
         Demo controls
       </button>
       {open ? (
         <div className="absolute right-0 mt-2 w-72 rounded-2xl bg-surface border border-line shadow-lg z-10 p-3">
-          <div className="text-[11px] font-semibold text-secondary uppercase tracking-wide px-1 mb-2">Force a metric state</div>
+          <div className="text-[11px] text-muted px-1 mb-2">Only capacity and latency are real, so only these can be forced (Degraded only — both are capped, per the status model).</div>
           <div className="space-y-1">
-            {OVERRIDE_METRICS.map((m) => (
-              <div key={m.key} className="flex items-center justify-between px-1 py-1">
-                <span className="text-[13px] text-ink">{m.label}</span>
-                <div className="flex gap-1">
-                  <button onClick={() => onSet({ scope: 'metric', metricKey: m.key, forcedStatus: 'degraded' })} className="rounded-md bg-warning-bg text-warning px-2 py-1 text-[11px] font-semibold">Degrade</button>
-                  {m.allowDown ? (
-                    <button onClick={() => onSet({ scope: 'metric', metricKey: m.key, forcedStatus: 'down' })} className="rounded-md bg-danger-bg text-danger px-2 py-1 text-[11px] font-semibold">Down</button>
-                  ) : null}
-                </div>
+            {METRIC_ORDER.map((key) => (
+              <div key={key} className="flex items-center justify-between px-1 py-1">
+                <span className="text-[13px] text-ink">{OVERRIDE_LABELS[key]}</span>
+                <button onClick={() => onSet({ scope: 'metric', metricKey: key, forcedStatus: 'degraded' })} className="rounded-md bg-warning-bg text-warning px-2 py-1 text-[11px] font-semibold">Degrade</button>
               </div>
             ))}
           </div>
           <div className="border-t border-line mt-3 pt-3 space-y-1.5">
-            <div className="text-[11px] font-semibold text-secondary uppercase tracking-wide px-1 mb-1">Force everything</div>
-            <div className="flex gap-1.5 px-1">
-              <button onClick={() => onSet({ scope: 'all', forcedStatus: 'degraded' })} className="flex-1 rounded-md bg-warning-bg text-warning px-2 py-1.5 text-[11px] font-semibold">All degraded</button>
-              <button onClick={() => onSet({ scope: 'all', forcedStatus: 'down' })} className="flex-1 rounded-md bg-danger-bg text-danger px-2 py-1.5 text-[11px] font-semibold">All down</button>
-            </div>
-            <button onClick={onReset} className="w-full rounded-md bg-surface-alt text-brand-dark px-2 py-1.5 text-[11px] font-semibold mt-1">Reset to normal</button>
+            <button onClick={() => onSet({ scope: 'all', forcedStatus: 'degraded' })} className="w-full rounded-md bg-warning-bg text-warning px-2 py-1.5 text-[11px] font-semibold">All degraded</button>
+            <button onClick={onReset} className="w-full rounded-md bg-surface-alt text-brand-dark px-2 py-1.5 text-[11px] font-semibold">Reset to normal</button>
           </div>
         </div>
       ) : null}
@@ -142,171 +157,146 @@ function DemoControls({ override, onSet, onReset }: { override: DemoOverride; on
   );
 }
 
-function MetricShell({ status, children }: { status: HealthStatus; children: React.ReactNode }) {
-  return <div className={`rounded-2xl bg-surface border border-line border-l-4 ${STATUS_BORDER[status]} p-5`}>{children}</div>;
-}
-
 export function StorageHealthPage() {
-  const [snapshot, setSnapshot] = useState<StorageHealthSnapshot>(() => seedSnapshot());
+  const [displaySnapshot, setDisplaySnapshot] = useState<StorageHealthSnapshot | null>(null);
   const [incidents, setIncidents] = useState<IncidentEntry[]>([]);
   const [override, setOverride] = useState<DemoOverride>({ scope: 'none' });
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [logExpanded, setLogExpanded] = useState(false);
-  const [sweeping, setSweeping] = useState(false);
   const [sweepNote, setSweepNote] = useState<string | null>(null);
 
-  const snapshotRef = useRef(snapshot);
-  snapshotRef.current = snapshot;
+  const rawSnapshotRef = useRef<StorageHealthSnapshot | null>(null);
+  const displaySnapshotRef = useRef<StorageHealthSnapshot | null>(null);
   const overrideRef = useRef(override);
   overrideRef.current = override;
 
-  function runTick() {
-    const result = tick(snapshotRef.current, overrideRef.current);
-    setSnapshot(result.snapshot);
-    if (result.incidents.length > 0) {
-      setIncidents((prev) => [...result.incidents.reverse(), ...prev].slice(0, MAX_INCIDENTS));
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await api.get<{ storage: StorageHealthApiResponse }>('/admin/monitoring/storage');
+      const rawNext = mapSnapshot(r.storage, rawSnapshotRef.current);
+      rawSnapshotRef.current = rawNext;
+
+      const displayNext = applyDemoOverride(rawNext, overrideRef.current);
+      if (displaySnapshotRef.current) {
+        const found = diffIncidents(displaySnapshotRef.current, displayNext, overrideRef.current.scope !== 'none');
+        if (found.length > 0) setIncidents((prev) => [...found.reverse(), ...prev].slice(0, MAX_INCIDENTS));
+      }
+      displaySnapshotRef.current = displayNext;
+      setDisplaySnapshot(displayNext);
+    } finally {
+      setLoading(false);
     }
   }
 
   useEffect(() => {
-    const id = setInterval(runTick, TICK_MS);
+    load();
+    const id = setInterval(load, POLL_MS);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleRefresh() {
-    setRefreshing(true);
-    runTick();
-    setTimeout(() => setRefreshing(false), 400);
-  }
-  function handleSetOverride(o: DemoOverride) {
-    setOverride(o);
-    setTimeout(runTick, 0);
-  }
-  function handleResetOverride() {
-    setOverride({ scope: 'none' });
-    setTimeout(runTick, 0);
-  }
-  function handleSweep() {
-    setSweeping(true);
-    setTimeout(() => {
-      const { snapshot: next, swept } = sweepOrphans(snapshotRef.current);
-      setSnapshot(next);
-      setSweepNote(swept > 0 ? `Swept ${swept} orphaned file${swept === 1 ? '' : 's'} just now` : 'No orphaned files needed cleanup');
-      setSweeping(false);
-    }, 700);
+  function applyOverride(next: DemoOverride) {
+    setOverride(next);
+    if (!rawSnapshotRef.current) return;
+    const displayNext = applyDemoOverride(rawSnapshotRef.current, next);
+    if (displaySnapshotRef.current) {
+      const found = diffIncidents(displaySnapshotRef.current, displayNext, next.scope !== 'none');
+      if (found.length > 0) setIncidents((prev) => [...found.reverse(), ...prev].slice(0, MAX_INCIDENTS));
+    }
+    displaySnapshotRef.current = displayNext;
+    setDisplaySnapshot(displayNext);
   }
 
-  const m = snapshot.metrics;
+  const snapshot = displaySnapshot;
 
   return (
     <div className="mx-auto max-w-6xl px-8 pt-6 pb-8 space-y-6">
       <div className="rounded-2xl bg-surface border border-line p-5 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${STATUS_TONE[snapshot.overallStatus]}`}>
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${snapshot ? STATUS_TONE[snapshot.overallStatus] : 'bg-surface-alt text-brand-dark'}`}>
             <HardDrive size={18} />
           </div>
           <div>
             <div className="flex items-center gap-2.5">
               <span className="text-sm font-semibold text-ink">Storage Health</span>
-              <StatusBadge status={snapshot.overallStatus} size="lg" />
+              {snapshot ? <StatusBadge status={snapshot.overallStatus} size="lg" /> : null}
             </div>
-            <p className="text-xs text-muted mt-0.5">Last checked: {new Date(snapshot.timestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>
+            <p className="text-xs text-muted mt-0.5">
+              {snapshot ? `Last checked: ${new Date(snapshot.timestamp).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : 'Checking…'}
+              {' · Caps at Degraded — Upload Failure Rate and Scan Failures aren’t available in this environment'}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <DemoControls override={override} onSet={handleSetOverride} onReset={handleResetOverride} />
-          <button onClick={handleRefresh} disabled={refreshing} className="flex items-center gap-1.5 rounded-lg bg-surface-alt px-3 py-2 text-xs font-semibold text-brand-dark disabled:opacity-50">
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+          <DemoControls override={override} onSet={applyOverride} onReset={() => applyOverride({ scope: 'none' })} />
+          <button onClick={load} disabled={loading} className="flex items-center gap-1.5 rounded-lg bg-surface-alt px-3 py-2 text-xs font-semibold text-brand-dark disabled:opacity-50">
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Refresh
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricShell status={m.uploadFailureRate.status}>
-          <div className="flex items-center gap-3.5">
-            <Ring value={100 - m.uploadFailureRate.value} status={m.uploadFailureRate.status} />
-            <div>
-              <div className="text-xs text-secondary">Upload success rate</div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-lg font-bold text-ink">{(100 - m.uploadFailureRate.value).toFixed(1)}%</span>
-                <TrendArrow current={m.uploadFailureRate.value} previous={m.uploadFailureRate.previousValue} />
-              </div>
-              <div className="text-[10.5px] text-muted mt-0.5">{m.uploadFailureRate.value.toFixed(1)}% failing</div>
-            </div>
-          </div>
-        </MetricShell>
-
-        <MetricShell status={m.storageCapacity.status}>
-          <div className="text-xs text-secondary">Storage capacity used</div>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="text-2xl font-bold text-ink">{m.storageCapacity.value.toFixed(1)}%</span>
-            <TrendArrow current={m.storageCapacity.value} previous={m.storageCapacity.previousValue} />
-          </div>
-          <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden mt-3">
-            <div className={`h-full rounded-full ${capacityBarColor(m.storageCapacity.value)}`} style={{ width: `${Math.min(100, m.storageCapacity.value)}%` }} />
-          </div>
-          <div className="text-[10.5px] text-muted mt-2">Warns above 75%</div>
-        </MetricShell>
-
-        <MetricShell status={m.retrievalLatency.status}>
-          <div className="text-xs text-secondary">File retrieval latency</div>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="text-2xl font-bold text-ink">{m.retrievalLatency.value.toFixed(2)}s</span>
-            <TrendArrow current={m.retrievalLatency.value} previous={m.retrievalLatency.previousValue} />
-          </div>
-          <div className="text-[10.5px] text-muted mt-3">Matters most during Auditor proof review</div>
-        </MetricShell>
-
-        <MetricShell status={m.scanFailures.status}>
-          <div className="flex items-start justify-between">
-            <div>
-              <div className="text-xs text-secondary">Scan failures (24h)</div>
-              <div className={`text-2xl font-bold mt-1 ${m.scanFailures.value > 0 ? 'text-danger' : 'text-ink'}`}>{Math.round(m.scanFailures.value)}</div>
-            </div>
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${STATUS_TONE[m.scanFailures.status]}`}>
-              <ShieldAlert size={16} />
-            </div>
-          </div>
-          <div className="text-[10.5px] text-muted mt-3">Blocked malformed/malicious uploads</div>
-        </MetricShell>
-      </div>
-
-      <Card title="Uploads by proof type">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 divide-line">
-          {CATEGORY_ORDER.map((key, i) => {
-            const c = snapshot.categories[key];
-            return (
-              <div key={key} className={`px-5 py-4 ${i > 0 ? 'sm:border-l border-line' : ''}`}>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-secondary">{c.label}</span>
-                  {c.elevated ? <span className="w-2 h-2 rounded-full bg-danger" title="Elevated failure rate" /> : null}
-                </div>
-                <div className="text-lg font-bold text-ink mt-1">{c.volume.toLocaleString()}</div>
-                <div className={`text-[11px] mt-0.5 ${c.elevated ? 'text-danger font-semibold' : 'text-muted'}`}>{c.failureRate.toFixed(1)}% failing</div>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      <div className="rounded-2xl bg-surface border border-line p-5 flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-surface-alt flex items-center justify-center text-brand-dark">
-            <Archive size={18} />
-          </div>
+      {snapshot?.reachable === false ? (
+        <div className="rounded-2xl bg-danger-bg border border-line p-5 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-surface flex items-center justify-center text-danger"><WifiOff size={18} /></div>
           <div>
-            <div className="text-sm font-semibold text-ink">{snapshot.orphanedFiles} orphaned files</div>
-            <p className="text-xs text-muted mt-0.5">
-              {sweepNote ?? 'Uploaded but never linked to a ledger entry — informational, not a health signal'}
-            </p>
+            <div className="text-sm font-semibold text-danger">Storage unreachable</div>
+            <p className="text-xs text-danger/80 mt-0.5">{snapshot.error ?? 'The health check could not reach storage.'}</p>
           </div>
         </div>
-        <button onClick={handleSweep} disabled={sweeping} className="flex items-center gap-1.5 rounded-lg bg-surface-alt px-3 py-2 text-xs font-semibold text-brand-dark disabled:opacity-50">
-          <Sparkles size={14} className={sweeping ? 'animate-pulse' : ''} />
-          {sweeping ? 'Sweeping…' : 'Run cleanup sweep'}
-        </button>
-      </div>
+      ) : null}
+
+      {snapshot && snapshot.reachable !== false ? (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <MetricCard metric={snapshot.metrics.storageCapacity} sub={`${formatBytes(snapshot.totalBytes)} of ${formatBytes(snapshot.storageCapacityBytes)} configured capacity`}>
+              <div className="h-1.5 rounded-full bg-surface-alt overflow-hidden mt-3.5">
+                <div className={`h-full rounded-full ${capacityBarColor(snapshot.metrics.storageCapacity.value ?? 0)}`} style={{ width: `${Math.min(100, snapshot.metrics.storageCapacity.value ?? 0)}%` }} />
+              </div>
+            </MetricCard>
+            <MetricCard
+              metric={snapshot.metrics.retrievalLatency}
+              sub={snapshot.metrics.retrievalLatency.collecting ? 'No uploaded file to sample yet' : 'Timed against the most recently uploaded file'}
+            />
+            {UNAVAILABLE_METRICS.map((m) => <UnavailableCard key={m.key} label={m.label} reason={m.reason} />)}
+          </div>
+
+          <Card title="Uploads by proof type">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 divide-line">
+              {CATEGORY_ORDER.map((key, i) => (
+                <div key={key} className={`px-5 py-4 ${i > 0 ? 'sm:border-l border-line' : ''}`}>
+                  <div className="text-[11px] text-secondary">{CATEGORY_LABELS[key]}</div>
+                  <div className="text-lg font-bold text-ink mt-1">{snapshot.categoryVolume[key].toLocaleString()}</div>
+                  <div className="text-[11px] text-muted mt-0.5">linked files</div>
+                </div>
+              ))}
+            </div>
+            <div className="px-5 py-3 text-[10.5px] text-muted border-t border-line">
+              Volume only — per-category failure rate isn't available (see Upload Failure Rate above).
+            </div>
+          </Card>
+
+          <div className="rounded-2xl bg-surface border border-line p-5 flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-surface-alt flex items-center justify-center text-brand-dark"><Archive size={18} /></div>
+              <div>
+                <div className="text-sm font-semibold text-ink">{snapshot.orphanedFiles} orphaned files</div>
+                <p className="text-xs text-muted mt-0.5">
+                  {sweepNote ?? 'Uploaded but not referenced by any members/contributions/loan_payments/expenses row — informational, not a health signal'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSweepNote(`This would remove ${snapshot.orphanedFiles} file${snapshot.orphanedFiles === 1 ? '' : 's'} — deletion isn't implemented in this prototype to avoid touching real storage`)}
+              className="flex items-center gap-1.5 rounded-lg bg-surface-alt px-3 py-2 text-xs font-semibold text-brand-dark"
+            >
+              <Sparkles size={14} />
+              Preview cleanup
+            </button>
+          </div>
+        </>
+      ) : null}
 
       <Card
         title="Incident log"

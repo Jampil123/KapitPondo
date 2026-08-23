@@ -41,6 +41,8 @@ export interface Loan {
   created_at: string;
   /** Who made the lending decision (approve/reject) — not necessarily who disbursed it. */
   approver: { full_name: string } | null;
+  /** Who the loan actually belongs to (the borrower) — not who approved it. */
+  membership: { member_id: string; members: { full_name: string } | null } | null;
 }
 
 export interface LoanEligibility {
@@ -62,11 +64,26 @@ export interface LoanPayment {
   proof_url: string | null;
   /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
   proof_signed_url: string | null;
+  /** Set only when status is 'rejected'. */
+  rejection_reason: string | null;
   created_at: string;
-  /** Who recorded this repayment. */
+  /** Who recorded this repayment (the member who submitted it, or the officer who recorded it directly). Null for gateway-auto-confirmed payments — see auto_confirmed. */
   recorder: { full_name: string } | null;
-  /** The different officer who verified it (segregation of duties). */
+  /** The different officer who confirmed/verified it (segregation of duties) — null while 'submitted', and null for gateway-auto-confirmed payments. */
   verifier: { full_name: string } | null;
+  /**
+   * Payment gateway fields — FUTURE PLAN, not live (see
+   * services/api/src/modules/payments). Always null/false today; once a
+   * real provider is wired up, a repayment paid through it arrives with
+   * auto_confirmed: true and no recorder/verifier, since the gateway's own
+   * signed webhook confirmation stands in for the human recorder/approver
+   * pair — and for the reference number, which no longer needs typing in.
+   */
+  gateway_provider: string | null;
+  gateway_reference: string | null;
+  auto_confirmed: boolean;
+  /** Only present on the group-wide listRepayments() — who the loan (and therefore this repayment) belongs to. */
+  loans?: { id: string; group_id: string; membership_id: string; membership: { member_id: string; members: { full_name: string } | null } | null };
 }
 
 export interface Liquidity {
@@ -150,12 +167,51 @@ export interface RecordRepaymentInput {
 }
 
 /**
- * POST — record a loan repayment. Server allocates interest first, then
- * principal, and posts the ledger entries (record_loan_repayment RPC).
+ * POST — record a loan repayment DIRECTLY (officer received it in person).
+ * Server allocates interest first, then principal, and posts the ledger
+ * entry immediately (record_loan_repayment RPC) — no confirmation step.
  */
 export function recordRepayment(groupId: string, loanId: string, input: RecordRepaymentInput) {
-  return api.post<{ payment: LoanPayment; loan: Loan }>(
+  return api.post<{ message: string; ledgerEntry: unknown }>(
     `/api/groups/${groupId}/loans/${loanId}/repayments`,
     input,
+  );
+}
+
+export interface SubmitRepaymentInput {
+  amount: string; // clean decimal string
+  payment_method?: PaymentMethod;
+  proof_url?: string;
+  external_reference?: string;
+}
+
+/**
+ * POST — member submits a repayment claim + proof for THEIR OWN loan. No
+ * money posts yet — a different officer must confirmRepayment() it first.
+ * Mirrors the contribution submit→approve flow.
+ */
+export function submitRepayment(groupId: string, loanId: string, input: SubmitRepaymentInput) {
+  return api.post<{ message: string; payment: LoanPayment }>(
+    `/api/groups/${groupId}/loans/${loanId}/repayments/submit`,
+    input,
+  );
+}
+
+/** GET — repayments across the group's loans. Members see only their own; officers see all (optionally filtered by status). */
+export async function listRepayments(groupId: string, status?: LoanPaymentStatus) {
+  const res = await api.get<{ repayments: LoanPayment[] }>(`/api/groups/${groupId}/repayments`, status ? { status } : undefined);
+  return res.repayments;
+}
+
+/** POST — confirm a submitted repayment claim (a DIFFERENT officer than whoever submitted it). Posts the ledger credit and updates the loan balance. */
+export function confirmRepayment(groupId: string, paymentId: string) {
+  return api.post<{ message: string; ledgerEntry: unknown }>(`/api/groups/${groupId}/repayments/${paymentId}/confirm`);
+}
+
+/** POST — reject a submitted repayment claim, with a reason (officers). */
+export function rejectRepayment(groupId: string, paymentId: string, reason?: string) {
+  return api.post<{ message: string; payment: LoanPayment }>(
+    `/api/groups/${groupId}/repayments/${paymentId}/reject`,
+    reason ? { reason } : undefined,
   );
 }

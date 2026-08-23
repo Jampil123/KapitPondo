@@ -13,13 +13,15 @@
  *   collection progress        → useContributions     ✅ real (approved/total, proxy)
  *   group fund (officer-only)  → NOT shown (RBAC)      → shows "My balance" instead
  *   recent activity            → useLedger (real)      last 3 entries, "See all" → Activity
- * Grid tiles: Contributions/Loans/Fund/Standing/Group/Activity/Reports/More
- * all route to real pages now (Phases 1–4).
+ * Grid tiles: Contributions/Loans/Fund/Standing/Group/Heads/Reports/More — all
+ * route to real pages. Activity moved off the grid onto the More screen
+ * (still reachable below via "My activity" → "See all activity", and from
+ * More's Dashboard section) to make room for Heads.
  */
 import { Alert, View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Users, History, BarChart3, MoreHorizontal,
+  ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Users, Layers, BarChart3, MoreHorizontal,
   ArrowUpRight, ArrowDownRight,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -166,7 +168,7 @@ const ACTIONS: ({ label: string; icon: any } & ({ route: string } | { soon: true
   { label: 'Fund', icon: PiggyBank, route: 'fund' },
   { label: 'My Standing', icon: BadgeCheck, route: 'standing' },
   { label: 'Group & Officers', icon: Users, route: 'group' },
-  { label: 'Activity', icon: History, route: 'activity' },
+  { label: 'Heads', icon: Layers, route: 'heads' },
   { label: 'Reports', icon: BarChart3, route: 'reports' },
   { label: 'More', icon: MoreHorizontal, route: 'more' },
 ];

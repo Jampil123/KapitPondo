@@ -55,6 +55,10 @@ export interface AuthContextValue {
   status: AuthStatus;
   session: Session | null;
   member: Member | null;
+  /** True from the moment signOut() is called until the router has actually
+   *  landed on (auth) — RootNavigator shows a full-screen loader over this
+   *  so nothing renders with its stale/empty post-signOut state mid-flight. */
+  signingOut: boolean;
 
   /** Sign up with phone + password; texts an OTP to confirm the phone. */
   signUp: (input: SignUpInput) => Promise<void>;
@@ -67,6 +71,8 @@ export interface AuthContextValue {
 
   refreshMember: () => Promise<void>;
   signOut: () => Promise<void>;
+  /** Called by RootNavigator once the (auth) screen is actually on screen. */
+  clearSigningOut: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -75,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [session, setSession] = useState<Session | null>(null);
   const [member, setMember] = useState<Member | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   const loadMember = useCallback(async (active: Session | null) => {
     if (!active) {
@@ -218,19 +225,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadMember, session]);
 
   const signOut = useCallback(async () => {
-    await supabase.auth.signOut();
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      setSigningOut(false);
+      throw e;
+    }
+    // Left true on success — RootNavigator clears it once (auth) is actually
+    // on screen, so the full-screen loader covers the whole redirect, not
+    // just the moment signOut() resolves.
   }, []);
+
+  const clearSigningOut = useCallback(() => setSigningOut(false), []);
 
   const value: AuthContextValue = {
     status,
     session,
     member,
+    signingOut,
     signUp,
     confirmOtp,
     resendOtp,
     signInWithPassword,
     refreshMember,
     signOut,
+    clearSigningOut,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

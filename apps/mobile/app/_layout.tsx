@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Platform, View, StyleSheet } from "react-native";
 import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaProvider, initialWindowMetrics } from "react-native-safe-area-context";
@@ -12,6 +12,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import * as SplashScreen from "expo-splash-screen";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { LoadingState } from "../src/components/shared/LoadingState";
 import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
@@ -23,12 +24,16 @@ SplashScreen.preventAutoHideAsync();
  * navigates anywhere, so the user stays stuck on the old screen.
  */
 function RootNavigator() {
-  const { status } = useAuth();
+  const { status, signingOut, clearSigningOut } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
   useEffect(() => {
-    if (status === "loading" || segments.length === 0) return;
+    // Expo Router's generated type for useSegments() only lists the known
+    // static routes' lengths (never 0), but at runtime it IS briefly `[]`
+    // before the navigator has mounted — widen the type for this check so
+    // that real, transient empty-array case still short-circuits correctly.
+    if (status === "loading" || (segments as readonly string[]).length === 0) return;
     const inAuthGroup = segments[0] === "(auth)";
 
     if (status === "signedOut" && !inAuthGroup) {
@@ -36,14 +41,30 @@ function RootNavigator() {
     } else if (status === "signedIn" && inAuthGroup) {
       router.replace("/(app)/groups" as any);
     }
-  }, [status, segments, router]);
+
+    // Only clear once we've actually landed on (auth) — keeps the
+    // full-screen sign-out loader up for the whole redirect instead of
+    // dropping it the instant signOut() resolves, before navigation lands.
+    if (signingOut && inAuthGroup) clearSigningOut();
+  }, [status, segments, router, signingOut, clearSigningOut]);
 
   return (
-    <Stack screenOptions={{ animation: Platform.OS === "web" ? "none" : "default" }}>
-      <Stack.Screen name="index" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="(app)" options={{ headerShown: false }} />
-    </Stack>
+    <View style={{ flex: 1 }}>
+      {/* Stack must stay mounted even while signing out — it's the actual
+          navigator that processes router.replace() and updates useSegments().
+          Unmounting it to show the loader breaks the redirect entirely,
+          leaving signingOut stuck true forever. Overlay on top instead. */}
+      <Stack screenOptions={{ animation: Platform.OS === "web" ? "none" : "default" }}>
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+      </Stack>
+      {signingOut ? (
+        <View style={StyleSheet.absoluteFill}>
+          <LoadingState label="Signing you out…" />
+        </View>
+      ) : null}
+    </View>
   );
 }
 

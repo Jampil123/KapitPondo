@@ -1,7 +1,10 @@
 /**
  * components/shared/MemberNav.tsx — member's bottom nav (config over GroupSheetNav).
- * Member actions (contribute / loan / repay / ledger) route to member screens
- * once they exist; marked "Soon" until then.
+ * Member actions (contribute / loan / repay / ledger) route to member
+ * screens once they exist; marked "Soon" until then. "Repay a loan" submits
+ * a claim + proof for a different officer to confirm (migration 0037) — a
+ * member can also just pay the treasurer directly and have THEM record it,
+ * see loans/index.tsx.
  */
 import {
   ArrowUpCircle, Coins, Repeat, MessageCircle, Users, LifeBuoy, Repeat as Switch,

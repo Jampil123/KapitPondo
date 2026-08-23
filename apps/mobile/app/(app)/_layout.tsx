@@ -15,7 +15,12 @@ export default function AppLayout() {
             headerShown: false,
             contentStyle: { backgroundColor: semantic.background },
           }}
-        />
+        >
+          {/* Bell icon → this route (DashboardHeader.tsx, ProfileBody.tsx) — explicit
+              slide so it always animates right-to-left in / left-to-right back out,
+              regardless of platform-default push/pop behavior. */}
+          <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+        </Stack>
       </GroupProvider>
     </NotificationsProvider>
   );

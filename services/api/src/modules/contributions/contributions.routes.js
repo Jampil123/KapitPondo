@@ -5,9 +5,13 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
 const { checkLatePenalties } = require('../penalties/penalties.service');
 
-// Submit a contribution. Members record only their own; officers may record
-// on behalf of any active member of the group (e.g. cash/GCash paid outside
-// the app) by passing membership_id — TC-018.
+// Submit a contribution. Members record only their own (status 'submitted',
+// awaiting officer approval). Officers may record on behalf of any active
+// member of the group (e.g. cash/GCash paid outside the app) by passing
+// membership_id — TC-018. A WALK-IN recording like that posts straight to
+// the ledger (status 'approved') instead: the officer already physically
+// confirmed the payment by receiving it, so there's no separate claim left
+// to verify the way there is for a member's own self-submission.
 router.post('/groups/:groupId/contributions',
   requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
@@ -20,7 +24,8 @@ router.post('/groups/:groupId/contributions',
 
       let targetMembershipId = req.membership.id;
       const isOfficer = ['treasurer', 'auditor', 'owner'].includes(req.membership.role);
-      if (membership_id && membership_id !== req.membership.id) {
+      const isWalkIn = !!membership_id && membership_id !== req.membership.id;
+      if (isWalkIn) {
         if (!isOfficer) {
           return res.status(403).json({ error: 'Only officers can record a contribution for another member' });
         }
@@ -31,16 +36,26 @@ router.post('/groups/:groupId/contributions',
         targetMembershipId = membership_id;
       }
 
-      const contribution = await service.createContribution({
-        membershipId: targetMembershipId,
-        cycleId: cycle_id,
-        groupId: req.params.groupId,
-        amount,
-        paymentMethod: payment_method,
-        proofUrl: proof_url,
-        externalReference: external_reference,
-        recordedBy: req.member.id,
-      });
+      const contribution = isWalkIn
+        ? await service.recordWalkInContribution({
+            membershipId: targetMembershipId,
+            cycleId: cycle_id,
+            groupId: req.params.groupId,
+            amount,
+            paymentMethod: payment_method,
+            externalReference: external_reference,
+            officerId: req.member.id,
+          })
+        : await service.createContribution({
+            membershipId: targetMembershipId,
+            cycleId: cycle_id,
+            groupId: req.params.groupId,
+            amount,
+            paymentMethod: payment_method,
+            proofUrl: proof_url,
+            externalReference: external_reference,
+            recordedBy: req.member.id,
+          });
       res.status(201).json({ contribution });
     } catch (err) { next(err); }
   }

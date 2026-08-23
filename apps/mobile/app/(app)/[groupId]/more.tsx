@@ -7,18 +7,33 @@
  * real entry point on the officer's own governance dashboard (see
  * OwnerDashboard's quick actions / stat tiles), so this screen renders
  * MEMBER_ITEMS unconditionally regardless of the caller's role.
+ *
+ * The "Dashboard" section mirrors every tile on the dashboard grid itself
+ * (Contributions/Loans/Fund/Standing/Heads/Reports), so this screen doubles
+ * as a full index of member-facing features, not just the overflow.
  */
 import { View, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Users, ScrollText, Image as ImageIcon, History, Bell, LifeBuoy, UserCircle,
+  ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Layers, BarChart3,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 
 const MEMBER_ITEMS = [
+  // Every tile from the dashboard grid — everything is reachable from here
+  // even if it's also one tap away on the dashboard itself. Activity (moved
+  // off the grid to make room for Heads — see MemberDashboard.tsx) isn't
+  // repeated here since "Approvals Trail" below already routes there.
+  { icon: ArrowUpCircle, label: 'Contributions', key: 'contributions', section: 'Dashboard' },
+  { icon: Coins, label: 'Loans', key: 'loans', section: 'Dashboard' },
+  { icon: PiggyBank, label: 'Fund', key: 'fund', section: 'Dashboard' },
+  { icon: BadgeCheck, label: 'My Standing', key: 'standing', section: 'Dashboard' },
+  { icon: Layers, label: 'Heads', key: 'heads', section: 'Dashboard' },
+  { icon: BarChart3, label: 'Reports', key: 'reports', section: 'Dashboard' },
   { icon: ScrollText, label: 'My Ledger & Reports', key: 'reports/ledger', section: 'My records' },
   { icon: ImageIcon, label: 'My Proofs', key: 'proofs', section: 'My records' },
   { icon: History, label: 'Approvals Trail', key: 'activity', section: 'My records' },

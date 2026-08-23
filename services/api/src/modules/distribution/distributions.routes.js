@@ -8,13 +8,18 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./distributions.service');
 
-// Set a member's head count (owner only) — affects their distribution share
+// Set a member's OWN head count — self-service (member and officers alike),
+// not an owner-configures-everyone action. Affects their own distribution
+// share, so it's scoped to the caller's own membership row only.
 router.patch(
   '/groups/:groupId/memberships/:id/heads',
   requireAuth,
-  requireGroupRole(['owner']),
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
+      if (req.params.id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only configure your own heads' });
+      }
       const { heads } = req.body;
       if (heads == null || Number(heads) < 1) {
         return res.status(400).json({ error: 'heads must be 1 or greater' });

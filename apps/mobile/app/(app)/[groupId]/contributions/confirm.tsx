@@ -1,11 +1,13 @@
 /**
  * app/(app)/[groupId]/contributions/confirm.tsx — treasurer confirms/records
  * contributions (M5). Pending tab: approve/reject submitted contributions
- * (real). Record tab: log a member's cash payment on their behalf.
+ * (real). Record tab: log a walk-in member's cash payment on their behalf.
  *
- * NOTE: recording on behalf sends membership_id — the API must accept it and
- * apply segregation of duties (a treasurer who records still needs a different
- * officer to approve).
+ * NOTE: recording on behalf sends membership_id. The API treats this as a
+ * WALK-IN payment the officer physically received — it posts straight to the
+ * ledger (status 'approved'), no separate officer approval needed. A
+ * member's own self-submission (the contribute.tsx screen) still goes
+ * through the normal submitted → approve flow.
  */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
@@ -81,9 +83,8 @@ export default function ConfirmContributions() {
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid amount.');
     const ok = await record.run({ cycle_id: cycle.id, membership_id: memberId, amount: amt, payment_method: method, external_reference: reference || undefined });
     if (ok !== undefined) {
-      Alert.alert('Recorded', 'Contribution recorded. It still needs a different officer to approve.');
+      Alert.alert('Recorded', `${memberName}'s contribution of ${formatPeso(amt)} was confirmed and posted.`);
       setAmount(''); setReference(''); setMemberId(null); setMemberName('Select member');
-      setTab('pending'); pending.refetch();
     } else if (record.error) Alert.alert('Could not record', record.error.message);
   }
 

@@ -7,7 +7,7 @@
  * and the group-scoped one ([groupId]/profile.tsx, the group's own nav bar).
  */
 import { useState } from 'react';
-import { View, ScrollView, Pressable, Alert } from 'react-native';
+import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { ShieldCheck, Bell, HelpCircle, Lock, ChevronRight, LogOut, UserPen, Camera } from 'lucide-react-native';
@@ -15,7 +15,6 @@ import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { LoadingState } from '@/components/shared/LoadingState';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
@@ -37,7 +36,6 @@ export function ProfileBody() {
   const { member, signOut, refreshMember } = useAuth();
   const verified = member?.verification_status === 'verified';
   const rejected = member?.verification_status === 'rejected';
-  const [signingOut, setSigningOut] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   async function pickAvatar() {
@@ -72,20 +70,13 @@ export function ProfileBody() {
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: () => {
-          // Sign out clears `member` to null right away, but the redirect to
-          // the landing screen only fires a moment later — without this, the
-          // profile briefly re-renders with everything reset to its empty
-          // fallback (name, avatar, phone) before the screen navigates away.
-          setSigningOut(true);
-          signOut();
-        },
+        // AuthContext's signingOut flag drives a full-screen loader in
+        // RootNavigator (app/_layout.tsx) for the whole redirect — this
+        // screen may keep rendering with `member` already cleared to null
+        // for a moment, but that's covered by the overlay, not visible.
+        onPress: () => signOut(),
       },
     ]);
-  }
-
-  if (signingOut) {
-    return <LoadingState label="Signing you out…" />;
   }
 
   return (

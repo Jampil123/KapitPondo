@@ -59,7 +59,7 @@ export function useCancelDistribution(groupId: string) {
   return useAction((id: string) => cancelDistribution(groupId, id));
 }
 
-/** setHeads(membershipId, heads) — owner adjusts a member's share before preview. */
+/** setHeads(membershipId, heads) — self-service; a member/officer adjusts their OWN share before preview. Server rejects membershipId that isn't the caller's own. */
 export function useSetHeads(groupId: string) {
   return useAction((membershipId: string, heads: number) => setHeads(groupId, membershipId, heads));
 }

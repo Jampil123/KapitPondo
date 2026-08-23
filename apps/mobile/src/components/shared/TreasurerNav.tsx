@@ -17,7 +17,7 @@ export function TreasurerNav() {
       ] }}
       add={{ title: 'Record a transaction', items: [
         { label: 'Record contribution', icon: ArrowUpRight, route: 'contributions/confirm' },
-        { label: 'Record repayment', icon: Repeat, route: 'loans/record-repayment' },
+        { label: 'Repayments', icon: Repeat, route: 'loans/record-repayment' },
         { label: 'Confirm disbursement', icon: Coins, route: 'loans/disburse' },
         { label: 'Record expense', icon: Minus, route: 'expenses/record' },
       ] }}

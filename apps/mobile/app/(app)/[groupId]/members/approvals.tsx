@@ -11,7 +11,7 @@
  * defensively — adjust `normalize()` once you see the real payload.
  */
 import { useMemo, useState } from 'react';
-import { View, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Search, Check, X } from 'lucide-react-native';
@@ -66,6 +66,7 @@ export default function MembershipApprovals() {
   const { data, loading, error, refetch } = useQuery(
     () => listPendingMembers(groupId!),
     [groupId],
+    { table: 'memberships', filter: `group_id=eq.${groupId}` },
   );
   const approve = useAction((id: string) => approveMember(groupId!, id));
   const reject = useAction(({ id, reason }: { id: string; reason: string }) => rejectMember(groupId!, id, reason || undefined));
@@ -119,28 +120,30 @@ export default function MembershipApprovals() {
             />
           </View>
 
-          {filtered.map((r) => {
-            const busy = approve.loading || reject.loading;
-            return (
-              <View key={r.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
-                <View style={{ flexDirection: 'row', gap: 12 }}>
-                  <Avatar name={r.name} size={46} />
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text variant="label" style={{ fontSize: 15 }}>{r.name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      {r.date ? <Text variant="caption" color="secondary">Joined {shortDate(r.date)}</Text> : null}
-                      {r.code ? <StatusBadge entity="role" value="member" labelOverride={r.code} /> : null}
-                      {r.verification ? <StatusBadge entity="verification" value={r.verification} /> : null}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 12, paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+            {filtered.map((r) => {
+              const busy = approve.loading || reject.loading;
+              return (
+                <View key={r.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
+                  <View style={{ flexDirection: 'row', gap: 12 }}>
+                    <Avatar name={r.name} size={46} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text variant="label" style={{ fontSize: 15 }}>{r.name}</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        {r.date ? <Text variant="caption" color="secondary">Joined {shortDate(r.date)}</Text> : null}
+                        {r.code ? <StatusBadge entity="role" value="member" labelOverride={r.code} /> : null}
+                        {r.verification ? <StatusBadge entity="verification" value={r.verification} /> : null}
+                      </View>
                     </View>
                   </View>
+                  <View style={{ flexDirection: 'row', gap: 10, marginTop: 13 }}>
+                    <SmallButton label="Approve" icon={Check} kind="ok" onPress={() => onApprove(r)} disabled={busy} />
+                    <SmallButton label="Reject" icon={X} kind="danger" onPress={() => setRejectTarget(r)} disabled={busy} />
+                  </View>
                 </View>
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 13 }}>
-                  <SmallButton label="Approve" icon={Check} kind="ok" onPress={() => onApprove(r)} disabled={busy} />
-                  <SmallButton label="Reject" icon={X} kind="danger" onPress={() => setRejectTarget(r)} disabled={busy} />
-                </View>
-              </View>
-            );
-          })}
+              );
+            })}
+          </ScrollView>
         </View>
       )}
 

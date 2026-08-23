@@ -24,7 +24,7 @@ export type Capability =
   | 'approveMembership'        // SPEC-DIVERGENCE: §1.1 = Owner only; API allows treasurer
   | 'setMemberRole'
   | 'removeMember'
-  | 'setHeads'
+  | 'setHeads'                  // self-service only — anyone may set their OWN heads (see distributions.routes.js); this table can't express that ownership scoping, only the role gate
   // cycles
   | 'manageCycle'
   // contributions
@@ -60,7 +60,7 @@ export const CAPABILITY_ROLES: Record<Capability, GroupRole[]> = {
   approveMembership: ['owner', 'treasurer'],
   setMemberRole: ['owner'],
   removeMember: ['owner'],
-  setHeads: ['owner'],
+  setHeads: ALL_ROLES,
 
   manageCycle: ['owner', 'treasurer'],
 

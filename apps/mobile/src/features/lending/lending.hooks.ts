@@ -27,14 +27,20 @@ import {
   disburseLoan,
   rejectLoan,
   recordRepayment,
+  submitRepayment,
+  listRepayments,
+  confirmRepayment,
+  rejectRepayment,
   type ApplyLoanInput,
   type LoanStatus,
+  type LoanPaymentStatus,
   type RecordRepaymentInput,
+  type SubmitRepaymentInput,
 } from '../../api/lending';
 
 export function useLoans(groupId: string, filters: { status?: LoanStatus } = {}) {
   const fn = useCallback(() => listLoans(groupId, filters), [groupId, filters.status]);
-  return useQuery(fn, [groupId, filters.status]);
+  return useQuery(fn, [groupId, filters.status], { table: 'loans', filter: `group_id=eq.${groupId}` });
 }
 
 /** Loan + payments. Safe to call with no loanId yet (e.g. still resolving which loan is active). */
@@ -43,13 +49,17 @@ export function useLoan(groupId: string, loanId?: string) {
     () => (loanId ? getLoan(groupId, loanId) : Promise.resolve(null)),
     [groupId, loanId],
   );
-  return useQuery(fn, [groupId, loanId]);
+  return useQuery(
+    fn,
+    [groupId, loanId],
+    loanId ? [{ table: 'loans', filter: `id=eq.${loanId}` }, { table: 'loan_payments', filter: `loan_id=eq.${loanId}` }] : null,
+  );
 }
 
 /** Available fund cash — compare against the principal before approving. */
 export function useLiquidity(groupId: string) {
   const fn = useCallback(() => getLiquidity(groupId), [groupId]);
-  return useQuery(fn, [groupId]);
+  return useQuery(fn, [groupId], { table: 'ledger_entries', filter: `group_id=eq.${groupId}` });
 }
 
 export function useApplyLoan(groupId: string) {
@@ -81,8 +91,38 @@ export function useRejectLoan(groupId: string) {
   return useAction((loanId: string, reason?: string) => rejectLoan(groupId, loanId, reason));
 }
 
+/** Direct-record path — officer received the payment in person, posts immediately, no confirm step. */
 export function useRecordRepayment(groupId: string) {
   return useAction((loanId: string, input: RecordRepaymentInput) =>
     recordRepayment(groupId, loanId, input),
   );
+}
+
+/** Member submits a repayment claim + proof for their own loan — needs a different officer to confirmRepayment(). */
+export function useSubmitRepayment(groupId: string) {
+  return useAction((loanId: string, input: SubmitRepaymentInput) =>
+    submitRepayment(groupId, loanId, input),
+  );
+}
+
+/**
+ * Repayments across the group's loans — the officer's pending queue, or a
+ * member's own history/status. loan_payments has no group_id of its own
+ * (only reachable via loan_id → loans.group_id), and postgres_changes can't
+ * filter on a joined column, so this watches every loan_payments change
+ * un-scoped rather than missing group-relevant ones — harmless over-trigger,
+ * not a security concern (listRepayments() itself is properly group-scoped
+ * server-side).
+ */
+export function useRepayments(groupId: string, status?: LoanPaymentStatus) {
+  const fn = useCallback(() => listRepayments(groupId, status), [groupId, status]);
+  return useQuery(fn, [groupId, status], { table: 'loan_payments' });
+}
+
+export function useConfirmRepayment(groupId: string) {
+  return useAction((paymentId: string) => confirmRepayment(groupId, paymentId));
+}
+
+export function useRejectRepayment(groupId: string) {
+  return useAction((paymentId: string, reason?: string) => rejectRepayment(groupId, paymentId, reason));
 }

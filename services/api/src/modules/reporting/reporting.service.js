@@ -51,8 +51,11 @@ async function groupLedger({ groupId, membershipId, entryType, limit = 100 }) {
     .from('ledger_entries')
     // posted_by is always the approving officer (see approve_contribution /
     // approve_and_disburse_loan / record_loan_repayment RPCs) — joined so the
-    // member-facing activity feed can show "approved by {name}".
-    .select('*, poster:members!posted_by(full_name)')
+    // member-facing activity feed can show "approved by {name}". membership
+    // is who the entry actually belongs to (the contributor/borrower) — null
+    // for group-level entries like expenses — joined so officer dashboards
+    // can show whose transaction this is, not just who approved it.
+    .select('*, poster:members!posted_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
     .eq('group_id', groupId)
     .order('posted_at', { ascending: false })
     .limit(limit);

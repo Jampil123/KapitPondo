@@ -6,7 +6,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { useLoans } from '@/features/lending/lending.hooks';
+import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
 
 function soon(l: string) { Alert.alert(l, 'Coming soon.'); }
 function SectionTitle({ title }: { title: string }) {
@@ -75,6 +75,9 @@ const ACTIONS: { label: string; icon: any; route?: string; params?: Record<strin
 ];
 
 function txnSign(dir: string) { return dir === 'credit' ? '+' : '-'; }
+function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
+  return e.membership?.members?.full_name ?? null;
+}
 
 export function TreasurerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
@@ -83,11 +86,12 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
   const pendingContribs = useContributions(groupId, { status: 'submitted' });
   const approvedLoans = useLoans(groupId, { status: 'approved' });
+  const pendingRepayments = useRepayments(groupId, 'submitted');
   const ledger = useLedger(groupId, { limit: 5 });
 
   const contribCount = pendingContribs.data?.length ?? 0;
   const disburseCount = approvedLoans.data?.length ?? 0;
-  const repayCount = 0; // no aggregate "repayments to confirm" API yet
+  const repayCount = pendingRepayments.data?.length ?? 0;
   const txns = ledger.data ?? [];
 
   return (
@@ -121,14 +125,17 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
           txns.map((e, i) => {
             const credit = e.direction === 'credit';
             const Icon = credit ? ArrowDownRight : ArrowUpRight;
+            const name = contributorName(e);
             return (
               <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                 <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={18} color={credit ? '#3E8E66' : '#C25C5E'} />
                 </View>
                 <View style={{ flex: 1, gap: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13 }} numberOfLines={1}>{e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                  <Text variant="caption" color="secondary">{new Date(e.posted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</Text>
+                  <Text variant="label" style={{ fontSize: 13 }} numberOfLines={1}>{name ?? e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
+                  <Text variant="caption" color="secondary" numberOfLines={1}>
+                    {name ? `${e.description ?? e.entry_type.replace(/_/g, ' ')} · ` : ''}{new Date(e.posted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                  </Text>
                 </View>
                 <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? '#3E8E66' : '#C25C5E' }}>{txnSign(e.direction)}{formatPeso(e.amount)}</Text>
               </View>

@@ -12,6 +12,7 @@ import { periodsSinceStart } from '@/lib/cycle';
 import { useSummary } from '@/features/reporting/reporting.hooks';
 import { useLoans } from '@/features/lending/lending.hooks';
 import { useActiveCycle, useCycleProgress } from '@/features/cycles/cycles.hooks';
+import { usePenalties } from '@/features/penalties/penalties.hooks';
 import { listPendingMembers } from '@/api/groups';
 
 /* ---- Fund hero (their FundCard, accent bg + cycle pill) ---- */
@@ -122,11 +123,16 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
   const go = (sub: string) =>
     router.push({ pathname: `/(app)/[groupId]/${sub}` as any, params: { groupId } });
   const pendingLoans = useLoans(groupId, { status: 'pending' });
-  const pendingMembers = useQuery(() => listPendingMembers(groupId), [groupId]);
+  const pendingMembers = useQuery(
+    () => listPendingMembers(groupId),
+    [groupId],
+    { table: 'memberships', filter: `group_id=eq.${groupId}` },
+  );
+  const pendingPenalties = usePenalties(groupId, 'pending');
 
   const loanCount = pendingLoans.data?.length ?? 0;
   const memberCount = Array.isArray(pendingMembers.data) ? pendingMembers.data.length : 0;
-  const penaltyCount = 0; // no penalties API yet (M5.4)
+  const penaltyCount = pendingPenalties.data?.length ?? 0;
 
   return (
     <>

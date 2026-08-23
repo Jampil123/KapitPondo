@@ -65,6 +65,14 @@ router.get('/admin/monitoring/verification-queue', requireAuth, requireSystemAdm
   } catch (err) { next(err); }
 });
 
+// Storage infra health — capacity used, retrieval latency, orphaned files, proof-type volume
+router.get('/admin/monitoring/storage', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const storage = await service.storageHealth();
+    res.json({ storage });
+  } catch (err) { next(err); }
+});
+
 // Cross-entity search (members, groups, audit log) for the dashboard search bar
 router.get('/admin/search', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {

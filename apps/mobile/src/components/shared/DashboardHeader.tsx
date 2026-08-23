@@ -3,8 +3,9 @@
  * ----------------------------------------------------------------------------
  * Reusable greeting header for ALL role dashboards: rounded-square avatar +
  * "Kumusta, {name}" + group name + a neutral role pill, with grid + bell (unread
- * dot) icons. Grid -> back to the groups list; bell -> Notification Center,
- * dot reflects NotificationsContext's live (realtime-updated) unread count.
+ * count badge) icons. Grid -> back to the groups list; bell -> Notification
+ * Center, badge reflects NotificationsContext's live (realtime-updated)
+ * unread count (capped "9+"/"99+" past two/three digits).
  *
  * The role pill is a prop so each dashboard shows the right label
  * (Organizer / Treasurer / Auditor / Member) using one component.
@@ -58,7 +59,17 @@ export function DashboardHeader({
       <Pressable onPress={() => router.push('/(app)/notifications' as any)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
         <Bell size={22} color={semantic.textPrimary} />
         {hasUnread ? (
-          <View style={{ position: 'absolute', top: 7, right: 8, width: 9, height: 9, borderRadius: 5, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.background }} />
+          <View
+            style={{
+              position: 'absolute', top: 2, right: 1, minWidth: 16, height: 16, borderRadius: 8,
+              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.background,
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#fff', lineHeight: 12 }}>
+              {unreadCount > 99 ? '99+' : unreadCount > 9 ? '9+' : unreadCount}
+            </Text>
+          </View>
         ) : null}
       </Pressable>
     </View>

@@ -218,4 +218,105 @@ router.post(
   }
 );
 
+// Member submits a repayment claim + proof for THEIR OWN loan — no money
+// posts yet, a different officer confirms it (see /loans/repayments/:id/confirm
+// below). Distinct from the officer's direct /repayments record above.
+router.post(
+  '/groups/:groupId/loans/:id/repayments/submit',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const { amount, payment_method, proof_url, external_reference } = req.body;
+      if (amount == null) return res.status(400).json({ error: 'amount is required' });
+      const loan = await service.getLoan(req.params.id);
+      if (loan.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      if (loan.membership_id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only submit a repayment for your own loan' });
+      }
+      const payment = await service.submitRepayment({
+        loanId: req.params.id,
+        amount,
+        recordedBy: req.member.id,
+        paymentMethod: payment_method,
+        proofUrl: proof_url,
+        externalReference: external_reference,
+      });
+      res.status(201).json({ message: 'Repayment submitted for confirmation', payment });
+    } catch (err) { next(err); }
+  }
+);
+
+// List repayments across the group's loans (officers see all / can filter by
+// status; members see only their own) — the officer's "pending" queue and a
+// member's own repayment history/status. NOT nested under /loans/:id — a
+// path like /loans/repayments would collide with the /loans/:id route above
+// (same segment shape, registered first, so "repayments" would be parsed as
+// an :id) — kept at the group level instead, alongside /liquidity.
+router.get(
+  '/groups/:groupId/repayments',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const repayments = await service.listRepayments({
+        groupId: req.params.groupId,
+        membershipId: req.membership.id,
+        role: req.membership.role,
+        status: req.query.status,
+      });
+      res.json({ repayments });
+    } catch (err) { next(err); }
+  }
+);
+
+// Confirm a submitted repayment claim (officers) — must be a DIFFERENT
+// officer than whoever submitted it (segregation of duties, enforced in SQL).
+router.post(
+  '/groups/:groupId/repayments/:paymentId/confirm',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const payment = await service.getRepayment(req.params.paymentId);
+      if (payment.loans.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Repayment does not belong to this group' });
+      }
+      if (payment.recorded_by === req.member.id) {
+        return res.status(403).json({ error: 'You cannot confirm a repayment you submitted' });
+      }
+      const ledgerEntry = await service.confirmRepayment({
+        paymentId: req.params.paymentId,
+        approverId: req.member.id,
+      });
+      res.json({ message: 'Repayment confirmed', ledgerEntry });
+    } catch (err) {
+      if (err.message && err.message.includes('Approver cannot be')) {
+        return res.status(403).json({ error: err.message });
+      }
+      next(err);
+    }
+  }
+);
+
+// Reject a submitted repayment claim, with a reason (officers)
+router.post(
+  '/groups/:groupId/repayments/:paymentId/reject',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const payment = await service.getRepayment(req.params.paymentId);
+      if (payment.loans.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Repayment does not belong to this group' });
+      }
+      const updated = await service.rejectRepayment({ paymentId: req.params.paymentId, reason: req.body?.reason });
+      if (!updated) return res.status(409).json({ error: 'Repayment is not pending confirmation' });
+      res.json({ message: 'Repayment rejected', payment: updated });
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;

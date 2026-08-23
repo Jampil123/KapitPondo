@@ -9,6 +9,9 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useExpenses } from '@/features/expenses/expenses.hooks';
 
 function soon(l: string) { Alert.alert(l, 'Coming soon.'); }
+function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
+  return e.membership?.members?.full_name ?? null;
+}
 function SectionTitle({ title }: { title: string }) {
   return <Text variant="h3" style={{ fontSize: 15 }}>{title}</Text>;
 }
@@ -103,14 +106,17 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
         txns.length === 0 ? <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No verifications yet.</Text> :
         txns.map((e, i) => {
           const credit = e.direction === 'credit';
+          const name = contributorName(e);
           return (
             <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}>
               <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: '#E2F0E8', alignItems: 'center', justifyContent: 'center' }}>
                 <Check size={16} color="#3E8E66" strokeWidth={2.4} />
               </View>
               <View style={{ flex: 1, gap: 1 }}>
-                <Text variant="label" style={{ fontSize: 12.5 }} numberOfLines={1}>{e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                <Text variant="caption" color="secondary">{new Date(e.posted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}</Text>
+                <Text variant="label" style={{ fontSize: 12.5 }} numberOfLines={1}>{name ?? e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
+                <Text variant="caption" color="secondary" numberOfLines={1}>
+                  {name ? `${e.description ?? e.entry_type.replace(/_/g, ' ')} · ` : ''}{new Date(e.posted_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}
+                </Text>
               </View>
               {credit ? <ArrowDownRight size={17} color="#3E8E66" /> : <ArrowUpRight size={17} color="#C25C5E" />}
             </View>

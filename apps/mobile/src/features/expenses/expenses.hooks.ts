@@ -25,7 +25,7 @@ import {
 
 export function useExpenses(groupId: string, filters: { status?: ExpenseStatus } = {}) {
   const fn = useCallback(() => listExpenses(groupId, filters), [groupId, filters.status]);
-  return useQuery(fn, [groupId, filters.status]);
+  return useQuery(fn, [groupId, filters.status], { table: 'expenses', filter: `group_id=eq.${groupId}` });
 }
 
 export function useRecordExpense(groupId: string) {

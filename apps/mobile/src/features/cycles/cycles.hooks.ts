@@ -25,7 +25,7 @@ import {
 /** All cycles for a group, newest first. */
 export function useCycles(groupId: string) {
   const fn = useCallback(() => listCycles(groupId), [groupId]);
-  return useQuery(fn, [groupId]);
+  return useQuery(fn, [groupId], { table: 'cycles', filter: `group_id=eq.${groupId}` });
 }
 
 /** The group's single active cycle (or null). Wraps useCycles. */
@@ -45,7 +45,11 @@ export function useCycleProgress(groupId: string, cycleId?: string) {
     () => (cycleId ? getCycleProgress(groupId, cycleId) : Promise.resolve(null)),
     [groupId, cycleId],
   );
-  return useQuery(fn, [groupId, cycleId]);
+  return useQuery(
+    fn,
+    [groupId, cycleId],
+    cycleId ? { table: 'contributions', filter: `cycle_id=eq.${cycleId}` } : null,
+  );
 }
 
 export function useCreateCycle(groupId: string) {

@@ -10,12 +10,18 @@
  * api/lending.ts) — approving sets the rate and moves the loan to "Approved,
  * awaiting disbursement"; a Treasurer or Owner then disburses it separately.
  * We also check liquidity ≥ principal before allowing approve.
+ *
+ * Each row shows the borrower's name (joined via loans.membership_id — see
+ * lending.service.js) and a "View details" sheet giving the full picture
+ * before deciding: purpose/term/applied date, plus useLoanEligibility()
+ * (verified status, an existing active loan, a missed contribution on file)
+ * — that hook existed already but was never rendered anywhere until now.
  */
-import { useState } from 'react';
-import { View, Modal, TextInput, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Modal, TextInput, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Wallet, Check, X, Banknote } from 'lucide-react-native';
+import { Wallet, Banknote, Eye, CheckCircle2, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { TabBar } from '@/components/ui/TabBar';
 import { Avatar } from '@/components/ui/Avatar';
@@ -24,11 +30,82 @@ import { AppBar } from '@/components/shared/AppBar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
-import { useLoans, useLiquidity, useApproveLoan, useDisburseLoan, useRejectLoan } from '@/features/lending/lending.hooks';
+import { useLoans, useLiquidity, useApproveLoan, useDisburseLoan, useRejectLoan, useLoanEligibility } from '@/features/lending/lending.hooks';
 import type { Loan, LoanStatus } from '@/api/lending';
 
-function loanName(l: any): string {
-  return l.member_name ?? l.members?.full_name ?? l.member?.full_name ?? 'Member';
+function loanName(l: Loan): string {
+  return l.membership?.members?.full_name ?? 'Member';
+}
+function shortDate(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/**
+ * Bottom sheet with a real slide-up/slide-down transition, replacing
+ * Modal's built-in `animationType="slide"` — that animates the WHOLE
+ * transparent overlay (dim included) as one rigid block and gives no exit
+ * animation at all (content just vanishes the instant `value` goes null).
+ * Here the backdrop fades independently while the sheet translates, and the
+ * last non-null `value` stays rendered through the close animation instead
+ * of blanking out mid-slide.
+ */
+function SlideSheet<T>({
+  value, onClose, keyboardAvoiding, children,
+}: {
+  value: T | null;
+  onClose: () => void;
+  keyboardAvoiding?: boolean;
+  children: (value: T) => React.ReactNode;
+}) {
+  const visible = value !== null;
+  const [mounted, setMounted] = useState(visible);
+  const [rendered, setRendered] = useState<T | null>(value);
+  const translateY = useRef(new Animated.Value(visible ? 0 : 500)).current;
+  const backdrop = useRef(new Animated.Value(visible ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (value !== null) setRendered(value);
+  }, [value]);
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.parallel([
+        Animated.timing(backdrop, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
+    } else if (mounted) {
+      Animated.parallel([
+        Animated.timing(backdrop, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(translateY, { toValue: 500, duration: 220, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
+      ]).start(({ finished }) => { if (finished) setMounted(false); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  if (!mounted || rendered === null) return null;
+
+  const sheet = (
+    <Animated.View style={{ transform: [{ translateY }] }}>
+      <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14, maxHeight: '85%' }}>
+        {children(rendered)}
+      </Pressable>
+    </Animated.View>
+  );
+
+  return (
+    <Modal visible transparent animationType="none" onRequestClose={onClose}>
+      <Pressable onPress={onClose} style={{ flex: 1 }}>
+        <Animated.View style={{ flex: 1, backgroundColor: 'rgba(42,62,75,0.35)', justifyContent: 'flex-end', opacity: backdrop }}>
+          {keyboardAvoiding ? (
+            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>{sheet}</KeyboardAvoidingView>
+          ) : sheet}
+        </Animated.View>
+      </Pressable>
+    </Modal>
+  );
 }
 
 export default function LoanDecisions() {
@@ -41,6 +118,9 @@ export default function LoanDecisions() {
   const approve = useApproveLoan(groupId!);
   const disburse = useDisburseLoan(groupId!);
   const reject = useRejectLoan(groupId!);
+
+  const [detailsTarget, setDetailsTarget] = useState<Loan | null>(null); // loan being viewed before a decision
+  const eligibility = useLoanEligibility(groupId!, detailsTarget?.id);
 
   const [target, setTarget] = useState<Loan | null>(null); // loan being approved
   const [rate, setRate] = useState('3'); // monthly % as typed
@@ -125,18 +205,14 @@ export default function LoanDecisions() {
                     <Text variant="caption" color="secondary">{l.term_months} mo</Text>
                   </View>
                 </View>
-                {l.status === 'pending' ? (
-                  <View style={{ flexDirection: 'row', gap: 10 }}>
-                    <Pressable onPress={() => openApprove(l)} style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#EAF2F6', borderRadius: 12, paddingVertical: 11 }}>
-                      <Check size={16} color="#5E8497" strokeWidth={2.4} />
-                      <Text variant="label" style={{ color: '#5E8497', fontSize: 13.5 }}>Approve</Text>
-                    </Pressable>
-                    <Pressable onPress={() => setRejectTarget(l)} style={{ flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#F7E5E5', borderRadius: 12, paddingVertical: 11 }}>
-                      <X size={16} color="#C25C5E" strokeWidth={2.4} />
-                      <Text variant="label" style={{ color: '#C25C5E', fontSize: 13.5 }}>Reject</Text>
-                    </Pressable>
-                  </View>
-                ) : l.status === 'approved' ? (
+                <Pressable
+                  onPress={() => setDetailsTarget(l)}
+                  style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, borderRadius: 12, paddingVertical: 10, marginBottom: 10, borderWidth: 1.5, borderColor: semantic.border }}
+                >
+                  <Eye size={15} color={semantic.textSecondary} />
+                  <Text variant="label" style={{ color: semantic.textSecondary, fontSize: 13 }}>View details</Text>
+                </Pressable>
+                {l.status === 'approved' ? (
                   <View style={{ gap: 10 }}>
                     <Text variant="caption" color="secondary">
                       Approved{l.approved_principal && Number(l.approved_principal) !== Number(l.principal) ? ` for ${formatPeso(l.approved_principal)} (partial)` : ''} — awaiting disbursement
@@ -159,44 +235,144 @@ export default function LoanDecisions() {
         )}
       </View>
 
-      {/* Approve sheet — the lending decision only; disbursement is separate */}
-      <Modal visible={!!target} transparent animationType="fade" onRequestClose={() => setTarget(null)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-          <Pressable onPress={() => setTarget(null)} style={{ flex: 1, backgroundColor: 'rgba(42,62,75,0.35)', justifyContent: 'flex-end' }}>
-            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
-              <Text variant="h2" style={{ fontSize: 18 }}>Approve loan</Text>
-              {target ? (
-                <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13, gap: 4 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text variant="label">{loanName(target)}</Text>
-                    <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(target.principal)} requested</Text>
-                  </View>
-                  <Text variant="caption" color="secondary">{target.purpose} · {target.term_months} months</Text>
-                  <Text variant="caption" color="secondary">Available fund cash: {formatPeso(available)}</Text>
+      {/* Approve sheet — the lending decision only; disbursement is separate. */}
+      <SlideSheet value={target} onClose={() => setTarget(null)} keyboardAvoiding>
+        {(t) => (
+          <>
+            <Text variant="h2" style={{ fontSize: 18 }}>Approve loan</Text>
+            <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13, gap: 4 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="label">{loanName(t)}</Text>
+                <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(t.principal)} requested</Text>
+              </View>
+              <Text variant="caption" color="secondary">{t.purpose} · {t.term_months} months</Text>
+              <Text variant="caption" color="secondary">Available fund cash: {formatPeso(available)}</Text>
+            </View>
+            <View style={{ gap: 7 }}>
+              <Text variant="overline" color="secondary">Approved amount (₱)</Text>
+              <TextInput value={approvedAmount} onChangeText={setApprovedAmount} keyboardType="numeric" placeholder="0.00" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, fontFamily: 'Poppins_400Regular', fontSize: 15, color: semantic.textPrimary }} />
+              <Text variant="caption" color="muted">Can be less than the requested amount if fund cash is short.</Text>
+            </View>
+            <View style={{ gap: 7 }}>
+              <Text variant="overline" color="secondary">Monthly interest rate (%)</Text>
+              <TextInput value={rate} onChangeText={setRate} keyboardType="decimal-pad" placeholder="3" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, fontFamily: 'Poppins_400Regular', fontSize: 15, color: semantic.textPrimary }} />
+              <Text variant="caption" color="muted">e.g. 3 = 3% per month. Disbursement is a separate step after this.</Text>
+            </View>
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <Pressable onPress={() => setTarget(null)} style={{ flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: semantic.border }}>
+                <Text variant="label" color="secondary">Cancel</Text>
+              </Pressable>
+              <Pressable onPress={confirmApprove} disabled={approve.loading} style={{ flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand }}>
+                {approve.loading ? <ActivityIndicator color="#fff" /> : <Text variant="label" style={{ color: '#fff' }}>Approve</Text>}
+              </Pressable>
+            </View>
+          </>
+        )}
+      </SlideSheet>
+
+      {/* View details — what the Owner should review before deciding (TC-014/TC-034) */}
+      <SlideSheet value={detailsTarget} onClose={() => setDetailsTarget(null)}>
+        {(d) => (
+          <>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Avatar name={loanName(d)} size={46} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="h2" style={{ fontSize: 17 }}>{loanName(d)}</Text>
+                <StatusBadge entity="loan" value={d.status} />
+              </View>
+            </View>
+
+            <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13, gap: 8 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="caption" color="secondary">Purpose</Text>
+                <Text variant="label" style={{ fontSize: 13 }}>{d.purpose ?? '—'}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="caption" color="secondary">Requested principal</Text>
+                <Text variant="label" style={{ fontSize: 13 }}>{formatPeso(d.principal)}</Text>
+              </View>
+              {d.approved_principal ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text variant="caption" color="secondary">Approved amount</Text>
+                  <Text variant="label" style={{ fontSize: 13 }}>{formatPeso(d.approved_principal)}</Text>
                 </View>
               ) : null}
-              <View style={{ gap: 7 }}>
-                <Text variant="overline" color="secondary">Approved amount (₱)</Text>
-                <TextInput value={approvedAmount} onChangeText={setApprovedAmount} keyboardType="numeric" placeholder="0.00" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, fontFamily: 'Poppins_400Regular', fontSize: 15, color: semantic.textPrimary }} />
-                <Text variant="caption" color="muted">Can be less than the requested amount if fund cash is short.</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="caption" color="secondary">Term</Text>
+                <Text variant="label" style={{ fontSize: 13 }}>{d.term_months} months</Text>
               </View>
-              <View style={{ gap: 7 }}>
-                <Text variant="overline" color="secondary">Monthly interest rate (%)</Text>
-                <TextInput value={rate} onChangeText={setRate} keyboardType="decimal-pad" placeholder="3" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 14, fontFamily: 'Poppins_400Regular', fontSize: 15, color: semantic.textPrimary }} />
-                <Text variant="caption" color="muted">e.g. 3 = 3% per month. Disbursement is a separate step after this.</Text>
+              {d.interest_rate ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text variant="caption" color="secondary">Interest rate</Text>
+                  <Text variant="label" style={{ fontSize: 13 }}>{(Number(d.interest_rate) * 100).toFixed(1)}% / month</Text>
+                </View>
+              ) : null}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text variant="caption" color="secondary">Applied</Text>
+                <Text variant="label" style={{ fontSize: 13 }}>{shortDate(d.applied_at)}</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <Pressable onPress={() => setTarget(null)} style={{ flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: semantic.border }}>
-                  <Text variant="label" color="secondary">Cancel</Text>
+              {d.rejection_reason ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  <Text variant="caption" color="secondary">Rejection reason</Text>
+                  <Text variant="label" style={{ fontSize: 13, flexShrink: 1, textAlign: 'right' }}>{d.rejection_reason}</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {d.status === 'pending' ? (
+              <View style={{ backgroundColor: eligibility.data?.eligible === false ? '#F8EFDA' : '#E2F0E8', borderRadius: 14, padding: 13, gap: 8 }}>
+                {eligibility.loading ? (
+                  <ActivityIndicator color={semantic.brand} />
+                ) : eligibility.data?.eligible ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <CheckCircle2 size={18} color="#3E8E66" />
+                    <Text variant="label" style={{ color: '#3E8E66', fontSize: 13 }}>Eligible for approval</Text>
+                  </View>
+                ) : (
+                  <View style={{ gap: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <AlertTriangle size={18} color="#A87C2C" />
+                      <Text variant="label" style={{ color: '#A87C2C', fontSize: 13 }}>Review before approving</Text>
+                    </View>
+                    {(eligibility.data?.reasons ?? []).map((r) => (
+                      <Text key={r} variant="caption" style={{ color: '#A87C2C' }}>· {r}</Text>
+                    ))}
+                  </View>
+                )}
+                <Text variant="caption" color="secondary">Available fund cash: {formatPeso(available)}</Text>
+              </View>
+            ) : null}
+
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <View style={{ flex: 1 }}>
+                <Pressable onPress={() => setDetailsTarget(null)} style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, borderWidth: 1.5, borderColor: semantic.border }}>
+                  <Text variant="label" color="secondary">Close</Text>
                 </Pressable>
-                <Pressable onPress={confirmApprove} disabled={approve.loading} style={{ flex: 1, alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand }}>
-                  {approve.loading ? <ActivityIndicator color="#fff" /> : <Text variant="label" style={{ color: '#fff' }}>Approve</Text>}
-                </Pressable>
               </View>
-            </Pressable>
-          </Pressable>
-        </KeyboardAvoidingView>
-      </Modal>
+              {d.status === 'pending' ? (
+                <>
+                  <View style={{ flex: 1 }}>
+                    <Pressable
+                      onPress={() => { setDetailsTarget(null); setRejectTarget(d); }}
+                      style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#F7E5E5' }}
+                    >
+                      <Text variant="label" style={{ color: '#C25C5E' }}>Reject</Text>
+                    </Pressable>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Pressable
+                      onPress={() => { setDetailsTarget(null); openApprove(d); }}
+                      style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand }}
+                    >
+                      <Text variant="label" style={{ color: '#fff' }}>Approve</Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : null}
+            </View>
+          </>
+        )}
+      </SlideSheet>
 
       <ReasonPrompt
         visible={!!rejectTarget}

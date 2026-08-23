@@ -148,4 +148,47 @@ async function verificationQueueHealth() {
   return data;
 }
 
-module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search, databaseHealth, verificationQueueHealth };
+// Configured storage cap for the capacity % shown on the Storage Health
+// page — same honest-constant pattern as DB_STORAGE_CAPACITY_MB, since
+// Supabase Storage has no queryable "provisioned capacity" either. Default
+// matches Supabase's free-tier 1GB bucket allowance.
+const OBJECT_STORAGE_CAPACITY_BYTES = Number(process.env.STORAGE_CAPACITY_MB || 1024) * 1024 * 1024;
+
+// Storage infra health for the admin System Health > Storage Health page:
+// bytes used, orphaned-file counts, proof-type upload volumes, and a real
+// retrieval-latency sample (timing a signed-URL creation against the most
+// recently uploaded object, the same way a proof-review screen would read
+// one). Doesn't throw on failure — mirrors databaseHealth()'s shape.
+async function storageHealth() {
+  const start = Date.now();
+  try {
+    const { data, error } = await supabase.rpc('storage_health');
+    if (error) throw error;
+
+    let retrieval_latency_ms = null;
+    if (data.sample_object) {
+      const t2 = Date.now();
+      const { error: signError } = await supabase.storage
+        .from(data.sample_object.bucket_id)
+        .createSignedUrl(data.sample_object.name, 60);
+      if (!signError) retrieval_latency_ms = Date.now() - t2;
+    }
+
+    const orphaned_files = (data.orphaned_proofs || 0) + (data.orphaned_id_documents || 0) + (data.orphaned_avatars || 0);
+    const storage_capacity_percent = Math.round((data.total_bytes / OBJECT_STORAGE_CAPACITY_BYTES) * 1000) / 10;
+
+    return {
+      reachable: true,
+      latency_ms: Date.now() - start,
+      retrieval_latency_ms,
+      storage_capacity_percent,
+      storage_capacity_bytes: OBJECT_STORAGE_CAPACITY_BYTES,
+      orphaned_files,
+      ...data,
+    };
+  } catch (err) {
+    return { reachable: false, latency_ms: Date.now() - start, error: err.message };
+  }
+}
+
+module.exports = { platformOverview, groupsOverview, auditFeed, recentLedger, search, databaseHealth, verificationQueueHealth, storageHealth };

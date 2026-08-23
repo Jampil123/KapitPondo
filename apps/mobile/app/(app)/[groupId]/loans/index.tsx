@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Coins, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Coins, ChevronDown, ChevronUp, Repeat } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -41,8 +41,9 @@ function PaymentRow({ p }: { p: LoanPayment }) {
         Principal {formatPeso(p.principal_portion)} · Interest {formatPeso(p.interest_portion)}
       </Text>
       <Text variant="caption" color="muted">
-        Recorded by {p.recorder?.full_name ?? 'an officer'}
-        {p.verifier ? `, verified by ${p.verifier.full_name}` : ''}
+        {p.auto_confirmed
+          ? `Paid automatically via ${p.gateway_provider ?? 'payment gateway'}`
+          : `Recorded by ${p.recorder?.full_name ?? 'an officer'}${p.verifier ? `, verified by ${p.verifier.full_name}` : ''}`}
         {shortDate(p.paid_date) ? ` · ${shortDate(p.paid_date)}` : ''}
       </Text>
     </View>
@@ -118,10 +119,12 @@ export default function LoansOverview() {
               </View>
             </View>
 
+            <Button label="Repay this loan" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} />
+
             <View style={[{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }]}>
               <Text variant="caption" color="secondary">
-                Repayments are recorded by your treasurer once they receive your payment — send your proof of
-                payment to them directly.
+                Submit a repayment with proof for your treasurer to confirm, or pay them directly and they'll
+                record it themselves — either way it shows up below once confirmed.
               </Text>
             </View>
 

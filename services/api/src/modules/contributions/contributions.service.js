@@ -54,6 +54,25 @@ async function getContribution(id) {
   return data;
 }
 
+// Officer recording a WALK-IN member's cash/GCash payment (TC-018) — the
+// officer already physically confirmed the payment by receiving it, so this
+// posts straight to the ledger (status 'approved') via record_walkin_
+// contribution(), instead of the normal submitted → separate-officer-
+// approves flow used for a member's own self-submission.
+async function recordWalkInContribution(input) {
+  const { data, error } = await supabase.rpc('record_walkin_contribution', {
+    p_membership_id: input.membershipId,
+    p_cycle_id: input.cycleId,
+    p_group_id: input.groupId,
+    p_amount: input.amount,
+    p_payment_method: input.paymentMethod ?? null,
+    p_external_reference: input.externalReference ?? null,
+    p_officer_id: input.officerId,
+  });
+  if (error) throw error;
+  return data;
+}
+
 async function approveContribution({ contributionId, approverId }) {
   const { data, error } = await supabase.rpc('approve_contribution', {
     p_contribution_id: contributionId,
@@ -97,6 +116,6 @@ async function rejectContribution({ contributionId, reason }) {
 }
 
 module.exports = {
-  createContribution, listContributions, getContribution, getActiveMembership,
+  createContribution, recordWalkInContribution, listContributions, getContribution, getActiveMembership,
   approveContribution, rejectContribution,
 };

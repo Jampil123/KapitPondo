@@ -35,7 +35,11 @@ export function useContributions(groupId: string, filters: ContributionFilters =
     // depend on the primitive filter values, not the object identity
     [groupId, filters.status, filters.cycle_id, filters.membership_id],
   );
-  return useQuery(fn, [groupId, filters.status, filters.cycle_id, filters.membership_id]);
+  return useQuery(
+    fn,
+    [groupId, filters.status, filters.cycle_id, filters.membership_id],
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+  );
 }
 
 export function useSubmitContribution(groupId: string) {
