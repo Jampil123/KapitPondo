@@ -54,8 +54,8 @@ function RoleSwitch({ value, onChange }: { value: 'officer' | 'member'; onChange
             key={o.key}
             onPress={() => onChange(o.key)}
             style={{
-              paddingVertical: 8,
-              paddingHorizontal: active ? 18 : 10,
+              paddingVertical: 5,
+              paddingHorizontal: active ? 13 : 7,
               borderRadius: 999,
               backgroundColor: active ? semantic.brand : 'transparent',
             }}
@@ -154,17 +154,17 @@ export default function GroupDashboard() {
         <>
           <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
           {role === 'treasurer' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
               <RoleSwitch value={treasurerView} onChange={setTreasurerView} />
             </View>
           )}
           {role === 'owner' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
               <RoleSwitch value={ownerView} onChange={setOwnerView} />
             </View>
           )}
           {role === 'auditor' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, backgroundColor: semantic.background }}>
+            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
               <RoleSwitch value={auditorView} onChange={setAuditorView} />
             </View>
           )}
