@@ -35,6 +35,8 @@ export interface Contribution {
   proof_signed_url: string | null;
   external_reference: string | null;
   created_at: string;
+  /** Set by rejectContribution(); the API already selects '*', this type just didn't list it. */
+  rejection_reason: string | null;
   /** Who approved this contribution — null until an officer confirms it. */
   approver: { full_name: string } | null;
 }

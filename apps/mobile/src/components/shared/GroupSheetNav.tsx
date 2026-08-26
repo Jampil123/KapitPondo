@@ -9,12 +9,16 @@
  *
  * Sheet items route to a group-scoped screen, jump to the groups list
  * ('@groups'), run a callback, or show "Soon".
+ *
+ * Chrome is a floating dark pill, glyphs only (no labels) — the active tab
+ * sits in a lit recess with a small glowing dash above it, and the center
+ * action is a glowing blue FAB, matching the reference redesign.
  */
 import { useState } from 'react';
 import { View, Pressable, Modal, Alert } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, usePathname, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircle, Home, Plus, User, MoreHorizontal, X } from 'lucide-react-native';
+import { MessageCircle, Home, Plus, User, Menu, X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic, shadowToken } from '../../theme/colors';
 
@@ -25,19 +29,44 @@ export type SheetItem = { label: string; icon: any } & (
 );
 export type SheetConfig = { title: string; subtitle?: string; items: SheetItem[] };
 
-function NavItem({ icon: Icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
+const NAV_BG = semantic.dashCard;
+const NAV_ICON = 'rgba(255,255,255,0.8)';
+const NAV_ICON_ON = '#FFFFFF';
+const NAV_SPARK = '#2FA8FF';
+// Same glow accent as the (auth)/landing.tsx welcome screen (its GLOW constant).
+const NAV_FAB = '#7FA6B8';
+
+function NavItem({ icon: Icon, onPress, active }: { icon: any; onPress: () => void; active?: boolean }) {
   return (
-    <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', gap: 4 }}>
-      <Icon size={23} color={semantic.textMuted} strokeWidth={1.8} />
-      <Text style={{ fontSize: 10, fontFamily: 'Poppins_500Medium', color: semantic.textMuted }}>{label}</Text>
+    <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+      <View
+        style={{
+          width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
+          backgroundColor: active ? 'rgba(255,255,255,0.13)' : 'transparent',
+        }}
+      >
+        {active ? (
+          <View
+            style={{
+              position: 'absolute', top: 6, width: 16, height: 2.5, borderRadius: 2, backgroundColor: NAV_SPARK,
+              shadowColor: NAV_SPARK, shadowOpacity: 0.9, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+            }}
+          />
+        ) : null}
+        <Icon size={22} color={active ? NAV_ICON_ON : NAV_ICON} strokeWidth={1.85} />
+      </View>
     </Pressable>
   );
 }
 
 export function GroupSheetNav({ chat, add, more }: { chat: SheetConfig; add: SheetConfig; more: SheetConfig }) {
   const insets = useSafeAreaInsets();
+  const path = usePathname();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [active, setActive] = useState<SheetConfig | null>(null);
+
+  const isHome = path === `/(app)/${groupId}`;
+  const isProfile = path.endsWith('/profile');
 
   function handleItem(it: SheetItem) {
     setActive(null);
@@ -51,28 +80,29 @@ export function GroupSheetNav({ chat, add, more }: { chat: SheetConfig; add: She
     <>
       <View
         style={{
-          flexDirection: 'row', alignItems: 'flex-start', paddingTop: 11,
-          height: 74 + insets.bottom, paddingBottom: insets.bottom,
-          backgroundColor: 'rgba(247,251,253,0.96)', borderTopWidth: 1, borderColor: '#E2EBF0',
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          marginHorizontal: 16, marginTop: 8, marginBottom: Math.max(insets.bottom, 14),
+          height: 66, borderRadius: 26, paddingHorizontal: 8,
+          backgroundColor: NAV_BG,
+          shadowColor: '#12303C', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 10,
         }}
       >
-        <NavItem icon={Home} label="Home" onPress={() => router.push({ pathname: '/(app)/[groupId]', params: { groupId } })} />
-        <NavItem icon={MessageCircle} label="Chat" onPress={() => setActive(chat)} />
+        <NavItem icon={Home} active={isHome} onPress={() => router.push({ pathname: '/(app)/[groupId]', params: { groupId } })} />
+        <NavItem icon={MessageCircle} onPress={() => setActive(chat)} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Pressable
             onPress={() => setActive(add)}
             style={{
-              width: 62, height: 62, borderRadius: 31, backgroundColor: semantic.brand,
-              alignItems: 'center', justifyContent: 'center', transform: [{ translateY: -22 }],
-              borderWidth: 5, borderColor: semantic.background,
-              shadowColor: semantic.brand, shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.5, shadowRadius: 24, elevation: 6,
+              width: 52, height: 52, borderRadius: 18, backgroundColor: NAV_FAB,
+              alignItems: 'center', justifyContent: 'center',
+              shadowColor: NAV_FAB, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.7, shadowRadius: 16, elevation: 8,
             }}
           >
-            <Plus size={28} color="#fff" strokeWidth={2.4} />
+            <Plus size={26} color="#fff" strokeWidth={2.6} />
           </Pressable>
         </View>
-        <NavItem icon={User} label="Profile" onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
-        <NavItem icon={MoreHorizontal} label="More" onPress={() => setActive(more)} />
+        <NavItem icon={User} active={isProfile} onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
+        <NavItem icon={Menu} onPress={() => setActive(more)} />
       </View>
 
       <Modal visible={!!active} transparent animationType="slide" onRequestClose={() => setActive(null)}>
