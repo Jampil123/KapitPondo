@@ -4,9 +4,9 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./penalties.service');
 
-// Manually run the late-contribution check for this group (officers). Also
-// triggered automatically when an officer views contributions/cycle progress
-// — this exists so it can be run/tested on demand too.
+// Manually run the late-contribution check for this group (officers) —
+// always runs fresh (unthrottled), unlike the automatic trigger on viewing
+// the contributions list (see contributions.routes.js's checkLatePenaltiesIfDue).
 router.post('/groups/:groupId/penalties/check',
   requireAuth,
   requireGroupRole(['treasurer', 'auditor', 'owner']),

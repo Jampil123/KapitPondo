@@ -88,10 +88,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMember(null);
       return;
     }
-    console.log('[auth] logged in as', active.user.id, active.user.phone, '— API_BASE_URL =', API_BASE_URL);
     try {
       const profile = await getMyProfile();
-      console.log('[auth] loaded member profile', profile);
       setMember(profile);
     } catch (e) {
       console.warn('[auth] could not load member profile', {

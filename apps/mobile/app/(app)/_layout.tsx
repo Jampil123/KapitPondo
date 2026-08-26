@@ -10,17 +10,18 @@ export default function AppLayout() {
   return (
     <NotificationsProvider>
       <GroupProvider>
+        {/* Every screen at this level (groups list, notifications, a group's own
+            [groupId] stack, ...) slides in from the right and back out to the
+            right on close/back by default — was only set per-screen for
+            notifications before; now every push/pop here is consistent
+            regardless of platform-default behavior. */}
         <Stack
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: semantic.background },
+            animation: 'slide_from_right',
           }}
-        >
-          {/* Bell icon → this route (DashboardHeader.tsx, ProfileBody.tsx) — explicit
-              slide so it always animates right-to-left in / left-to-right back out,
-              regardless of platform-default push/pop behavior. */}
-          <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
-        </Stack>
+        />
       </GroupProvider>
     </NotificationsProvider>
   );

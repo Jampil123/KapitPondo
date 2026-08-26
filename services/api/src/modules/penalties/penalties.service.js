@@ -10,10 +10,18 @@
  * member's own contribution history instead of just silence.
  *
  * There's no task scheduler in this stack (no cron/pg_cron wired up), so
- * detection runs lazily: any officer viewing contributions or cycle progress
- * for a group triggers a check first (see contributions.routes.js /
- * cycles.routes.js) — from the officer's point of view this is automatic;
- * nothing needs to be clicked to make it happen.
+ * detection runs lazily: any officer viewing contributions triggers a check
+ * first (see contributions.routes.js's GET list handler, via
+ * checkLatePenaltiesIfDue below) — from the officer's point of view this is
+ * automatic; nothing needs to be clicked to make it happen.
+ *
+ * checkLatePenaltiesIfDue() throttles that automatic trigger (see below) —
+ * the contributions list it's called from is realtime-watched by the same
+ * screen (useContributions), so an unthrottled check writing a new 'late'
+ * row on every GET would fire a postgres_changes event back to that same
+ * screen, triggering an immediate refetch of the page an officer just
+ * opened (looks like "the page keeps reloading," reported and diagnosed as
+ * this exact cause — not a network issue).
  */
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
@@ -127,6 +135,25 @@ async function checkLatePenalties(groupId) {
   return created;
 }
 
+// Throttles the AUTOMATIC trigger only (contributions.routes.js's GET list
+// handler) — the explicit POST /penalties/check endpoint always calls the
+// raw checkLatePenalties() above, since that's a deliberate "run it now"
+// action, not a side effect of viewing a list. Cooldown is only recorded on
+// SUCCESS — if the check throws (e.g. a real network error), the next
+// request tries again immediately rather than being locked out for the
+// full window over something that never actually ran.
+const AUTO_CHECK_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const lastAutoCheckedAt = new Map(); // groupId -> timestamp
+
+async function checkLatePenaltiesIfDue(groupId) {
+  const last = lastAutoCheckedAt.get(groupId);
+  const now = Date.now();
+  if (last && now - last < AUTO_CHECK_COOLDOWN_MS) return [];
+  const created = await checkLatePenalties(groupId);
+  lastAutoCheckedAt.set(groupId, now);
+  return created;
+}
+
 async function listPenalties({ groupId, status }) {
   let q = supabase
     .from('penalties')
@@ -171,4 +198,4 @@ async function waivePenalty({ penaltyId, waivedBy, reason }) {
   return data;
 }
 
-module.exports = { checkLatePenalties, listPenalties, waivePenalty };
+module.exports = { checkLatePenalties, checkLatePenaltiesIfDue, listPenalties, waivePenalty };

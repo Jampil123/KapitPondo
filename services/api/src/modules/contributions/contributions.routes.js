@@ -3,15 +3,17 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
-const { checkLatePenalties } = require('../penalties/penalties.service');
+const { checkLatePenaltiesIfDue } = require('../penalties/penalties.service');
 
 // Submit a contribution. Members record only their own (status 'submitted',
-// awaiting officer approval). Officers may record on behalf of any active
-// member of the group (e.g. cash/GCash paid outside the app) by passing
-// membership_id — TC-018. A WALK-IN recording like that posts straight to
-// the ledger (status 'approved') instead: the officer already physically
-// confirmed the payment by receiving it, so there's no separate claim left
-// to verify the way there is for a member's own self-submission.
+// awaiting officer approval) via the plain member self-submit flow (no
+// membership_id in the body — that's how this tells the two flows apart).
+// Officers using the "Record new" flow explicitly pass membership_id — for
+// a walk-in member (TC-018) OR for their own membership — and either way it
+// posts straight to the ledger (status 'approved') instead of going through
+// the pending queue: the officer already physically confirmed the payment
+// by recording it themselves, whoever it's for, so there's no separate
+// claim left to verify the way there is for an unverified member self-report.
 router.post('/groups/:groupId/contributions',
   requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
@@ -24,8 +26,12 @@ router.post('/groups/:groupId/contributions',
 
       let targetMembershipId = req.membership.id;
       const isOfficer = ['treasurer', 'auditor', 'owner'].includes(req.membership.role);
-      const isWalkIn = !!membership_id && membership_id !== req.membership.id;
-      if (isWalkIn) {
+      // membership_id is only ever sent by the officer's "Record new" UI
+      // (the member's own contribute screen never sends it) — so its mere
+      // presence means an officer explicitly recorded this, regardless of
+      // whether the target happens to be their own membership.
+      let isWalkIn = false;
+      if (membership_id) {
         if (!isOfficer) {
           return res.status(403).json({ error: 'Only officers can record a contribution for another member' });
         }
@@ -34,6 +40,7 @@ router.post('/groups/:groupId/contributions',
           return res.status(400).json({ error: 'membership_id is not an active member of this group' });
         }
         targetMembershipId = membership_id;
+        isWalkIn = true;
       }
 
       const contribution = isWalkIn
@@ -69,9 +76,13 @@ router.get('/groups/:groupId/contributions',
     try {
       // Officers viewing the list is the trigger for lazy late-penalty
       // detection (no cron in this stack) — from their point of view this
-      // just happens; nothing needs to be clicked (TC-039).
+      // just happens; nothing needs to be clicked (TC-039). Throttled
+      // (checkLatePenaltiesIfDue, not the raw check) — this list is
+      // realtime-watched by the same screen that calls it, so running it
+      // on every single request would self-trigger a refetch of the page
+      // an officer just opened whenever it writes a new 'late' row.
       if (req.membership.role !== 'member') {
-        await checkLatePenalties(req.params.groupId).catch((e) => console.error('[penalties] check failed:', e.message));
+        await checkLatePenaltiesIfDue(req.params.groupId).catch((e) => console.error('[penalties] check failed:', e.message));
       }
       const contributions = await service.listContributions({
         groupId: req.params.groupId,
