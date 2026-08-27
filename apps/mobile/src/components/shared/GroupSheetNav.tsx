@@ -59,7 +59,15 @@ function NavItem({ icon: Icon, onPress, active }: { icon: any; onPress: () => vo
   );
 }
 
-export function GroupSheetNav({ chat, add, more }: { chat: SheetConfig; add: SheetConfig; more: SheetConfig }) {
+export function GroupSheetNav({
+  chat, add, more, centerIcon: CenterIcon = Plus, onCenterPress,
+}: {
+  chat: SheetConfig; add: SheetConfig; more: SheetConfig;
+  /** Override the center FAB glyph — e.g. Search for a role that never creates entries. */
+  centerIcon?: any;
+  /** Override what the center FAB does — defaults to opening the `add` sheet. */
+  onCenterPress?: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const path = usePathname();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -91,14 +99,14 @@ export function GroupSheetNav({ chat, add, more }: { chat: SheetConfig; add: She
         <NavItem icon={MessageCircle} onPress={() => setActive(chat)} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Pressable
-            onPress={() => setActive(add)}
+            onPress={onCenterPress ?? (() => setActive(add))}
             style={{
               width: 52, height: 52, borderRadius: 18, backgroundColor: NAV_FAB,
               alignItems: 'center', justifyContent: 'center',
               shadowColor: NAV_FAB, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.7, shadowRadius: 16, elevation: 8,
             }}
           >
-            <Plus size={26} color="#fff" strokeWidth={2.6} />
+            <CenterIcon size={26} color="#fff" strokeWidth={2.6} />
           </Pressable>
         </View>
         <NavItem icon={User} active={isProfile} onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
