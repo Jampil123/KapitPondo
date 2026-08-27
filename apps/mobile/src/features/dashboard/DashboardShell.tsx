@@ -1,11 +1,3 @@
-/**
- * features/dashboard/DashboardShell.tsx
- * ----------------------------------------------------------------------------
- * The common frame every role dashboard shares: back button, group name +
- * fund code, the caller's role badge, and a scroll container with optional
- * pull-to-refresh. Role-specific content slots in as children, so all four
- * dashboards look like one app.
- */
 import { ReactNode } from 'react';
 import { View, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,7 +24,7 @@ export function DashboardShell({
   /** Optional pull-to-refresh — pass both to enable it. */
   refreshing?: boolean;
   onRefresh?: () => void;
-  /** Optional pinned bottom bar (e.g. DashboardNav for the owner). */
+  /** Optional pinned bottom bar (e.g. DashbcmsoardNav for the owner). */
   bottomBar?: ReactNode;
   /** Optional custom header — replaces the default chevron/name/fund_code/badge row. */
   header?: ReactNode;
@@ -66,7 +58,7 @@ export function DashboardShell({
 
       <ScrollView
         style={{ flex: 1 }}
-        contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 20, gap: 10 }}
+        contentContainerStyle={{ padding: 20, paddingTop: 0, paddingBottom: 20, gap: 6 }}
         refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
       >
         {children}

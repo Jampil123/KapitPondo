@@ -20,8 +20,8 @@ const CARD_BG = '#F5F9FA';
 
 function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: string; onAsidePress?: () => void }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14 }}>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
       {aside && onAsidePress ? (
         <Pressable onPress={onAsidePress} hitSlop={8}>
           <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>{aside}</Text>

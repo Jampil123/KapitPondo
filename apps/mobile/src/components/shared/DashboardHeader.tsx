@@ -2,12 +2,11 @@
  * components/shared/DashboardHeader.tsx
  * ----------------------------------------------------------------------------
  * Reusable greeting header for ALL role dashboards: brand logo + "Kumusta,
- * {name}" with a small inline role pill, plus a bell (unread count badge).
- * Bell -> Notification Center, badge reflects NotificationsContext's live
- * (realtime-updated) unread count (capped "9+"/"99+" past two/three digits).
- *
- * The role pill is a prop so each dashboard shows the right label
- * (Organizer / Treasurer / Auditor / Member) using one component.
+ * {name}!" with the group's name underneath, plus a bell (unread count
+ * badge). Bell -> Notification Center, badge reflects NotificationsContext's
+ * live (realtime-updated) unread count (capped "9+"/"99+" past two/three
+ * digits). Which role the caller is viewing as is shown by the RoleSwitch
+ * pill in [groupId]/index.tsx instead of repeated here.
  *
  *   <DashboardHeader group={group} member={member} roleLabel="Organizer" />
  */
@@ -26,6 +25,7 @@ function firstName(n?: string | null) {
 }
 
 export function DashboardHeader({
+  group,
   member,
   roleLabel,
 }: {
@@ -40,11 +40,9 @@ export function DashboardHeader({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: semantic.background }}>
       <LogoMark size={40} />
 
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        <Text variant="h3" style={{ fontSize: 17 }} numberOfLines={1}>Kumusta, {firstName(member?.full_name)}</Text>
-        <View style={{ backgroundColor: semantic.surfaceAlt, borderWidth: 1, borderColor: semantic.brand, paddingHorizontal: 5, paddingVertical: 0.5, borderRadius: 999 }}>
-          <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_500Medium', color: semantic.brandDark }}>{roleLabel}</Text>
-        </View>
+      <View style={{ flex: 1, gap: 3 }}>
+        <Text variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>Kumusta, {firstName(member?.full_name)}!</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
       </View>
 
       <Pressable onPress={() => router.push('/(app)/notifications' as any)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>

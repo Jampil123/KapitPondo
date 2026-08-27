@@ -40,10 +40,10 @@ function Centered({ children }: { children: React.ReactNode }) {
  * items are plain text. Kept local/one-off rather than restyling the shared
  * Segmented control, which other screens use as an equal-width tab bar.
  */
-function RoleSwitch({ value, onChange }: { value: 'officer' | 'member'; onChange: (v: 'officer' | 'member') => void }) {
+function RoleSwitch({ value, onChange, officerLabel }: { value: 'officer' | 'member'; onChange: (v: 'officer' | 'member') => void; officerLabel: string }) {
   const options: { key: 'officer' | 'member'; label: string }[] = [
-    { key: 'officer', label: 'Officer' },
-    { key: 'member', label: 'Member' },
+    { key: 'officer', label: officerLabel },
+    { key: 'member', label: 'My member view' },
   ];
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -155,17 +155,17 @@ export default function GroupDashboard() {
           <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
           {role === 'treasurer' && (
             <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
-              <RoleSwitch value={treasurerView} onChange={setTreasurerView} />
+              <RoleSwitch value={treasurerView} onChange={setTreasurerView} officerLabel="Treasurer" />
             </View>
           )}
           {role === 'owner' && (
             <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
-              <RoleSwitch value={ownerView} onChange={setOwnerView} />
+              <RoleSwitch value={ownerView} onChange={setOwnerView} officerLabel="Owner" />
             </View>
           )}
           {role === 'auditor' && (
             <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
-              <RoleSwitch value={auditorView} onChange={setAuditorView} />
+              <RoleSwitch value={auditorView} onChange={setAuditorView} officerLabel="Auditor" />
             </View>
           )}
         </>
