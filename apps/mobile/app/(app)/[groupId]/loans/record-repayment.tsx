@@ -1,18 +1,3 @@
-/**
- * app/(app)/[groupId]/loans/record-repayment.tsx — treasurer records/confirms
- * loan repayments (M6). Two tabs, mirroring contributions/confirm.tsx:
- *   Pending    → confirm/reject a member's self-submitted repayment claim
- *                (useRepayments(status:'submitted') → useConfirmRepayment /
- *                useRejectRepayment)
- *   Record new → officer records a payment they received directly, posts
- *                immediately (useRecordRepayment) — unchanged from before.
- *
- * SEGREGATION OF DUTIES: both paths require a different officer than
- * whoever submitted/recorded it. The direct-record flow still needs the
- * officer to name a verifier up front (record_loan_repayment SQL throws
- * otherwise); the Pending flow enforces it server-side when confirming
- * (confirm_loan_repayment SQL — recorder ≠ approver).
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Modal, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

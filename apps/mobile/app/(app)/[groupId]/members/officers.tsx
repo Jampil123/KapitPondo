@@ -1,13 +1,3 @@
-/**
- * app/(app)/[groupId]/members-officers.tsx
- * ----------------------------------------------------------------------------
- * Owner manages members + appoints officers (designer layout, wired to API):
- *   list → listMembers(groupId)     change role → setMemberRole(groupId, id, role)
- *
- * Role change uses an action sheet (Make Treasurer / Auditor / Member). The
- * owner's own row is locked. "Standing" from the prototype is omitted — our API
- * doesn't expose it yet.
- */
 import { useMemo, useState } from 'react';
 import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

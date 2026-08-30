@@ -1,22 +1,3 @@
-/**
- * app/(app)/[groupId]/loan-decisions.tsx
- * ----------------------------------------------------------------------------
- * Owner's lending decisions (designer layout, wired to our API):
- *   fund balance → useLiquidity        tabs → useLoans(status)
- *   approve      → approveLoan(id, monthlyRate)   reject → rejectLoan(id, reason)
- *   disburse     → useDisburseLoan(id) — separate step, shown on Approved loans
- *
- * Approval and disbursement are deliberately two different actions now (see
- * api/lending.ts) — approving sets the rate and moves the loan to "Approved,
- * awaiting disbursement"; a Treasurer or Owner then disburses it separately.
- * We also check liquidity ≥ principal before allowing approve.
- *
- * Each row shows the borrower's name (joined via loans.membership_id — see
- * lending.service.js) and a "View details" sheet giving the full picture
- * before deciding: purpose/term/applied date, plus useLoanEligibility()
- * (verified status, an existing active loan, a missed contribution on file)
- * — that hook existed already but was never rendered anywhere until now.
- */
 import { useEffect, useRef, useState } from 'react';
 import { View, Modal, TextInput, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

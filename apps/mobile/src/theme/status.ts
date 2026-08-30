@@ -61,6 +61,7 @@ export const loanStatus: Record<string, StatusMeta> = {
   active:    { intent: 'primary', label: 'Active' },
   paid:      { intent: 'success', label: 'Settled' },
   rejected:  { intent: 'danger',  label: 'Rejected' },
+  cancelled: { intent: 'neutral', label: 'Cancelled' },
   defaulted: { intent: 'danger',  label: 'Defaulted' },
 };
 
@@ -72,6 +73,7 @@ export const loanPaymentStatus: Record<string, StatusMeta> = {
   paid:      { intent: 'success', label: 'Paid' },
   late:      { intent: 'danger',  label: 'Late' },
   partial:   { intent: 'warning', label: 'Partial' },
+  rejected:  { intent: 'danger',  label: 'Rejected' },
 };
 
 // M9 — distribution_status

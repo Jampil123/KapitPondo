@@ -1,21 +1,3 @@
-/**
- * app/(app)/[groupId]/loans/disburse.tsx — Treasurer disbursement (M6).
- *
- * approve_loan and disburse_loan are separate steps (migration 0026, per
- * spec §1.2) — an Owner approving a loan on the Loan Decision screen leaves
- * it 'approved' and awaiting release, it does NOT post any money yet. THIS
- * screen is where that release actually happens: disburseLoan() posts a
- * debit ledger entry for the principal (see disburse_loan() SQL), which is
- * what deducts it from the group's available fund cash — group_available_cash
- * is just a live sum over ledger_entries, so the fund balance below updates
- * the instant a disbursement posts.
- *
- * This screen used to be read-only (a stale note claimed approve+disburse
- * were still fused into one call, and there was no button anywhere) even
- * though decisions.tsx's own inline Disburse button already exercised the
- * real, working endpoint — that's now mirrored here too, since this is the
- * Treasurer's actual dashboard entry point for it.
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

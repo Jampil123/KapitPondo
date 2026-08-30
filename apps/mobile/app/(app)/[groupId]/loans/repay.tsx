@@ -1,23 +1,3 @@
-/**
- * app/(app)/[groupId]/loans/repay.tsx — member submits a repayment claim for
- * their own active loan (M6). Mirrors contributions/contribute.tsx: amount +
- * payment method + optional proof, submitted for a DIFFERENT officer to
- * confirm (useSubmitRepayment → submit_loan_repayment SQL — no money posts
- * until confirmed, see loans/record-repayment.tsx's Pending tab).
- *
- * Previously this route existed but could never succeed for anyone reaching
- * it — the backend only had the officer's direct-record endpoint, gated to
- * treasurer/owner, so member/auditor got 403'd and even Owner failed the
- * segregation-of-duties check. Migration 0037 added the actual submit→
- * confirm flow this screen now calls.
- *
- * "Pay with GCash" below is a FUTURE PLAN placeholder (migration 0038,
- * services/api/src/modules/payments) — not wired to anything live yet, no
- * gateway credentials exist. Once it is, that path skips this whole manual
- * form: the gateway's own signed webhook posts the payment directly
- * (auto_confirm_loan_repayment), with no reference number to type and no
- * screenshot to attach — the webhook confirmation IS the proof.
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

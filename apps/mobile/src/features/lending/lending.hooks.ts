@@ -23,6 +23,8 @@ import {
   getLoan,
   getLiquidity,
   getLoanEligibility,
+  getMemberLoanEligibility,
+  cancelLoan,
   approveLoan,
   disburseLoan,
   rejectLoan,
@@ -89,6 +91,22 @@ export function useDisburseLoan(groupId: string) {
 
 export function useRejectLoan(groupId: string) {
   return useAction((loanId: string, reason?: string) => rejectLoan(groupId, loanId, reason));
+}
+
+/** Member-safe: am I eligible to request a loan right now, and how much fund cash exists — before any loan is submitted. */
+export function useMemberLoanEligibility(groupId: string) {
+  const fn = useCallback(() => getMemberLoanEligibility(groupId), [groupId]);
+  return useQuery(fn, [groupId], [
+    { table: 'loans', filter: `group_id=eq.${groupId}` },
+    // available_cash is a live sum over the ledger — a disbursement/repayment
+    // elsewhere in the group changes it without necessarily touching `loans`.
+    { table: 'ledger_entries', filter: `group_id=eq.${groupId}` },
+  ]);
+}
+
+/** The borrower withdraws their own still-pending request. */
+export function useCancelLoan(groupId: string) {
+  return useAction((loanId: string) => cancelLoan(groupId, loanId));
 }
 
 /** Direct-record path — officer received the payment in person, posts immediately, no confirm step. */

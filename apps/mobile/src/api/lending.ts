@@ -19,8 +19,11 @@
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-export type LoanStatus = 'pending' | 'approved' | 'active' | 'paid' | 'rejected' | 'defaulted';
-export type LoanPaymentStatus = 'scheduled' | 'submitted' | 'approved' | 'paid' | 'late' | 'partial';
+// 'cancelled' = the borrower withdrew their own still-pending request (migration
+// 0041) — distinct from 'rejected', which is an Owner decision. 'defaulted' is
+// in the DB enum but no code path ever sets it — dead status, kept for parity.
+export type LoanStatus = 'pending' | 'approved' | 'active' | 'paid' | 'rejected' | 'cancelled' | 'defaulted';
+export type LoanPaymentStatus = 'scheduled' | 'submitted' | 'approved' | 'paid' | 'late' | 'partial' | 'rejected';
 export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
 export interface Loan {
@@ -41,6 +44,8 @@ export interface Loan {
   created_at: string;
   /** Who made the lending decision (approve/reject) — not necessarily who disbursed it. */
   approver: { full_name: string } | null;
+  /** Who actually released the funds — a separate step/actor from approval (see disburseLoan()). Null until disbursed. */
+  disburser: { full_name: string } | null;
   /** Who the loan actually belongs to (the borrower) — not who approved it. */
   membership: { member_id: string; members: { full_name: string } | null } | null;
 }
@@ -50,6 +55,13 @@ export interface LoanEligibility {
   reasons: string[];
   available_cash: Money;
   requested_principal: Money;
+}
+
+/** Same checks as LoanEligibility, run against the caller's own membership before any loan exists — see getMemberLoanEligibility(). */
+export interface MemberLoanEligibility {
+  eligible: boolean;
+  reasons: string[];
+  available_cash: Money;
 }
 
 export interface LoanPayment {
@@ -122,6 +134,16 @@ export function getLiquidity(groupId: string) {
 /** GET — what the Owner should review before deciding: verified status, an existing active loan, a missed contribution on file, and current liquidity. */
 export function getLoanEligibility(groupId: string, loanId: string) {
   return api.get<LoanEligibility>(`/api/groups/${groupId}/loans/${loanId}/eligibility`);
+}
+
+/** GET — member-safe: am I eligible to request a loan right now, and how much cash does the fund have. Same 3 checks as getLoanEligibility, before any loan exists. */
+export function getMemberLoanEligibility(groupId: string) {
+  return api.get<MemberLoanEligibility>(`/api/groups/${groupId}/loans/eligibility`);
+}
+
+/** POST — the borrower withdraws their own request. Only works while status is still 'pending'. */
+export function cancelLoan(groupId: string, loanId: string) {
+  return api.post<{ loan: Loan }>(`/api/groups/${groupId}/loans/${loanId}/cancel`);
 }
 
 // --- Decision / disbursement / repayment ------------------------------------

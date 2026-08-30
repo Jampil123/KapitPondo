@@ -25,11 +25,12 @@ async function applyForLoan(input) {
 }
 
 async function listLoans({ groupId, membershipId, role, status }) {
-  // approver is who made the decision; membership is who the loan actually
-  // belongs to (the borrower) — officer review screens need the latter to
-  // show whose request this is, not just who approved it.
+  // approver/disburser are who made each decision — two separate officers,
+  // two separate columns (see migration 0026); membership is who the loan
+  // actually belongs to (the borrower) — officer review screens need the
+  // latter to show whose request this is, not just who decided it.
   let q = supabase.from('loans')
-    .select('*, approver:members!approved_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
     .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   if (status) q = q.eq('status', status);
@@ -41,7 +42,7 @@ async function listLoans({ groupId, membershipId, role, status }) {
 async function getLoan(id) {
   const { data, error } = await supabase
     .from('loans')
-    .select('*, approver:members!approved_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
     .eq('id', id).single();
   if (error) throw error;
   return data;
@@ -63,19 +64,19 @@ async function availableCash(groupId) {
   return data;
 }
 
-// TC-014 / TC-034: what the Owner is meant to "review" before deciding.
-// Liquidity is checked separately (inside approve_loan/disburse_loan, against
-// whatever amount is actually being approved) since TC-040 lets the Owner
-// approve a smaller amount rather than being flatly blocked by it — the
-// checks here are the ones that make a loan ineligible outright, regardless
-// of amount.
-async function checkEligibility(loanId) {
-  const loan = await getLoan(loanId);
-
+// TC-014 / TC-034: what the Owner is meant to "review" before deciding — and
+// (checkEligibilityForMembership) also what a member is shown BEFORE they
+// even apply, so a blocked member learns why from their own screen rather
+// than from a rejection. Liquidity is checked separately (inside
+// approve_loan/disburse_loan, against whatever amount is actually being
+// approved) since TC-040 lets the Owner approve a smaller amount rather than
+// being flatly blocked by it — the checks here are the ones that make a
+// loan ineligible outright, regardless of amount.
+async function checkEligibilityForMembership(membershipId, excludeLoanId = null) {
   const { data: membership, error: mErr } = await supabase
     .from('memberships')
     .select('member_id, members!member_id(verification_status)')
-    .eq('id', loan.membership_id)
+    .eq('id', membershipId)
     .single();
   if (mErr) throw mErr;
 
@@ -84,12 +85,13 @@ async function checkEligibility(loanId) {
     reasons.push('Member is not verified');
   }
 
-  const { data: activeLoans, error: lErr } = await supabase
+  let activeQ = supabase
     .from('loans')
     .select('id')
-    .eq('membership_id', loan.membership_id)
-    .in('status', ['approved', 'active'])
-    .neq('id', loanId);
+    .eq('membership_id', membershipId)
+    .in('status', ['approved', 'active']);
+  if (excludeLoanId) activeQ = activeQ.neq('id', excludeLoanId);
+  const { data: activeLoans, error: lErr } = await activeQ;
   if (lErr) throw lErr;
   if (activeLoans?.length) reasons.push('Member already has an active loan');
 
@@ -102,13 +104,19 @@ async function checkEligibility(loanId) {
   const { data: pendingPenalties, error: pErr } = await supabase
     .from('penalties')
     .select('id')
-    .eq('membership_id', loan.membership_id)
+    .eq('membership_id', membershipId)
     .eq('status', 'pending')
     .limit(1);
   if (pErr) throw pErr;
   if (pendingPenalties?.length) reasons.push('Member has an unresolved late-contribution penalty');
 
-  return { eligible: reasons.length === 0, reasons, loan };
+  return { eligible: reasons.length === 0, reasons };
+}
+
+async function checkEligibility(loanId) {
+  const loan = await getLoan(loanId);
+  const { eligible, reasons } = await checkEligibilityForMembership(loan.membership_id, loanId);
+  return { eligible, reasons, loan };
 }
 
 // Owner-only lending decision. p_approved_principal lets TC-040 approve less
@@ -275,6 +283,22 @@ async function rejectRepayment({ paymentId, reason }) {
   return data;
 }
 
+// The borrower withdraws their own request — only while it's still 'pending'
+// (nobody's decided on it yet). Distinct status from 'rejected' since that's
+// an Owner decision; this is the member's own action.
+async function cancelLoan(loanId, membershipId) {
+  const { data, error } = await supabase
+    .from('loans')
+    .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+    .eq('id', loanId)
+    .eq('membership_id', membershipId)
+    .eq('status', 'pending')
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 async function rejectLoan(loanId, reason) {
   const { data, error } = await supabase
     .from('loans')
@@ -309,6 +333,8 @@ module.exports = {
   getLoanPayments,
   availableCash,
   checkEligibility,
+  checkEligibilityForMembership,
+  cancelLoan,
   approveLoan,
   disburseLoan,
   recordRepayment,

@@ -58,6 +58,25 @@ router.get(
   }
 );
 
+// Member-safe pre-application check: "am I eligible to request a loan right
+// now" + how much cash the fund has — same 3 checks as the officer's
+// per-loan eligibility below, just run against the caller's own membership
+// before any loan exists to check against. Registered BEFORE /loans/:id so
+// "eligibility" isn't swallowed as a loan id (same reasoning as /repayments
+// being kept off /loans/:id further down).
+router.get(
+  '/groups/:groupId/loans/eligibility',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const { eligible, reasons } = await service.checkEligibilityForMembership(req.membership.id);
+      const availableCash = await service.availableCash(req.params.groupId);
+      res.json({ eligible, reasons, available_cash: availableCash });
+    } catch (err) { next(err); }
+  }
+);
+
 // Get one loan + its payments
 router.get(
   '/groups/:groupId/loans/:id',
@@ -186,6 +205,27 @@ router.post(
     } catch (err) {
       next(err);
     }
+  }
+);
+
+// Borrower withdraws their own request — only while still 'pending'.
+router.post(
+  '/groups/:groupId/loans/:id/cancel',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const loan = await service.getLoan(req.params.id);
+      if (loan.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      if (loan.membership_id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only cancel your own loan request' });
+      }
+      const cancelled = await service.cancelLoan(req.params.id, req.membership.id);
+      if (!cancelled) return res.status(409).json({ error: 'Only a pending request can be cancelled' });
+      res.json({ message: 'Loan request cancelled', loan: cancelled });
+    } catch (err) { next(err); }
   }
 );
 

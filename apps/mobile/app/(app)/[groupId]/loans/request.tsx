@@ -1,9 +1,10 @@
 /**
- * app/(app)/[groupId]/request-loan.tsx — member requests a loan (M6).
+ * app/(app)/[groupId]/loans/request.tsx — member requests a loan (M6).
  * Wired to useApplyLoan. Interest is NOT set here — the organizer sets it at
- * approval — so the repayment preview shows principal + per-month estimate with
- * a clear note. Available-fund is NOT shown to members (liquidity is officer-
- * only in our RBAC).
+ * approval — so the repayment preview shows principal + per-month estimate
+ * with a clear note. Eligibility + available fund cash are shown one screen
+ * back, on loans/index.tsx's "Can request" state, before the member ever
+ * gets here — this form only re-checks verification as a light local gate.
  */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
