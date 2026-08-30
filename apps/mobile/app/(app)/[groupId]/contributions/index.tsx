@@ -1,60 +1,192 @@
-/**
- * app/(app)/[groupId]/contributions/index.tsx — Contributions overview (member).
- * Ledger-first: full history + who confirmed each entry, not just a submit form.
- * "Confirmed by {officer}" uses the approver join added in contributions.service.js;
- * there's no approved_at column in the schema, so we show the paid_date (date-only)
- * rather than inventing a precise timestamp.
- */
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { View, ScrollView, Image, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Plus, Users, TrendingUp } from 'lucide-react-native';
+import { Check, Clock3, AlertTriangle, RotateCcw, Clock, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AppBar } from '@/components/shared/AppBar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
+import { useMyBalance } from '@/features/reporting/reporting.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
-import type { Contribution } from '@/api/contributions';
+import { buildTimeline, cyclePeriods, periodLabel, type PeriodEntry, type PeriodKind } from '@/features/contributions/periods';
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const CARD_SHADOW = {
+  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
+  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
+} as const;
 
-function shortDate(iso: string | null) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+const DOT_TONE: Record<PeriodKind, string> = {
+  paid: intent.success.base,
+  review: intent.info.base,
+  rejected: intent.danger.base,
+  late: intent.danger.base,
+  due: semantic.brand,
+  upcoming: semantic.surfaceAlt,
+};
+
+function shortDate(iso: string | Date | null | undefined) {
+  if (!iso) return '';
+  const d = iso instanceof Date ? iso : parseApiDate(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function ContributionRow({ c }: { c: Contribution }) {
-  const confirmedDate = shortDate(c.paid_date);
-  const proofUrl = useSignedProofUrl(c.proof_url);
+function daysBetween(a: Date, b: Date) {
+  return Math.round((a.getTime() - b.getTime()) / 86400000);
+}
+
+type Filter = 'all' | 'action' | 'posted';
+
+function LegendDot({ color, label }: { color: string; label: string }) {
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14, gap: 10 }, shadowToken.card]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ gap: 2 }}>
-          <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(c.amount)}</Text>
-          <Text variant="caption" color="secondary">{shortDate(c.created_at) ?? '—'}</Text>
-        </View>
-        <StatusBadge entity="contribution" value={c.status} />
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+      <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
+      <Text style={{ fontSize: 10.5 }} variant="caption" color="secondary">{label}</Text>
+    </View>
+  );
+}
+
+/** Underline tabs — this page's own filter bar, not the shared pill-style Segmented control. */
+function TabBar<T extends string>({
+  options, value, onChange,
+}: {
+  options: { key: T; label: string; count?: number }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderColor: semantic.border }}>
+      {options.map((o) => {
+        const active = o.key === value;
+        return (
+          <Pressable key={o.key} onPress={() => onChange(o.key)} style={{ flex: 1, alignItems: 'center', paddingBottom: 11, gap: 9 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ fontSize: 13, fontFamily: active ? 'Poppins_700Bold' : 'Poppins_600SemiBold', color: active ? semantic.brandDark : semantic.textSecondary }}>
+                {o.label}
+              </Text>
+              {o.count ? (
+                <View style={{ minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? semantic.brandDark : semantic.surfaceAlt }}>
+                  <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{o.count}</Text>
+                </View>
+              ) : null}
+            </View>
+            <View style={{ height: 3, width: '60%', borderRadius: 2, backgroundColor: active ? semantic.brandDark : 'transparent' }} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+function GroupLabel({ title }: { title: string }) {
+  return <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2, letterSpacing: 0.8 }}>{title}</Text>;
+}
+
+const ICON: Record<PeriodKind, any> = { paid: Check, review: Clock3, rejected: RotateCcw, late: AlertTriangle, due: Clock, upcoming: Clock };
+const ICON_TONE: Record<PeriodKind, IntentName> = { paid: 'success', review: 'info', rejected: 'danger', late: 'danger', due: 'primary', upcoming: 'neutral' };
+
+function Thumb({ path }: { path: string | null }) {
+  const url = useSignedProofUrl(path);
+  if (!url) return null;
+  return (
+    <View style={{ width: 34, height: 34, borderRadius: 9, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
+      <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+    </View>
+  );
+}
+
+function ActionRow({ entry, frequency, onPress }: { entry: PeriodEntry; frequency: string; onPress: () => void }) {
+  const Icon = ICON[entry.kind];
+  const tone = intent[ICON_TONE[entry.kind]];
+  const label = periodLabel(entry.periodStart, frequency);
+
+  let sub: string;
+  let tagLabel: string;
+  if (entry.kind === 'rejected') {
+    sub = `Proof returned ${shortDate(entry.row?.updated_at)}`;
+    tagLabel = 'Resubmit';
+  } else if (entry.kind === 'late') {
+    const days = Math.abs(daysBetween(entry.dueDate, new Date()));
+    sub = `Was due ${shortDate(entry.dueDate)}`;
+    tagLabel = `${days} day${days === 1 ? '' : 's'} late`;
+  } else {
+    sub = `Sent ${shortDate(entry.row?.created_at)}`;
+    tagLabel = 'Under review';
+  }
+
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: tone.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={17} color={tone.text} strokeWidth={2.2} />
       </View>
-
-      {proofUrl ? (
-        <Image source={{ uri: proofUrl }} style={{ width: '100%', height: 120, borderRadius: 10 }} resizeMode="cover" />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{label}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+          <Text variant="caption" color="secondary">{sub}</Text>
+          <View style={{ backgroundColor: tone.soft, paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20 }}>
+            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: tone.text }}>{tagLabel}</Text>
+          </View>
+        </View>
+      </View>
+      {entry.row?.proof_url ? <Thumb path={entry.row.proof_url} /> : entry.kind === 'late' ? (
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(entry.amount)}</Text>
       ) : null}
+      <ChevronRight size={16} color={semantic.textMuted} />
+    </Pressable>
+  );
+}
 
-      {c.status === 'approved' ? (
-        <Text variant="caption" color="secondary">
-          Confirmed by {c.approver?.full_name ?? 'an officer'}{confirmedDate ? ` · ${confirmedDate}` : ''}
-        </Text>
-      ) : c.status === 'rejected' ? (
-        <Text variant="caption" style={{ color: '#C25C5E' }}>Rejected</Text>
-      ) : (
-        <Text variant="caption" color="muted">Awaiting confirmation</Text>
-      )}
+function PostedRow({ entry }: { entry: PeriodEntry }) {
+  const row = entry.row!;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Check size={17} color={intent.success.text} strokeWidth={2.2} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{row.approver?.full_name ? `Verified ${shortDate(row.paid_date)} by ${row.approver.full_name}` : `Posted ${shortDate(row.paid_date)}`}</Text>
+        <View style={{ backgroundColor: intent.success.soft, alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20, marginTop: 3 }}>
+          <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Posted</Text>
+        </View>
+      </View>
+      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(row.amount)}</Text>
+    </View>
+  );
+}
+
+function UpcomingRow({ entry, frequency, onPress }: { entry: PeriodEntry; frequency: string; onPress?: () => void }) {
+  const label = periodLabel(entry.periodStart, frequency);
+  const content = (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, opacity: onPress ? 1 : 0.55 }}>
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: entry.kind === 'due' ? semantic.surfaceAlt : '#F2F7F9', alignItems: 'center', justifyContent: 'center' }}>
+        <Clock size={16} color={entry.kind === 'due' ? semantic.brandDark : semantic.textMuted} strokeWidth={2} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{label}</Text>
+        <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>Due {shortDate(entry.dueDate)}</Text>
+      </View>
+      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{formatPeso(entry.amount)}</Text>
+      {onPress ? <ChevronRight size={16} color={semantic.textMuted} /> : null}
+    </View>
+  );
+  return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
+}
+
+function PenaltyNotice({ amount, type }: { amount: number | string; type: string | null }) {
+  return (
+    <View style={{ paddingVertical: 11, paddingHorizontal: 16, paddingLeft: 66, backgroundColor: intent.warning.soft, borderBottomWidth: 1, borderColor: semantic.border, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>Late penalty may apply</Text>
+        <Text variant="caption" color="secondary" style={{ marginTop: 2, fontSize: 10.5 }}>The Owner reviews this before it applies</Text>
+      </View>
+      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>
+        {type === 'percent' ? `${amount}%` : formatPeso(amount)}
+      </Text>
     </View>
   );
 }
@@ -62,79 +194,176 @@ function ContributionRow({ c }: { c: Contribution }) {
 export default function ContributionsOverview() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
-  const { membership, role } = useActiveGroup();
+  const { membership, group } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
+  const bal = useMyBalance(groupId!);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const heads = membership?.heads ?? 1;
-  // listContributions only self-scopes server-side when role === 'member' — for
-  // owner/treasurer/auditor it returns the whole group's rows, so filter here to
-  // guarantee this page only ever shows the caller's own contributions.
   const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
-  const paid = useMemo(
-    () => rows.filter((c) => c.status === 'approved').reduce((sum, c) => sum + Number(c.amount), 0),
-    [rows],
-  );
-  const perHead = Number(cycle?.contribution_amount ?? 0);
-  const expected = perHead * heads;
-  const pct = expected > 0 ? Math.min(100, Math.round((paid / expected) * 100)) : 0;
-  const advance = Math.max(0, paid - expected);
 
-  function goToContribute() {
-    router.push({ pathname: '/(app)/[groupId]/contributions/contribute', params: { groupId } });
+  const timeline = useMemo(
+    () => (cycle ? buildTimeline(cycle, rows, heads) : []),
+    [cycle, rows, heads],
+  );
+  const totalPeriods = cycle ? cyclePeriods(cycle).length : 0;
+
+  const needsAction = timeline.filter((p) => p.kind === 'late' || p.kind === 'rejected');
+  const inProgress = timeline.filter((p) => p.kind === 'review');
+  const posted = timeline.filter((p) => p.kind === 'paid');
+  const upcoming = timeline.filter((p) => p.kind === 'due' || p.kind === 'upcoming');
+
+  function openEntry(entry: PeriodEntry) {
+    if (entry.row) {
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, id: entry.row.id } });
+    } else {
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, due: entry.dueDate.toISOString() } });
+    }
   }
+
+  const nextPayable = needsAction.find((p) => p.kind === 'rejected') ?? needsAction.find((p) => p.kind === 'late') ?? upcoming.find((p) => p.kind === 'due');
+
+  const badge: { tone: IntentName; label: string } =
+    needsAction.length > 0 ? { tone: 'danger', label: `${needsAction.length} need${needsAction.length === 1 ? 's' : ''} action` } :
+    inProgress.length > 0 ? { tone: 'info', label: `${inProgress.length} under review` } :
+    { tone: 'success', label: 'All caught up' };
+  const badgeTone = intent[badge.tone];
+
+  const showGroup = (sec: 'action' | 'progress' | 'posted' | 'upcoming') =>
+    filter === 'all' || (filter === 'action' && (sec === 'action' || sec === 'progress')) || (filter === 'posted' && sec === 'posted');
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Contributions" subtitle={ROLE_LABEL[role ?? 'member'] ?? 'Member'} />
-      <View style={{ padding: 16, gap: 14, flex: 1 }}>
-        <View style={[{ backgroundColor: semantic.brand, borderRadius: 18, padding: 16, gap: 10 }]}>
-          <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>Paid this cycle</Text>
-          <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(paid)}</Text>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text variant="caption" style={{ color: '#fff', opacity: 0.9 }}>of {formatPeso(expected)} expected</Text>
-            <Text variant="caption" style={{ color: '#fff', fontWeight: '600' }}>{pct}%</Text>
+      <AppBar title="My contributions" subtitle={`${group?.name ?? 'Group'} · ${cycle?.name ?? 'No active cycle'}`} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: nextPayable ? 110 : 40 }}>
+
+        {/* ---------------- Summary (transparent, no card) ---------------- */}
+        <View style={{ paddingHorizontal: 2 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+            <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Contributed so far</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: badgeTone.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
+              <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: badgeTone.text }}>{badge.label}</Text>
+            </View>
+          </View>
+          <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8, marginTop: 4 }}>
+            {contribs.loading || bal.loading ? '…' : formatPeso(bal.data?.contributions)}
+          </Text>
+          <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
+            {totalPeriods > 0 ? `${posted.length} of ${totalPeriods} periods posted` : `${posted.length} posted so far`}
+            {cycle ? <> · <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(cycle.contribution_amount)}</Text> per period at {heads} head{heads === 1 ? '' : 's'}</> : null}
+          </Text>
+
+          {timeline.length ? (
+            <View style={{ flexDirection: 'row', gap: 4, marginTop: 16 }}>
+              {timeline.map((p) => (
+                <View key={p.index} style={{ flex: 1, height: 9, minWidth: 0, borderRadius: 5, backgroundColor: DOT_TONE[p.kind] }} />
+              ))}
+            </View>
+          ) : null}
+
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 12, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
+            <LegendDot color={intent.success.base} label="Posted" />
+            <LegendDot color={intent.info.base} label="Under review" />
+            <LegendDot color={intent.danger.base} label="Overdue" />
+            <LegendDot color={semantic.brand} label="Due" />
+            <LegendDot color={semantic.surfaceAlt} label="Upcoming" />
           </View>
         </View>
 
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 8 }, shadowToken.card]}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-            <Users size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
-            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-              Your contribution is based on your heads: {heads} head{heads === 1 ? '' : 's'} × {formatPeso(perHead)} = {formatPeso(expected)} this cycle.
-            </Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-            <TrendingUp size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
-            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-              {advance > 0
-                ? `You've paid ${formatPeso(advance)} ahead of what's expected this cycle.`
-                : "You can pay ahead of schedule — any extra counts toward future cycles."}
-            </Text>
-          </View>
+        {/* ---------------- Filters ---------------- */}
+        <View style={{ marginTop: 20 }}>
+          <TabBar<Filter>
+            options={[
+              { key: 'all', label: 'All' },
+              { key: 'action', label: 'Needs action', count: needsAction.length + inProgress.length || undefined },
+              { key: 'posted', label: 'Posted', count: posted.length || undefined },
+            ]}
+            value={filter}
+            onChange={setFilter}
+          />
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Text variant="h3" style={{ fontSize: 15 }}>History</Text>
-          <Pressable
-            onPress={goToContribute}
-            style={[{ width: 34, height: 34, borderRadius: 17, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
-          >
-            <Plus size={19} color="#fff" strokeWidth={2.4} />
-          </Pressable>
-        </View>
         {contribs.loading ? (
-          <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />
-        ) : rows.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, shadowToken.card]}>
-            <Text variant="body" color="muted">No contributions yet.</Text>
+          <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
+        ) : !cycle ? (
+          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
+            <Text variant="body" color="muted">This group has no active contribution cycle right now.</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 24 }}>
-            {rows.map((c) => <ContributionRow key={c.id} c={c} />)}
-          </ScrollView>
+          <>
+            {showGroup('action') && needsAction.length > 0 && (
+              <>
+                <GroupLabel title="Needs your action" />
+                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                  {needsAction.map((entry) => (
+                    <View key={entry.index}>
+                      <ActionRow entry={entry} frequency={cycle.frequency} onPress={() => openEntry(entry)} />
+                      {entry.kind === 'late' && cycle.penalty_amount ? <PenaltyNotice amount={cycle.penalty_amount} type={cycle.penalty_type} /> : null}
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {showGroup('progress') && inProgress.length > 0 && (
+              <>
+                <GroupLabel title="In progress" />
+                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                  {inProgress.map((entry) => <ActionRow key={entry.index} entry={entry} frequency={cycle.frequency} onPress={() => openEntry(entry)} />)}
+                </View>
+              </>
+            )}
+
+            {showGroup('posted') && posted.length > 0 && (
+              <>
+                <GroupLabel title="Posted to the ledger" />
+                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                  {posted.map((entry) => <PostedRow key={entry.index} entry={entry} />)}
+                </View>
+              </>
+            )}
+
+            {showGroup('upcoming') && upcoming.length > 0 && (
+              <>
+                <GroupLabel title="Upcoming" />
+                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                  {upcoming.map((entry) => (
+                    <UpcomingRow key={entry.index} entry={entry} frequency={cycle.frequency} onPress={entry.kind === 'due' ? () => openEntry(entry) : undefined} />
+                  ))}
+                </View>
+              </>
+            )}
+
+            {timeline.length === 0 ? (
+              <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
+                <Text variant="body" color="muted">No contributions yet.</Text>
+              </View>
+            ) : null}
+
+            <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
+              Every period you pay is returned to you as capital at the end of the cycle. Profit is shared separately, by heads.
+            </Text>
+          </>
         )}
-      </View>
+      </ScrollView>
+
+      {nextPayable ? (
+        <LinearGradient
+          colors={['transparent', semantic.background, semantic.background]}
+          locations={[0, 0.4, 1]}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 28 }}
+        >
+          <Pressable
+            onPress={() => openEntry(nextPayable)}
+            style={[{ paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: semantic.brandDark }, CARD_SHADOW]}
+          >
+            <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>
+              {nextPayable.kind === 'rejected' ? 'Resubmit' : 'Pay'} {periodLabel(nextPayable.periodStart, cycle!.frequency, true)} — {formatPeso(nextPayable.amount)}
+            </Text>
+          </Pressable>
+        </LinearGradient>
+      ) : null}
     </SafeAreaView>
   );
 }

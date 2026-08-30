@@ -4,17 +4,17 @@
  * [groupId] route; the dashboard there switches on role via useActiveGroup().
  */
 import { useState } from 'react';
-import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, Alert } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Plus, X, Users, UserPlus } from 'lucide-react-native';
+import { Plus, X, Users, UserPlus, Bell } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { BottomNav } from '@/components/shared/BottomNav';
 import { GroupCard } from '@/components/shared/GroupCard';
-import { Wordmark } from '@/components/shared/ScreenHeader';
+import { Wordmark, LogoMark } from '@/components/shared/ScreenHeader';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
+import { useNotifications } from '@/context/NotificationsContext';
 import type { MyGroup } from '@/api/groups';
 
 function initialsOf(name?: string | null) {
@@ -24,8 +24,11 @@ function initialsOf(name?: string | null) {
 
 export default function GroupsDashboard() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const fabBottom = insets.bottom + 24;
   const { groups, loading, refresh } = useGroups();
-  const { member, signOut } = useAuth();
+  const { member } = useAuth();
+  const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
 
@@ -37,13 +40,6 @@ export default function GroupsDashboard() {
 
   function openGroup(item: MyGroup) {
     router.push({ pathname: '/(app)/[groupId]', params: { groupId: item.groups.id } });
-  }
-
-  function onMenu() {
-    Alert.alert('KapitPondo', undefined, [
-      { text: 'Sign Out', style: 'destructive', onPress: () => signOut() },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
   }
 
   return (
@@ -60,11 +56,30 @@ export default function GroupsDashboard() {
           borderBottomColor: semantic.border,
         }}
       >
-        <View style={{ flex: 1, marginLeft: 4 }}>
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9, marginLeft: 4 }}>
+          <LogoMark size={28} />
           <Wordmark fontSize={20} />
         </View>
+
+        <Pressable onPress={() => router.push('/(app)/notifications' as any)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+          <Bell size={22} color={semantic.textPrimary} />
+          {unreadCount > 0 ? (
+            <View
+              style={{
+                position: 'absolute', top: 2, right: 1, minWidth: 16, height: 16, borderRadius: 8,
+                paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.surface,
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#fff', lineHeight: 12 }}>
+                {unreadCount > 99 ? '99+' : unreadCount > 9 ? '9+' : unreadCount}
+              </Text>
+            </View>
+          ) : null}
+        </Pressable>
+
         <Pressable
-          onPress={onMenu}
+          onPress={() => router.push('/(app)/groups/profile' as any)}
           style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}
         >
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{initialsOf(member?.full_name)}</Text>
@@ -90,7 +105,7 @@ export default function GroupsDashboard() {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={{ padding: 20, paddingBottom: 160 }}
+          contentContainerStyle={{ padding: 20, paddingBottom: fabBottom + 100 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
           <Text variant="overline" color="secondary" style={{ marginBottom: 12 }}>My Groups</Text>
@@ -104,7 +119,7 @@ export default function GroupsDashboard() {
 
       {/* FAB mini-menu */}
       {fabOpen && (
-        <View style={{ position: 'absolute', right: 20, bottom: 178, gap: 10, alignItems: 'flex-end' }}>
+        <View style={{ position: 'absolute', right: 20, bottom: fabBottom + 76, gap: 10, alignItems: 'flex-end' }}>
           {[
             { icon: Plus, label: 'Create Group', path: '/(app)/groups/create' as const },
             { icon: UserPlus, label: 'Join Group', path: '/(app)/groups/join' as const },
@@ -126,12 +141,10 @@ export default function GroupsDashboard() {
       {/* FAB */}
       <Pressable
         onPress={() => setFabOpen((o) => !o)}
-        style={[{ position: 'absolute', right: 24, bottom: 102, width: 60, height: 60, borderRadius: 30, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
+        style={[{ position: 'absolute', right: 24, bottom: fabBottom, width: 60, height: 60, borderRadius: 30, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
       >
         {fabOpen ? <X size={30} color="#fff" /> : <Plus size={30} color="#fff" />}
       </Pressable>
-
-      <BottomNav active="home" />
     </SafeAreaView>
   );
 }

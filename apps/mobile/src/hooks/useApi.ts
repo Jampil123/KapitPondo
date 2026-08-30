@@ -19,6 +19,7 @@
  * wiring — they just refetch(), same as any other data change.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import { ApiError } from '../api/client';
 import { supabase } from '../lib/supabase';
 
@@ -62,6 +63,19 @@ export function useQuery<T>(
     return () => {
       mounted.current = false;
     };
+  }, [refetch]);
+
+  // React Native suspends the realtime WebSocket while the app is backgrounded
+  // (screen lock, app switch), and nothing reconnects it on its own — a query
+  // relying on postgres_changes to stay fresh would otherwise sit stale until
+  // the app is relaunched. Refetching on every foreground transition is a
+  // blunter fix than reconnecting the socket directly, but it means no screen
+  // is ever more than one foreground away from correct.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active' && mounted.current) refetch();
+    });
+    return () => sub.remove();
   }, [refetch]);
 
   const watches = realtime ? (Array.isArray(realtime) ? realtime : [realtime]) : [];

@@ -29,7 +29,7 @@ export type SheetItem = { label: string; icon: any } & (
 );
 export type SheetConfig = { title: string; subtitle?: string; items: SheetItem[] };
 
-const NAV_BG = semantic.dashCard;
+const NAV_BG = '#12303C'; // darker than semantic.dashCard — deliberately the darkest surface in the app
 const NAV_ICON = 'rgba(255,255,255,0.8)';
 const NAV_ICON_ON = '#FFFFFF';
 const NAV_SPARK = '#2FA8FF';

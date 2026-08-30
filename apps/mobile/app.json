@@ -15,7 +15,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.johnp15.kapitpondo"
+      "package": "com.johnp15.kapitpondo",
+      "largeHeap": true
     },
     "web": {
       "output": "single",

@@ -19,9 +19,11 @@ type Applicant = {
   created_at?: string;
   city?: string;
   province?: string;
-  reject_reason?: string;
+  verification_rejection_reason?: string;
   id_document_url?: string;
   id_document_signed_url?: string;
+  selfie_url?: string;
+  selfie_signed_url?: string;
 };
 type Detail = { member: Applicant };
 
@@ -151,7 +153,7 @@ export function VerificationsPage() {
                   {kv('Registered', u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH') : undefined)}
                   {kv('ID type', u.id_type)}
                   {kv('Location', [u.city, u.province].filter(Boolean).join(', ') || undefined)}
-                  {u.verification_status === 'rejected' && <div className="col-span-2">{kv('Reason', u.reject_reason)}</div>}
+                  {u.verification_status === 'rejected' && <div className="col-span-2">{kv('Reason', u.verification_rejection_reason)}</div>}
                 </div>
               </button>
               {u.verification_status === 'pending' && (
@@ -223,11 +225,11 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                 {kv('Registered', a?.created_at ? new Date(a.created_at).toLocaleDateString('en-PH') : undefined)}
                 {kv('ID type', a?.id_type)}
                 <div className="col-span-2">{kv('Location', [a?.city, a?.province].filter(Boolean).join(', ') || undefined)}</div>
-                {mode === 'rejected' && <div className="col-span-2">{kv('Reason', a?.reject_reason)}</div>}
+                {mode === 'rejected' && <div className="col-span-2">{kv('Reason', a?.verification_rejection_reason)}</div>}
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted document</div>
-              <div className="bg-surface-alt rounded-2xl p-3.5">
+              <div className="bg-surface-alt rounded-2xl p-3.5 mb-5">
                 {a?.id_document_signed_url ? (
                   <img
                     src={a.id_document_signed_url}
@@ -239,6 +241,24 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                        style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
                     <span className="text-sm font-medium">
                       {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted selfie</div>
+              <div className="bg-surface-alt rounded-2xl p-3.5">
+                {a?.selfie_signed_url ? (
+                  <img
+                    src={a.selfie_signed_url}
+                    alt="Submitted selfie"
+                    className="w-full h-64 object-contain rounded-lg bg-surface"
+                  />
+                ) : (
+                  <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+                       style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+                    <span className="text-sm font-medium">
+                      {a?.selfie_url ? 'Preview unavailable' : 'No selfie on file'}
                     </span>
                   </div>
                 )}

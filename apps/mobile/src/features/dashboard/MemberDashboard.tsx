@@ -6,17 +6,27 @@ import {
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { semantic, shadowToken, intent, type IntentName } from '@/theme/colors';
+import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useMyBalance, useLedger, useFundSummary } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
+import { cyclePeriods, buildTimeline } from '@/features/contributions/periods';
 import type { Contribution } from '@/api/contributions';
 
 // Lighter than semantic.surfaceAlt so the secondary cards read as barely-tinted,
 // but still distinct from the pure-white StandingCard hero at the top.
 const CARD_BG = '#F5F9FA';
+
+// Softer than the shared shadowToken.card — this dashboard's cards sit close
+// together (CARD_BG is already barely-tinted), so the default shadow read as
+// too high-contrast here. Same shape, lower opacity/spread/elevation.
+const CARD_SHADOW = {
+  shadowColor: '#2A3E4B', shadowOpacity: 0.045, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2,
+  boxShadow: '0px 4px 14px rgba(42,62,75,0.045)',
+} as const;
 
 function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: string; onAsidePress?: () => void }) {
   return (
@@ -35,7 +45,7 @@ function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: st
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
-  const d = new Date(iso);
+  const d = parseApiDate(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
@@ -46,26 +56,6 @@ function daysBetween(a: Date, b: Date) {
 const FREQUENCY_LABEL: Record<string, string> = {
   weekly: 'Week', biweekly: 'Period', quarterly: 'Quarter', monthly: 'Month',
 };
-
-/** Every period's start date between a cycle's start and end, stepped by its frequency. Empty if the cycle is open-ended (no end_date to count periods against). */
-function cyclePeriods(cycle: { start_date: string; end_date: string | null; frequency: string }): Date[] {
-  if (!cycle.end_date) return [];
-  const start = new Date(cycle.start_date);
-  const end = new Date(cycle.end_date);
-  if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
-  const dates: Date[] = [];
-  const d = new Date(start);
-  let guard = 0;
-  while (d <= end && guard < 120) {
-    dates.push(new Date(d));
-    if (cycle.frequency === 'weekly') d.setDate(d.getDate() + 7);
-    else if (cycle.frequency === 'biweekly') d.setDate(d.getDate() + 14);
-    else if (cycle.frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
-    else d.setMonth(d.getMonth() + 1);
-    guard++;
-  }
-  return dates;
-}
 
 /** "Month 4 of 12" for the section header — undefined when the cycle has no end_date to count against. */
 function cycleProgressLabel(cycle: { start_date: string; end_date: string | null; frequency: string } | null): string | undefined {
@@ -85,11 +75,11 @@ const STANDING_ICON: Record<IntentName, any> = {
 };
 
 /** The row this member should see front-and-center: the earliest not-yet-approved period, else the latest. */
-function pickCurrent(rows: Contribution[]): Contribution | null {
+export function pickCurrent(rows: Contribution[]): Contribution | null {
   if (!rows.length) return null;
   const sorted = [...rows].sort((a, b) => {
-    const ad = a.due_date ? new Date(a.due_date).getTime() : new Date(a.created_at).getTime();
-    const bd = b.due_date ? new Date(b.due_date).getTime() : new Date(b.created_at).getTime();
+    const ad = a.due_date ? parseApiDate(a.due_date).getTime() : new Date(a.created_at).getTime();
+    const bd = b.due_date ? parseApiDate(b.due_date).getTime() : new Date(b.created_at).getTime();
     return ad - bd;
   });
   return sorted.find((r) => r.status !== 'approved') ?? sorted[sorted.length - 1];
@@ -102,31 +92,51 @@ function StandingCard({ groupId }: { groupId: string }) {
   const { cycle, loading: cycleLoading } = useActiveCycle(groupId);
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
   const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
-  const current = pickCurrent(rows);
+  const heads = membership?.heads ?? 1;
+
+  // Built from the full period timeline, not just existing rows — a member who has
+  // paid every period so far has no row at all for the NEXT one (nothing auto-creates
+  // it; see periods.ts), so picking straight from `rows` would leave the card stuck on
+  // "Up to date" forever instead of flipping to "Submit payment"/"Overdue" as that next
+  // period's due date approaches and passes.
+  const timeline = cycle ? buildTimeline(cycle, rows, heads) : [];
+  const entry = timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null;
+  const current = entry?.row ?? null;
+  const kind = entry?.kind ?? null;
 
   const loading = cycleLoading || contribs.loading;
-  // Standing is red whenever the period is late or rejected — status/is_late otherwise
-  // collapses to the 3 states a member cares about: up to date, under review, or rejected.
+  // Standing is red whenever the period is late or rejected — kind otherwise collapses
+  // to the 3 states a member cares about: up to date, under review, or rejected.
   const meta: { intent: IntentName; label: string } = !cycle
     ? { intent: 'neutral', label: 'No active cycle' }
-    : !current
+    : !entry
     ? { intent: 'neutral', label: 'No period yet' }
-    : current.status === 'rejected'
+    : kind === 'rejected'
     ? { intent: 'danger', label: 'Rejected' }
-    : current.is_late
+    : kind === 'late'
     ? { intent: 'danger', label: 'Overdue' }
-    : current.status === 'submitted'
+    : kind === 'review'
     ? { intent: 'info', label: 'Under review' }
     : { intent: 'success', label: 'Up to date' };
   const tone = intent[meta.intent];
   const Icon = STANDING_ICON[meta.intent];
 
-  const heads = membership?.heads ?? 1;
-  const amount = current?.amount ?? (cycle ? Number(cycle.contribution_amount) * heads : null);
+  const amount = entry?.amount ?? (cycle ? Number(cycle.contribution_amount) * heads : null);
   const now = new Date();
-  const due = current?.due_date ? new Date(current.due_date) : null;
+  const due = entry?.dueDate ?? null;
 
-  function go() { router.push({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } }); }
+  // "View my contributions" (paid) goes to the history list; every other state goes to
+  // the state-aware payment screen (submit / review / overdue / rejected) — pointed at
+  // this exact period via `id` when there's a real row, or `due` when there isn't yet.
+  function go() {
+    if (!entry || kind === 'paid') {
+      router.push({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } });
+    } else if (entry.row) {
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, id: entry.row.id } });
+    } else {
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, due: entry.dueDate.toISOString() } });
+    }
+  }
 
   let label = 'Next payment';
   let btnLabel = 'Submit payment';
@@ -135,41 +145,41 @@ function StandingCard({ groupId }: { groupId: string }) {
 
   if (!cycle) {
     meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>This group has no active contribution cycle right now.</Text>;
-  } else if (!current) {
+  } else if (!entry) {
     meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>No contribution period has been recorded yet.</Text>;
-  } else if (current.status === 'approved') {
+  } else if (kind === 'paid') {
     btnLabel = 'View my contributions';
     ghost = true;
     meta1 = (
       <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
-        Posted{current.paid_date ? <> <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.paid_date)}</Text></> : null}
+        Posted{current?.paid_date ? <> <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.paid_date)}</Text></> : null}
       </Text>
     );
-  } else if (current.status === 'submitted') {
+  } else if (kind === 'review') {
     label = 'Submitted';
     btnLabel = 'View my proof';
     ghost = true;
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Awaiting officer approval{due ? <> · originally due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text></> : null}</Text>;
-  } else if (current.status === 'rejected') {
+    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Awaiting officer approval{due ? <> · originally due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text></> : null}</Text>;
+  } else if (kind === 'rejected') {
     label = 'Amount due';
     btnLabel = 'Upload new proof';
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text> · proof rejected</Text>;
+    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due?.toISOString() ?? null)}</Text> · proof rejected</Text>;
   } else if (due) {
     const diff = daysBetween(due, now);
-    if (current.is_late) {
+    if (kind === 'late') {
       const lateDays = Math.abs(diff);
       label = 'Amount due';
       btnLabel = 'Submit payment now';
       meta1 = (
         <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
-          Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text>
+          Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>
           {'  '}<Text style={{ fontSize: 12, lineHeight: 16, color: intent.danger.text }}>· {lateDays} day{lateDays === 1 ? '' : 's'} late{cycle.penalty_amount ? ' — a penalty may apply after review' : ''}</Text>
         </Text>
       );
     } else {
       meta1 = (
         <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
-          Due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text>
+          Due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>
           {diff > 0 ? ` · ${diff} day${diff === 1 ? '' : 's'} from now` : diff === 0 ? ' · today' : ''}
         </Text>
       );
@@ -177,7 +187,7 @@ function StandingCard({ groupId }: { groupId: string }) {
   }
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 9, gap: 10 }}>
         <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>{label}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: tone.soft, paddingVertical: 3.5, paddingHorizontal: 8, borderRadius: 20 }}>
@@ -244,27 +254,12 @@ function CycleDots({ groupId }: { groupId: string }) {
 
   if (!cycle) return null;
 
-  const sorted = [...rows].sort((a, b) => {
-    const ad = a.due_date ? new Date(a.due_date).getTime() : new Date(a.created_at).getTime();
-    const bd = b.due_date ? new Date(b.due_date).getTime() : new Date(b.created_at).getTime();
-    return ad - bd;
-  });
-
-  // One dot per period the cycle actually runs (e.g. 12 for a 12-month cycle) — periods
-  // the cycle hasn't reached yet (no contribution row generated) render as "upcoming".
-  // Falls back to just the rows we have when the cycle has no end_date to count periods from.
-  const periods = cyclePeriods(cycle);
-  const slots = periods.length || sorted.length;
-
-  const kinds = Array.from({ length: slots }, (_, i) => {
-    const r = sorted[i];
-    if (!r) return 'upcoming';
-    if (r.status === 'approved') return 'paid';
-    if (r.status === 'submitted') return 'review';
-    if (r.status === 'rejected') return 'late';
-    if (r.status === 'pending' && r.is_late) return 'late';
-    return 'due';
-  });
+  // A "rejected" period reads as the same red dot as "late" here — the dot strip
+  // only distinguishes 5 colors; the contributions list is where rejected vs.
+  // actually-overdue gets its own icon.
+  const timeline = buildTimeline(cycle, rows, membership?.heads ?? 1);
+  const slots = timeline.length;
+  const kinds = timeline.map((p) => (p.kind === 'rejected' ? 'late' : p.kind));
 
   const counts = kinds.reduce<Record<string, number>>((acc, k) => ({ ...acc, [k]: (acc[k] ?? 0) + 1 }), {});
   const summary = [
@@ -275,7 +270,7 @@ function CycleDots({ groupId }: { groupId: string }) {
   ].filter(Boolean).join(' · ') || 'No periods recorded yet';
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, CARD_SHADOW]}>
       {slots ? (
         <View style={{ flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 14 }}>
           {kinds.map((k, i) => (
@@ -314,7 +309,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 function Stat({ label, value, sub }: { label: string; value: ReactNode; sub: string }) {
   return (
-    <View style={[{ flex: 1, backgroundColor: CARD_BG, borderRadius: 16, padding: 15 }, shadowToken.card]}>
+    <View style={[{ flex: 1, backgroundColor: CARD_BG, borderRadius: 16, padding: 15 }, CARD_SHADOW]}>
       <Text variant="overline" color="muted">{label}</Text>
       <Text style={{ fontSize: 21, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, letterSpacing: -0.4 }}>{value}</Text>
       <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{sub}</Text>
@@ -351,7 +346,7 @@ function FundComposition({ groupId }: { groupId: string }) {
 
   if (fund.loading) {
     return (
-      <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17, alignItems: 'center' }, shadowToken.card]}>
+      <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17, alignItems: 'center' }, CARD_SHADOW]}>
         <ActivityIndicator color={semantic.brand} />
       </View>
     );
@@ -364,7 +359,7 @@ function FundComposition({ groupId }: { groupId: string }) {
   const lentPct = 100 - cashPct;
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, CARD_SHADOW]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 13 }}>
         <Text variant="label">Total fund value</Text>
         <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(total)}</Text>
@@ -408,7 +403,7 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
   const entries = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: entries.length ? 6 : 20 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: entries.length ? 6 : 20 }, CARD_SHADOW]}>
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
@@ -476,7 +471,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
           <Pressable
             key={a.label}
             onPress={() => onTilePress(a)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: CARD_BG, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
+            style={[{ width: '23%', borderRadius: 18, backgroundColor: CARD_BG, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, CARD_SHADOW]}
           >
             <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 10, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>

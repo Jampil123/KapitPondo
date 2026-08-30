@@ -18,8 +18,13 @@ export function toE164PH(raw: string): string | null {
   return null;
 }
 
-/** Pretty form for display: +63 917 123 4567 */
-export function formatPH(e164: string): string {
-  const m = e164.match(/^\+63(\d{3})(\d{3})(\d{4})$/);
-  return m ? `+63 ${m[1]} ${m[2]} ${m[3]}` : e164;
+/**
+ * Pretty form for display: +63 917 123 4567. Accepts whatever shape the
+ * number happens to be stored in (some rows are missing the leading "+"),
+ * normalizing through toE164PH first so the 3-3-4 grouping still applies.
+ */
+export function formatPH(raw: string): string {
+  const e164 = raw.startsWith('+') ? raw : toE164PH(raw);
+  const m = e164?.match(/^\+63(\d{3})(\d{3})(\d{4})$/);
+  return m ? `+63 ${m[1]} ${m[2]} ${m[3]}` : raw;
 }

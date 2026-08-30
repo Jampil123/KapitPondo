@@ -1,25 +1,3 @@
-/**
- * features/profile/ProfileBody.tsx
- * ----------------------------------------------------------------------------
- * Shared profile content, restructured per the kapitpondo-profile reference:
- * a gradient identity band, a verification-state card that leads (it's the
- * one thing that gates loans/group-creation/officer roles per §1.3), real
- * per-group role pills, an Account section, and Support/Sign-out. Reused by
- * both the account-level profile screen (groups/profile.tsx, its own
- * BottomNav) and the group-scoped one ([groupId]/profile.tsx, the group's
- * own nav bar) — each host screen supplies its own back/header chrome, so
- * this component doesn't duplicate a back button inside the band.
- *
- * What's real vs. honestly stubbed:
- *   avatar/name/phone/verification → useAuth().member          ✅ real
- *   verification 4-state card       → member.verification_status ✅ real (unverified/pending/verified/rejected)
- *   "My groups" + role pills        → useGroups()                ✅ real (one real role per membership — no group shows two role pills, unlike the mockup's example, since a membership has exactly one role field)
- *   email "Not set" pill            → member.email                ✅ real
- *   app version                     → expo-constants              ✅ real (not a hardcoded string)
- *   Notifications                   → kept as ONE row to the real Notification Center — the reference's 3 toggles would need a per-category preferences API that doesn't exist; a fake toggle that silently does nothing is worse than not having one
- *   Login activity / consent date / Download my records / Change password / Help / Feedback
- *                                    → no backing API found for any of these; kept as real, tappable rows using this codebase's own "Coming soon" convention (see soon() below) rather than inventing device counts, consent timestamps, or a fake screen
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -78,6 +56,7 @@ export function ProfileBody() {
   const { member, signOut, refreshMember } = useAuth();
   const { groups, loading: groupsLoading } = useGroups();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [bandHeight, setBandHeight] = useState(150);
 
   const status = member?.verification_status ?? 'unverified';
   const vmeta = VERIFY_META[status] ?? VERIFY_META.unverified;
@@ -115,18 +94,20 @@ export function ProfileBody() {
       {
         text: 'Sign Out',
         style: 'destructive',
-        // AuthContext's signingOut flag drives a full-screen loader in
-        // RootNavigator (app/_layout.tsx) for the whole redirect — this
-        // screen may keep rendering with `member` already cleared to null
-        // for a moment, but that's covered by the overlay, not visible.
+
         onPress: () => signOut(),
       },
     ]);
   }
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-      <LinearGradient colors={['#4C7C90', semantic.brandDark, '#35606F']} style={{ paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}>
+    <View style={{ flex: 1, backgroundColor: semantic.background }}>
+      {/* Fixed behind the scroll content — stays put while the white sheet below scrolls up over it. */}
+      <LinearGradient
+        colors={['#4C7C90', semantic.brandDark, '#35606F']}
+        onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
+      >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
           <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
             <Avatar name={member?.full_name} uri={member?.avatar_url} size={64} />
@@ -141,7 +122,7 @@ export function ProfileBody() {
             </View>
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
+            <Text style={{ fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
             <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
               {member?.phone ? formatPH(member.phone) : 'No phone on file'}
             </Text>
@@ -156,7 +137,9 @@ export function ProfileBody() {
         </View>
       </LinearGradient>
 
-      <View style={{ backgroundColor: semantic.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -18, padding: 18, gap: 20 }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+        <View style={{ height: bandHeight }} />
+        <View style={{ backgroundColor: semantic.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -18, padding: 18, gap: 20 }}>
 
         {/* Verification state — leads because it gates what the account can do */}
         <View style={[{ backgroundColor: vtone.soft, borderRadius: 18, padding: 16 }, shadowToken.card]}>
@@ -289,7 +272,8 @@ export function ProfileBody() {
         <Text variant="caption" color="muted" style={{ textAlign: 'center', lineHeight: 17 }}>
           KapitPondo records money that moves outside the app.{'\n'}It never holds or transfers your funds.
         </Text>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 }

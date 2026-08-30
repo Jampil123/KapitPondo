@@ -146,7 +146,7 @@ async function rejectMember(groupId, memberId, reason) {
 async function listGroupMembers(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, member_id, role, status, joined_at, members!memberships_member_id_fkey(id, full_name, email, verification_status)')
+    .select('id, member_id, role, status, heads, joined_at, members!memberships_member_id_fkey(id, full_name, email, verification_status)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('joined_at', { ascending: true, nullsFirst: true });

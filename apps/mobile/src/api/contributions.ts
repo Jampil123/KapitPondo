@@ -16,7 +16,10 @@
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-export type ContributionStatus = 'pending' | 'submitted' | 'approved' | 'rejected';
+// 'late' is set only by the server's lazy penalty sweep (penalties.service.js) —
+// a companion row for a missed period, created the first time an officer views
+// the group's contributions list after the due date passes.
+export type ContributionStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'late';
 export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
 export interface Contribution {
@@ -35,6 +38,8 @@ export interface Contribution {
   proof_signed_url: string | null;
   external_reference: string | null;
   created_at: string;
+  /** Bumped by rejectContribution() — the only timestamp we have for "when was this returned". */
+  updated_at: string;
   /** Set by rejectContribution(); the API already selects '*', this type just didn't list it. */
   rejection_reason: string | null;
   /** Who approved this contribution — null until an officer confirms it. */

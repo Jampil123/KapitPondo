@@ -5,9 +5,20 @@
  * wire in) — newest first, tap to mark read, "Mark all read" in the header.
  * Reads from NotificationsContext, which keeps the list live over Supabase
  * Realtime — no local fetch/refetch of its own.
+ *
+ * Scoped to the group it was opened from (DashboardHeader passes its own
+ * groupId): only that group's notifications plus account-level ones
+ * (group_id null, e.g. identity verification results) show here. Previously
+ * this always listed every notification across every group the member
+ * belongs to, so Group A's bell opened a list containing Group B's items too.
+ * "Mark all read" is scoped the same way — it marks only what's visible here,
+ * not the member's entire notification history, since the backend's
+ * read-all endpoint has no group filter of its own.
  */
+import { useMemo } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { BellOff, CheckCircle2, XCircle, Bell } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
@@ -55,11 +66,26 @@ function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
 }
 
 export default function Notifications() {
-  const { notifications, unreadCount, loading, error, markRead, markAllRead } = useNotifications();
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+  const { notifications: allNotifications, loading, error, markRead, markAllRead } = useNotifications();
+
+  const notifications = useMemo(
+    () => (groupId ? allNotifications.filter((n) => n.group_id === null || n.group_id === groupId) : allNotifications),
+    [allNotifications, groupId],
+  );
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   async function onPressRow(n: Notification) {
     if (n.is_read) return;
     await markRead(n.id);
+  }
+
+  async function onMarkAllRead() {
+    // Scoped: mark only what's shown here, not every unread notification the
+    // member has across every group — the backend's read-all endpoint has no
+    // group filter, so a plain markAllRead() would over-mark other groups.
+    if (!groupId) return markAllRead();
+    await Promise.all(notifications.filter((n) => !n.is_read).map((n) => markRead(n.id)));
   }
 
   return (
@@ -69,7 +95,7 @@ export default function Notifications() {
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
         right={
           unreadCount > 0 ? (
-            <Pressable onPress={markAllRead} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+            <Pressable onPress={onMarkAllRead} hitSlop={8} style={{ paddingHorizontal: 8 }}>
               <Text variant="label" color="brand" style={{ fontSize: 13 }}>Mark all read</Text>
             </Pressable>
           ) : undefined

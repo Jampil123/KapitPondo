@@ -2,24 +2,23 @@
  * services/api/src/routes/admin/verifications.js
  * ----------------------------------------------------------------------------
  * The core Sysadmin workflow: list the verification queue, view an applicant
- * (with a short-lived SIGNED URL for the private ID image), and approve/reject.
- * Every decision writes a system_audit_log row.
+ * (with short-lived SIGNED URLs for the private ID + selfie images), and
+ * approve/reject. Every decision writes a system_audit_log row.
  *
- * ASSUMPTIONS (adjust to your real schema): identity lives on `profiles` with
- * `id` (= auth user id), `full_name`, `mobile_number`, `verification_status`,
- * a submitted-at timestamp, and an ID document path in the private
- * `id-documents` bucket. The path column name is auto-detected below.
+ * Identity lives on `members` (supabase/migrations/0001_initial_schema.sql,
+ * 0013_identity_fields.sql, 0032_verification_queue_health.sql) — this route
+ * previously targeted a `profiles` table/columns that don't exist anywhere in
+ * the schema (id_document_path, id_submitted_at, mobile_number, reject_reason),
+ * so every request here 500'd. Fixed to the real table + column names, and the
+ * response shapes now match what VerificationsPage.tsx actually reads
+ * ({ members } from the list, { member: {...} } from the detail).
  */
 const { Router } = require('express');
 const { supabaseAdmin } = require('../../lib/supabaseAdmin');
 
 const router = Router();
-const ID_BUCKET = 'id-documents';
+const ID_BUCKET = 'id-documents'; // private bucket — see apps/mobile/src/lib/upload.ts
 const SIGNED_URL_TTL = 60; // seconds
-
-function idDocPath(row) {
-  return row.id_document_path || row.id_document_url || row.id_doc_path || row.id_document || null;
-}
 
 async function writeAudit(actorId, action, targetId, metadata) {
   await supabaseAdmin.from('system_audit_log').insert({
@@ -31,45 +30,53 @@ async function writeAudit(actorId, action, targetId, metadata) {
   });
 }
 
+async function signPath(path) {
+  if (!path) return null;
+  const { data: signed } = await supabaseAdmin.storage.from(ID_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
+  return (signed && signed.signedUrl) || null;
+}
+
 // GET /admin/verifications?status=pending
 router.get('/', async (req, res) => {
   const status = req.query.status || 'pending';
-  const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .select('*')
-    .eq('verification_status', status)
-    .order('id_submitted_at', { ascending: true });
+  let query = supabaseAdmin.from('members').select('*').order('submitted_at', { ascending: true, nullsFirst: false });
+  if (status !== 'all') query = query.eq('verification_status', status);
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ verifications: data || [] });
+  res.json({ members: data || [] });
 });
 
-// GET /admin/verifications/:id  → applicant + signed ID image URL
+// GET /admin/verifications/:id  → applicant + signed ID + selfie image URLs
 router.get('/:id', async (req, res) => {
   const { data: row, error } = await supabaseAdmin
-    .from('profiles')
+    .from('members')
     .select('*')
     .eq('id', req.params.id)
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
   if (!row) return res.status(404).json({ error: 'Not found' });
 
-  let id_document_signed_url = null;
-  const path = idDocPath(row);
-  if (path) {
-    const { data: signed } = await supabaseAdmin.storage.from(ID_BUCKET).createSignedUrl(path, SIGNED_URL_TTL);
-    id_document_signed_url = (signed && signed.signedUrl) || null;
-    await writeAudit(req.admin.user_id, 'account.id_viewed', row.id, { path });
+  const id_document_signed_url = await signPath(row.id_document_url);
+  const selfie_signed_url = await signPath(row.selfie_url);
+  if (id_document_signed_url || selfie_signed_url) {
+    await writeAudit(req.admin.user_id, 'account.id_viewed', row.id, {
+      id_document_url: row.id_document_url,
+      selfie_url: row.selfie_url,
+    });
   }
 
-  res.json({ applicant: row, id_document_signed_url, signed_url_ttl: SIGNED_URL_TTL });
+  res.json({
+    member: { ...row, id_document_signed_url, selfie_signed_url },
+    signed_url_ttl: SIGNED_URL_TTL,
+  });
 });
 
 // POST /admin/verifications/:id/approve
 router.post('/:id/approve', async (req, res) => {
   const now = new Date().toISOString();
   const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .update({ verification_status: 'verified', verified_by: req.admin.user_id, verified_at: now, reject_reason: null })
+    .from('members')
+    .update({ verification_status: 'verified', verified_by: req.admin.user_id, verified_at: now, verification_rejection_reason: null })
     .eq('id', req.params.id)
     .eq('verification_status', 'pending')
     .select('id, verification_status')
@@ -88,8 +95,8 @@ router.post('/:id/reject', async (req, res) => {
 
   const now = new Date().toISOString();
   const { data, error } = await supabaseAdmin
-    .from('profiles')
-    .update({ verification_status: 'rejected', verified_by: req.admin.user_id, verified_at: now, reject_reason: reason })
+    .from('members')
+    .update({ verification_status: 'rejected', verified_by: req.admin.user_id, verified_at: now, verification_rejection_reason: reason })
     .eq('id', req.params.id)
     .eq('verification_status', 'pending')
     .select('id, verification_status')

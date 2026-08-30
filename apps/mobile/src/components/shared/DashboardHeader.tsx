@@ -3,15 +3,18 @@
  * ----------------------------------------------------------------------------
  * Reusable greeting header for ALL role dashboards: brand logo + "Kumusta,
  * {name}!" with the group's name underneath, plus a bell (unread count
- * badge). Bell -> Notification Center, badge reflects NotificationsContext's
- * live (realtime-updated) unread count (capped "9+"/"99+" past two/three
- * digits). Which role the caller is viewing as is shown by the RoleSwitch
- * pill in [groupId]/index.tsx instead of repeated here.
+ * badge). Bell -> Notification Center, scoped to THIS group — the badge only
+ * counts notifications whose group_id matches this group (plus account-level
+ * ones with a null group_id, e.g. identity verification results, which apply
+ * everywhere). Previously this showed the unread count across every group the
+ * member belongs to, so Group A's badge included Group B's unread items.
+ * Which role the caller is viewing as is shown by the RoleSwitch pill in
+ * [groupId]/index.tsx instead of repeated here.
  *
  *   <DashboardHeader group={group} member={member} roleLabel="Organizer" />
  */
 import { View, Pressable } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { LogoMark } from './ScreenHeader';
@@ -33,7 +36,9 @@ export function DashboardHeader({
   member: Member | null;
   roleLabel: string;
 }) {
-  const { unreadCount } = useNotifications();
+  const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+  const { notifications } = useNotifications();
+  const unreadCount = notifications.filter((n) => !n.is_read && (n.group_id === null || n.group_id === groupId)).length;
   const hasUnread = unreadCount > 0;
 
   return (
@@ -45,7 +50,7 @@ export function DashboardHeader({
         <Text variant="caption" color="secondary" style={{ fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
       </View>
 
-      <Pressable onPress={() => router.push('/(app)/notifications' as any)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable onPress={() => router.push({ pathname: '/(app)/notifications' as any, params: { groupId } })} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
         <Bell size={22} color={semantic.textPrimary} />
         {hasUnread ? (
           <View

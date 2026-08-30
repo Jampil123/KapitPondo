@@ -41,13 +41,26 @@ function monthRange(now = new Date()) {
 // for each active membership with no submitted/approved contribution for the
 // current period past that due day, charges a penalty (idempotent — running
 // this again the same period is a no-op for members already flagged).
+//
+// Also excludes cycles outside their own [start_date, end_date] window —
+// createCycle() marks a brand-new cycle 'active' immediately even when its
+// start_date is in the future (TC-011), and currentPeriodDueDate() below
+// only knows "today's calendar month + contribution_due_day," with no idea
+// what cycle it's being asked about. Without this guard, a cycle scheduled
+// to start next month gets checked against THIS month's due day and flagged
+// late for a period that doesn't exist yet. Same idea for end_date: nothing
+// in this stack auto-closes a cycle once it ends (no cron), so a status
+// still reading 'active' past end_date shouldn't be checked either.
 async function checkLatePenalties(groupId) {
+  const todayStr = new Date().toISOString().slice(0, 10);
   const { data: cycles, error: cyclesErr } = await supabase
     .from('cycles')
-    .select('id, contribution_amount, penalty_amount, contribution_due_day')
+    .select('id, contribution_amount, penalty_amount, contribution_due_day, start_date, end_date')
     .eq('group_id', groupId)
     .eq('status', 'active')
-    .not('contribution_due_day', 'is', null);
+    .not('contribution_due_day', 'is', null)
+    .lte('start_date', todayStr)
+    .or(`end_date.is.null,end_date.gte.${todayStr}`);
   if (cyclesErr) throw cyclesErr;
   if (!cycles?.length) return [];
 
@@ -56,6 +69,12 @@ async function checkLatePenalties(groupId) {
   const created = [];
 
   for (const cycle of cycles) {
+    // Belt-and-suspenders — the query above already filters this, but this
+    // is the exact spot the bug manifested, so the invariant is worth
+    // stating here too in case the query filter is ever loosened later.
+    if (cycle.start_date && now < new Date(cycle.start_date)) continue; // cycle hasn't started
+    if (cycle.end_date && now > new Date(cycle.end_date)) continue; // cycle window closed
+
     const dueDate = currentPeriodDueDate(cycle.contribution_due_day);
     if (now < dueDate) continue; // not due yet this period
 

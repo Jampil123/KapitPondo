@@ -24,6 +24,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Modal } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@/hooks/useApi';
 import {
@@ -32,7 +33,14 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { semantic, shadowToken, intent } from '@/theme/colors';
+import { semantic, intent } from '@/theme/colors';
+
+// A softer, lower-contrast shadow than the shared shadowToken.card (opacity
+// 0.07) — barely-there lift instead of a visibly dark edge under each card.
+const SOFT_SHADOW = {
+  shadowColor: '#2A3E4B', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
+  elevation: 1, boxShadow: '0px 2px 10px rgba(42,62,75,0.04)',
+} as const;
 import { formatPeso } from '@/lib/money';
 import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useLoans, useLoanEligibility } from '@/features/lending/lending.hooks';
@@ -40,7 +48,8 @@ import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { listPendingMembers } from '@/api/groups';
+import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
+import { listPendingMembers, listMembers } from '@/api/groups';
 import type { Loan } from '@/api/lending';
 import type { Penalty } from '@/api/penalties';
 
@@ -76,7 +85,10 @@ function FundCard({ groupId }: { groupId: string }) {
   const lentPct = 100 - cashPct;
 
   return (
-    <View style={[{ backgroundColor: semantic.dashCard, borderRadius: 20, padding: 15 }, shadowToken.card]}>
+    <LinearGradient
+      colors={[semantic.brand, semantic.dashCard]}
+      style={[{ borderRadius: 20, padding: 15 }, SOFT_SHADOW]}
+    >
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
         <Text variant="overline" style={{ color: 'rgba(255,255,255,0.55)' }}>Fund value</Text>
         {cycle ? (
@@ -110,7 +122,7 @@ function FundCard({ groupId }: { groupId: string }) {
           <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(onLoan)}</Text>
         </View>
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
@@ -126,7 +138,7 @@ function Chip({ tone, children }: { tone: 'pass' | 'fail' | 'warn'; children: Re
 
 function DecisionCard({ children, onPress }: { children: ReactNode; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.card]}>
+    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, SOFT_SHADOW]}>
       {children}
     </Pressable>
   );
@@ -208,7 +220,7 @@ function PenaltyDecisionCard({ penalty, onPress }: { penalty: Penalty; onPress: 
 
 function EmptyQueue({ decidedCount }: { decidedCount: number }) {
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, SOFT_SHADOW]}>
       <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
         <CheckCircle2 size={18} color={intent.success.text} />
       </View>
@@ -232,7 +244,7 @@ const TONE: Record<Tone, { bg: string; fg: string; dot: string }> = {
 function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; count: number; label: string; tone: Tone; onPress: () => void }) {
   const t = TONE[tone];
   return (
-    <Pressable onPress={onPress} style={[{ flex: 1, backgroundColor: semantic.surface, borderRadius: 16, padding: 13 }, shadowToken.card]}>
+    <Pressable onPress={onPress} style={[{ flex: 1, backgroundColor: semantic.surface, borderRadius: 16, padding: 13 }, SOFT_SHADOW]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
         <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
           <Icon size={19} color={t.fg} strokeWidth={1.8} />
@@ -267,7 +279,7 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
       <SectionHead title="Needs your decision" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} hot={total > 0} />
 
       {loading ? (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, SOFT_SHADOW]}>
           <ActivityIndicator color={semantic.brand} />
         </View>
       ) : total === 0 ? (
@@ -296,54 +308,87 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
 }
 
 /* ---------------- This period's collection — the fact the old screen was missing ---------------- */
+// The denominator here used to be "members with a contribution row for this
+// cycle" — but a member who hasn't paid a single period yet has NO row at
+// all (nothing auto-creates one; see periods.ts), so they were silently
+// dropped from both the count and the peso total instead of showing up as
+// outstanding. Pulled from the full active roster (listMembers) instead.
+// Each member's status comes from buildTimeline() at THE SAME calendar
+// period index for everyone (currentPeriodIndex) — not each member's own
+// first-unpaid period, which would make a member's payment disappear from
+// "this month" the instant it's approved and their own progress rolls
+// forward to next month.
 function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string) => void }) {
   const { cycle } = useActiveCycle(groupId);
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
+  const membersQ = useQuery(() => listMembers(groupId), [groupId]);
 
   const rows = contribs.data ?? [];
-  const currentRows = useMemo(() => {
-    const latestByMember = new Map<string, (typeof rows)[number]>();
-    for (const r of rows) {
-      const existing = latestByMember.get(r.membership_id);
-      const t = new Date(r.due_date ?? r.created_at).getTime();
-      const existingT = existing ? new Date(existing.due_date ?? existing.created_at).getTime() : -Infinity;
-      if (!existing || t > existingT) latestByMember.set(r.membership_id, r);
-    }
-    return [...latestByMember.values()];
-  }, [rows]);
-  const currentDue = currentRows.reduce<string | null>((latest, r) => {
-    if (!r.due_date) return latest;
-    return !latest || new Date(r.due_date) > new Date(latest) ? r.due_date : latest;
-  }, null);
-  const expected = currentRows.reduce((s, r) => s + Number(r.amount), 0);
-  const collected = currentRows.filter((r) => r.status === 'approved').reduce((s, r) => s + Number(r.amount), 0);
-  const collectedCount = currentRows.filter((r) => r.status === 'approved').length;
-  const overdueRows = currentRows.filter((r) => r.status === 'pending' && r.is_late);
-  const pct = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
+  const roster = membersQ.data ?? [];
 
-  if (!cycle || currentRows.length === 0) return null;
+  const summary = useMemo(() => {
+    if (!cycle || roster.length === 0) return null;
+    const rowsByMember = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const list = rowsByMember.get(r.membership_id);
+      if (list) list.push(r); else rowsByMember.set(r.membership_id, [r]);
+    }
+
+    // Expected is every active member's heads × this cycle's per-head rate — a plain
+    // roster total, independent of anyone's individual payment history. (What each
+    // member has actually paid can differ from that, which is exactly the gap this
+    // widget exists to show — deriving "expected" from paid amounts would hide it.)
+    const totalHeads = roster.reduce((s, m) => s + m.heads, 0);
+    const expected = totalHeads * Number(cycle.contribution_amount);
+
+    let collected = 0;
+    let collectedCount = 0;
+    let lateCount = 0;
+    let latestDue: string | null = null;
+
+    // The SAME calendar period for every member — not each member's own first
+    // unpaid one. Otherwise a member who's already paid this month has their
+    // "current" period roll forward to next month the instant it's approved,
+    // and their payment disappears from THIS month's collected total.
+    const periodIdx = currentPeriodIndex(cycle);
+
+    for (const m of roster) {
+      const timeline = buildTimeline(cycle, rowsByMember.get(m.id) ?? [], m.heads);
+      const entry = periodIdx !== null ? (timeline[periodIdx] ?? null) : (timeline[timeline.length - 1] ?? null);
+      if (!entry) continue; // open-ended cycle, this member has no rows yet — nothing to compare against
+      if (entry.kind === 'paid') { collected += entry.amount; collectedCount++; }
+      if (entry.kind === 'late') lateCount++;
+      if (!latestDue) latestDue = entry.dueDate.toISOString(); // same period for everyone now, so the same due date
+    }
+
+    return { expected, collected, collectedCount, lateCount, latestDue, totalMembers: roster.length };
+  }, [cycle, roster, rows]);
+
+  if (!cycle || !summary) return null;
+
+  const pct = summary.expected > 0 ? Math.min(100, Math.round((summary.collected / summary.expected) * 100)) : 0;
 
   return (
     <>
-      <SectionHead title="This month's collection" aside={currentDue ? `Due ${shortDate(currentDue)}` : undefined} />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 17 }, shadowToken.card]}>
+      <SectionHead title="This month's collection" aside={summary.latestDue ? `Due ${shortDate(summary.latestDue)}` : undefined} />
+      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 17 }, SOFT_SHADOW]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 11 }}>
           <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>
-            {formatPeso(collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(expected)}</Text>
+            {formatPeso(summary.collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(summary.expected)}</Text>
           </Text>
-          <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>{collectedCount} of {currentRows.length} members</Text>
+          <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>{summary.collectedCount} of {summary.totalMembers} members</Text>
         </View>
         <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
           <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 5, backgroundColor: semantic.brand }} />
         </View>
 
-        {overdueRows.length > 0 ? (
+        {summary.lateCount > 0 ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 15, paddingTop: 14, borderTopWidth: 1, borderColor: semantic.border }}>
             <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: intent.danger.soft, alignItems: 'center', justifyContent: 'center' }}>
               <AlertTriangle size={15} color={intent.danger.text} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{overdueRows.length} member{overdueRows.length === 1 ? '' : 's'} overdue</Text>
+              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{summary.lateCount} member{summary.lateCount === 1 ? '' : 's'} overdue</Text>
               <Text variant="caption" color="secondary" style={{ fontSize: 10.5, lineHeight: 13, marginTop: 2 }}>Past the due date</Text>
             </View>
             <Pressable onPress={() => go('contributions/confirm')} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 13 }}>
@@ -449,7 +494,7 @@ function ManageSheet({ visible, onClose, go }: { visible: boolean; onClose: () =
               <Pressable
                 key={a.key}
                 onPress={() => { onClose(); go(a.key); }}
-                style={[{ flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: semantic.background, borderRadius: 14, padding: 13 }, shadowToken.card]}
+                style={[{ flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: semantic.background, borderRadius: 14, padding: 13 }, SOFT_SHADOW]}
               >
                 <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
                   <a.icon size={20} color={semantic.brandDark} />
@@ -474,7 +519,7 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
   const entries = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: entries.length ? 6 : 20 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: entries.length ? 6 : 20 }, SOFT_SHADOW]}>
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
@@ -530,7 +575,7 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
           <Pressable
             key={a.key}
             onPress={() => go(a.key)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
+            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, SOFT_SHADOW]}
           >
             <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>

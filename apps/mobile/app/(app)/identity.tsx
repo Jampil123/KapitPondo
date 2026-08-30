@@ -16,10 +16,11 @@
  *
  * Deps: expo-image-picker (npx expo install expo-image-picker)
  */
-import { useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, Modal } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, ScrollView, Pressable, Image, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -38,6 +39,29 @@ import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 
 const STEP_LABELS = ['Submit an ID', 'Take a Selfie', 'Personal Information', 'Review & Submit'];
+
+// Camera hand-off (launchCameraAsync backgrounds the app for the system camera)
+// can get the process killed and relaunched — on Android this happens under
+// memory pressure, and the Expo dev client can also force a full JS reload
+// when its Metro connection drops while backgrounded. Either way, a reload
+// wipes React state, so the wizard's progress is mirrored to AsyncStorage and
+// restored on mount rather than lost. Picked images aren't re-validated here —
+// expo-image-picker copies them into the app's own cache dir, which usually
+// survives a process restart; if a stale URI fails to load, the user just
+// re-picks that one photo, cheaper than losing the whole form.
+const DRAFT_KEY = 'identity_draft_v1';
+
+type IdentityDraft = {
+  step: number;
+  idType: string | null;
+  idImageUri: string | null;
+  selfieUri: string | null;
+  firstName: string; middleName: string; lastName: string; birthday: string;
+  nationality: string; email: string;
+  region: string; province: string; city: string; barangay: string;
+  streetAddress: string; zipCode: string;
+  sourceOfFunds: string | null; employmentStatus: string | null; occupation: string;
+};
 
 const ID_GUIDES = [
   'ID must be fully visible inside the frame',
@@ -134,6 +158,66 @@ export default function Identity() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Consent is deliberately NOT persisted — always re-check the box on a restored draft.
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(DRAFT_KEY);
+        if (raw) {
+          const d: Partial<IdentityDraft> = JSON.parse(raw);
+          if (d.step) setStep(d.step);
+          if (d.idType !== undefined) setIdType(d.idType);
+          if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
+          if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
+          if (d.firstName !== undefined) setFirstName(d.firstName);
+          if (d.middleName !== undefined) setMiddleName(d.middleName);
+          if (d.lastName !== undefined) setLastName(d.lastName);
+          if (d.birthday !== undefined) setBirthday(d.birthday);
+          if (d.nationality !== undefined) setNationality(d.nationality);
+          if (d.email !== undefined) setEmail(d.email);
+          if (d.region !== undefined) setRegion(d.region);
+          if (d.province !== undefined) setProvince(d.province);
+          if (d.city !== undefined) setCity(d.city);
+          if (d.barangay !== undefined) setBarangay(d.barangay);
+          if (d.streetAddress !== undefined) setStreetAddress(d.streetAddress);
+          if (d.zipCode !== undefined) setZipCode(d.zipCode);
+          if (d.sourceOfFunds !== undefined) setSourceOfFunds(d.sourceOfFunds);
+          if (d.employmentStatus !== undefined) setEmploymentStatus(d.employmentStatus);
+          if (d.occupation !== undefined) setOccupation(d.occupation);
+        }
+      } catch {
+        // Corrupt/unreadable draft — just start fresh.
+      } finally {
+        setHydrated(true);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Mirror progress to disk so a forced reload (see the comment on DRAFT_KEY
+  // above) resumes instead of starting over. Lightly debounced since this
+  // fires on every keystroke across the whole form.
+  useEffect(() => {
+    if (!hydrated) return;
+    const draft: IdentityDraft = {
+      step, idType, idImageUri, selfieUri,
+      firstName, middleName, lastName, birthday, nationality, email,
+      region, province, city, barangay, streetAddress, zipCode,
+      sourceOfFunds, employmentStatus, occupation,
+    };
+    const t = setTimeout(() => {
+      AsyncStorage.setItem(DRAFT_KEY, JSON.stringify(draft)).catch(() => {});
+    }, 400);
+    return () => clearTimeout(t);
+  }, [
+    hydrated, step, idType, idImageUri, selfieUri,
+    firstName, middleName, lastName, birthday, nationality, email,
+    region, province, city, barangay, streetAddress, zipCode,
+    sourceOfFunds, employmentStatus, occupation,
+  ]);
+
   async function pickIdImage() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
@@ -192,12 +276,21 @@ export default function Identity() {
         employment_status: employmentStatus ?? undefined,
         occupation: occupation.trim() || undefined,
       });
+      await AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
       router.replace('/(app)/pending' as any);
     } catch (e) {
       Alert.alert('Submission failed', (e as Error).message);
     } finally {
       setLoading(false);
     }
+  }
+
+  if (!hydrated) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background, alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color={semantic.brand} />
+      </SafeAreaView>
+    );
   }
 
   return (

@@ -78,8 +78,20 @@ export async function listPendingMembers(groupId: string) {
   const res = await api.get<{ members: unknown[] }>(`/api/groups/${groupId}/members/pending`);
   return res.members ?? [];
 }
+
+/** One row from GET /groups/:groupId/members (officer-only, full roster incl. heads). */
+export interface GroupMember {
+  id: string; // membership id
+  member_id: string;
+  role: GroupRole;
+  status: MembershipStatus;
+  heads: number;
+  joined_at: string | null;
+  members: { id: string; full_name: string | null; email: string | null; verification_status: string } | null;
+}
+
 export async function listMembers(groupId: string) {
-  const res = await api.get<{ members: unknown[] }>(`/api/groups/${groupId}/members`);
+  const res = await api.get<{ members: GroupMember[] }>(`/api/groups/${groupId}/members`);
   return res.members ?? [];
 }
 export function approveMember(groupId: string, memberId: string) {
