@@ -9,10 +9,16 @@
  */
 import { useCallback } from 'react';
 import { useQuery, useAction } from '../../hooks/useApi';
-import { listPenalties, waivePenalty, type PenaltyStatus } from '../../api/penalties';
+import { listPenalties, listMyPenalties, waivePenalty, type PenaltyStatus } from '../../api/penalties';
 
 export function usePenalties(groupId: string, status?: PenaltyStatus) {
   const fn = useCallback(() => listPenalties(groupId, status), [groupId, status]);
+  return useQuery(fn, [groupId, status], { table: 'penalties', filter: `group_id=eq.${groupId}` });
+}
+
+/** Member-safe: my own penalties only. */
+export function useMyPenalties(groupId: string, status?: PenaltyStatus) {
+  const fn = useCallback(() => listMyPenalties(groupId, status), [groupId, status]);
   return useQuery(fn, [groupId, status], { table: 'penalties', filter: `group_id=eq.${groupId}` });
 }
 

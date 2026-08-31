@@ -18,6 +18,23 @@ router.post('/groups/:groupId/penalties/check',
   }
 );
 
+// Member-safe: my own penalties only (e.g. for the reports screen's
+// "unsettled penalty" deduction) — no group-wide visibility.
+router.get('/groups/:groupId/penalties/mine',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const penalties = await service.listPenalties({
+        groupId: req.params.groupId,
+        membershipId: req.membership.id,
+        status: req.query.status,
+      });
+      res.json({ penalties });
+    } catch (err) { next(err); }
+  }
+);
+
 // List penalties (officers)
 router.get('/groups/:groupId/penalties',
   requireAuth,

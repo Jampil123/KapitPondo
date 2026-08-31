@@ -16,6 +16,8 @@ export interface GroupSummary {
   total_distributions: Money;
   available_cash: Money;
   active_members: number;
+  /** Sum of heads across active members — NOT active_members (a plain count). What year-end distribution actually splits available_cash by. */
+  total_heads: number;
   pending_loans: number;
 }
 

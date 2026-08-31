@@ -173,12 +173,13 @@ async function checkLatePenaltiesIfDue(groupId) {
   return created;
 }
 
-async function listPenalties({ groupId, status }) {
+async function listPenalties({ groupId, status, membershipId }) {
   let q = supabase
     .from('penalties')
     .select('*, membership:memberships!membership_id(member_id, members!member_id(full_name))')
     .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
+  if (membershipId) q = q.eq('membership_id', membershipId);
   const { data, error } = await q.order('created_at', { ascending: false });
   if (error) throw error;
   return data;

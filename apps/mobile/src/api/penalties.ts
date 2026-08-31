@@ -37,6 +37,12 @@ export async function listPenalties(groupId: string, status?: PenaltyStatus) {
   return res.penalties;
 }
 
+/** GET — member-safe: my own penalties only. Optional status filter (e.g. 'pending' for what's still unsettled). */
+export async function listMyPenalties(groupId: string, status?: PenaltyStatus) {
+  const res = await api.get<{ penalties: Penalty[] }>(`/api/groups/${groupId}/penalties/mine`, status ? { status } : undefined);
+  return res.penalties;
+}
+
 /** POST — waive a pending penalty, with a required reason (Owner only) — TC-017. */
 export function waivePenalty(groupId: string, penaltyId: string, reason: string) {
   return api.post<{ message: string; penalty: Penalty }>(
