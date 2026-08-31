@@ -73,6 +73,8 @@ export interface LoanPayment {
   due_date: string | null;
   paid_date: string | null;
   status: LoanPaymentStatus;
+  payment_method: PaymentMethod | null;
+  external_reference: string | null;
   proof_url: string | null;
   /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
   proof_signed_url: string | null;

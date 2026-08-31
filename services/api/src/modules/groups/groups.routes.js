@@ -168,4 +168,17 @@ router.delete('/groups/:groupId/members/:memberId', requireAuth,
   }
 );
 
+// Self-service: the caller leaves their own group. Blocked (409) if they're
+// the Owner, or have an active loan / unresolved penalty — see
+// leaveGroup()'s comment for why.
+router.post('/groups/:groupId/leave', requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      await service.leaveGroup(req.params.groupId, req.member.id);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  }
+);
+
 module.exports = router;

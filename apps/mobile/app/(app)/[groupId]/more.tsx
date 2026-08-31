@@ -8,15 +8,28 @@
  * OwnerDashboard's quick actions / stat tiles), so this screen renders
  * MEMBER_ITEMS unconditionally regardless of the caller's role.
  *
- * The "Dashboard" section mirrors every tile on the dashboard grid itself
- * (Contributions/Loans/Fund/Standing/Heads/Reports), so this screen doubles
- * as a full index of member-facing features, not just the overflow.
+ * Three sections: My records (my own dashboard-grid tiles + Proofs), Group
+ * (the group as a whole — who runs it, its fund), Support. "My Ledger &
+ * Reports" (reports/ledger.tsx) and "Approvals Trail" (activity.tsx) were
+ * dropped from here — the rebuilt Reports screen (key 'reports') now covers
+ * that ground properly (a real month-by-month chart and year-end estimate,
+ * where reports/ledger.tsx only had a placeholder for both), and Activity is
+ * still one tap away from there ("See all entries" on the statement) rather
+ * than needing its own top-level tile too.
+ *
+ * "Fund Ledger" routes to reports/group-ledger.tsx, rebuilt into a real
+ * GROUP-WIDE ledger any member can read (every posting, not just their
+ * own) — a confirmed transparency policy backed by a new member-safe route
+ * (GET /reports/fund-ledger). Previously pointed at fund/index.tsx (fund
+ * composition only, no transaction list) — that screen's content is also
+ * already shown inline on the dashboard itself, so it's not linked here
+ * anymore rather than duplicating a tile for it.
  */
 import { View, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  Users, ScrollText, Image as ImageIcon, History, Bell, LifeBuoy, UserCircle,
+  Users, Image as ImageIcon, LifeBuoy, UserCircle,
   ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Layers, BarChart3,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -24,22 +37,15 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 
 const MEMBER_ITEMS = [
-  // Every tile from the dashboard grid — everything is reachable from here
-  // even if it's also one tap away on the dashboard itself. Activity (moved
-  // off the grid to make room for Heads — see MemberDashboard.tsx) isn't
-  // repeated here since "Approvals Trail" below already routes there.
-  { icon: ArrowUpCircle, label: 'Contributions', key: 'contributions', section: 'Dashboard' },
-  { icon: Coins, label: 'Loans', key: 'loans', section: 'Dashboard' },
-  { icon: PiggyBank, label: 'Fund', key: 'fund', section: 'Dashboard' },
-  { icon: BadgeCheck, label: 'My Standing', key: 'standing', section: 'Dashboard' },
-  { icon: Layers, label: 'Heads', key: 'heads', section: 'Dashboard' },
-  { icon: BarChart3, label: 'Reports', key: 'reports', section: 'Dashboard' },
-  { icon: ScrollText, label: 'My Ledger & Reports', key: 'reports/ledger', section: 'My records' },
-  { icon: ImageIcon, label: 'My Proofs', key: 'proofs', section: 'My records' },
-  { icon: History, label: 'Approvals Trail', key: 'activity', section: 'My records' },
+  { icon: ArrowUpCircle, label: 'Contributions', key: 'contributions', section: 'My records' },
+  { icon: Coins, label: 'Loans', key: 'loans', section: 'My records' },
+  { icon: ImageIcon, label: 'Proofs', key: 'proofs', section: 'My records' },
+  { icon: BarChart3, label: 'Reports', key: 'reports', section: 'My records' },
+  { icon: Layers, label: 'Heads', key: 'heads', section: 'My records' },
+  { icon: BadgeCheck, label: 'My Standing', key: 'standing', section: 'My records' },
   { icon: Users, label: 'Group & Officers', key: 'group', section: 'Group' },
-  { icon: UserCircle, label: 'Profile & Settings', key: 'profile', section: 'Group' },
-  { icon: Bell, label: 'Notifications', key: 'notifications', section: 'Support', soon: true },
+  { icon: PiggyBank, label: 'Fund Ledger', key: 'reports/group-ledger', section: 'Group' },
+  { icon: UserCircle, label: 'Profile & Settings', key: 'profile', section: 'Support' },
   { icon: LifeBuoy, label: 'Help', key: 'help', section: 'Support', soon: true },
 ];
 

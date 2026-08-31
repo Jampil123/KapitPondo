@@ -1,29 +1,3 @@
-/**
- * app/(app)/[groupId]/reports/index.tsx — "My reports" (M8). Everything on
- * this screen is real data, with one deliberate adaptation from the design
- * it's built from:
- *
- * "If the cycle closed today" shows `available_cash × (my heads ÷ total
- * heads)`, not a "capital + profit − loan − penalty" breakdown. That's not a
- * simplification — it's what preview_distribution() actually pays out (see
- * migration 0028's comment on that function: "Allocates available cash
- * proportional to heads across every ACTIVE membership"). There is no
- * per-member capital/profit split and no loan/penalty netting at payout
- * time, so showing those as subtracted line items would describe a formula
- * this app doesn't run. The loan balance and any unsettled penalty are shown
- * as separate reminders instead, not folded into the estimate.
- *
- * Backend additions this screen needed (neither existed for a member before):
- *   - GET /penalties/mine — a member's own pending penalties (was officer-only).
- *   - group_summary() gained total_heads (was only a bare member COUNT,
- *     same class of bug as cycle_progress's heads fix in migration 0040) —
- *     needed for the estimate above.
- *
- * "Where my money sits" and "Month by month" are always THIS cycle
- * (buildTimeline() is inherently period-shaped) regardless of the This
- * cycle/All time toggle, which otherwise only affects the summary total and
- * the statement/export below it.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -195,15 +169,15 @@ export default function Reports() {
           {loading ? (
             <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
           ) : (
-            <Text style={{ fontSize: 32, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(capital)}</Text>
+            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(capital)}</Text>
           )}
-          <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>Capital you've put in — returned to you when the cycle closes</Text>
           <Split items={
             period === 'cycle'
               ? [{ k: 'Periods posted', v: `${posted.length} of ${timeline.length || '—'}` }, { k: 'My heads', v: String(heads) }]
               : [{ k: 'My heads', v: String(heads) }]
           } />
         </View>
+        <Text variant="caption" color="muted" style={{paddingTop: 11,lineHeight: 16, textAlign: 'justify'}}>Capital you've put in — returned to you when the cycle closes</Text>
 
         {/* ---------------- Period toggle ---------------- */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
@@ -249,18 +223,27 @@ export default function Reports() {
             {/* ---------------- Month by month ---------------- */}
             <SectionHead title="Period by period" aside={`${formatPeso(cycle.contribution_amount)} × ${heads} expected`} />
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 90 }}>
+              {/* Bars and labels are separate rows, each with their own fixed height —
+                  a bar at 100% filling one shared 90px box with its label stacked on
+                  top of it (via gap) has no room left for the label and overflows. */}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 70 }}>
                 {timeline.map((p) => {
                   const heightPct = p.kind === 'paid' || p.kind === 'review' ? 100 : p.kind === 'late' || p.kind === 'rejected' ? 4 : 14;
                   return (
-                    <View key={p.index} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%', gap: 5 }}>
+                    <View key={p.index} style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
                       <View style={{ width: '100%', height: `${heightPct}%`, minHeight: 4, borderRadius: 3, backgroundColor: KIND_TONE[p.kind] }} />
-                      <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
-                        {periodLabel(p.periodStart, cycle.frequency, true).slice(0, 1)}
-                      </Text>
                     </View>
                   );
                 })}
+              </View>
+              <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
+                {timeline.map((p) => (
+                  <View key={p.index} style={{ flex: 1, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
+                      {periodLabel(p.periodStart, cycle.frequency, true).slice(0, 1)}
+                    </Text>
+                  </View>
+                ))}
               </View>
               <Text variant="caption" color="secondary" style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border, lineHeight: 17 }}>
                 Green periods are posted, blue is under review, red is late or returned.

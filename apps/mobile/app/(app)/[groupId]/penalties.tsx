@@ -1,14 +1,3 @@
-/**
- * app/(app)/[groupId]/penalties.tsx — Penalties Review (M5.4, TC-017/TC-039).
- * Wired to the real API: list → usePenalties(groupId, status); waive → a
- * required-reason prompt calling useWaivePenalty (Owner only — the backend
- * 403s anyone else, but there's nothing gating the button client-side here
- * since only the Owner's own dashboard links to this screen).
- *
- * There's still no "pay it off" flow (see api/penalties.ts — `ledger_entry_id`
- * is only ever set once a penalty is actually paid, and nothing does that
- * yet), so a pending penalty can currently only be resolved by waiving it.
- */
 import { useState } from 'react';
 import { View, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

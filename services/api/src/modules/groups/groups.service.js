@@ -35,7 +35,7 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, role, status, heads, groups(*, owner:members!groups_owner_id_fkey(full_name))')
+    .select('id, role, status, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name))')
     .eq('member_id', memberId)
     .in('status', ['active', 'pending']);
   if (error) throw error;
@@ -161,7 +161,7 @@ async function listGroupMembers(groupId) {
 async function listOfficers(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('role, members!memberships_member_id_fkey(full_name)')
+    .select('role, members!memberships_member_id_fkey(full_name, verification_status)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .neq('role', 'member')
@@ -176,22 +176,27 @@ async function listOfficers(groupId) {
   if (countErr) throw countErr;
 
   return {
-    officers: data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null })),
+    // verified is a plain boolean here, not the raw verification_status —
+    // member-safe rows stay minimal (name + role + duty context), same
+    // reasoning as leaving out email/phone.
+    officers: data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null, verified: m.members?.verification_status === 'verified' })),
     member_count: count ?? 0,
   };
 }
 
-// Member-safe directory — every active member's name + role (no email/phone),
-// unlike listGroupMembers (officer-only, includes email/verification_status).
+// Member-safe directory — every active member's name + role + heads (no
+// email/phone/verification_status), unlike listGroupMembers (officer-only).
+// heads is included because it determines year-end profit share — every
+// member has a legitimate interest in seeing it, unlike payment history.
 async function listMemberDirectory(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('role, members!memberships_member_id_fkey(full_name)')
+    .select('member_id, role, heads, members!memberships_member_id_fkey(full_name)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('joined_at', { ascending: true, nullsFirst: true });
   if (error) throw error;
-  return data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null }));
+  return data.map((m) => ({ member_id: m.member_id, role: m.role, heads: m.heads, full_name: m.members?.full_name ?? null }));
 }
 
 async function updateMemberRole(groupId, memberId, role) {
@@ -226,4 +231,62 @@ async function removeMember(groupId, memberId) {
   if (error) throw error;
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember };
+// Self-service: a member leaves their own group. Blocked while they have an
+// active/approved loan or an unresolved late-contribution penalty — same
+// checks lending.service.js's checkEligibilityForMembership runs before a
+// loan, kept as separate small queries here rather than importing across
+// modules for two simple selects. Owner is blocked entirely — leaving would
+// orphan the group; ownership transfer isn't a feature yet.
+async function checkLeaveBlockers(membershipId) {
+  const reasons = [];
+
+  const { data: activeLoans, error: lErr } = await supabase
+    .from('loans')
+    .select('id')
+    .eq('membership_id', membershipId)
+    .in('status', ['approved', 'active']);
+  if (lErr) throw lErr;
+  if (activeLoans?.length) reasons.push('You have an active loan — settle it before leaving.');
+
+  const { data: pendingPenalties, error: pErr } = await supabase
+    .from('penalties')
+    .select('id')
+    .eq('membership_id', membershipId)
+    .eq('status', 'pending');
+  if (pErr) throw pErr;
+  if (pendingPenalties?.length) reasons.push('You have an unresolved late-contribution penalty — settle it before leaving.');
+
+  return reasons;
+}
+
+async function leaveGroup(groupId, memberId) {
+  const { data: membership, error: mErr } = await supabase
+    .from('memberships')
+    .select('id, role, status')
+    .eq('group_id', groupId)
+    .eq('member_id', memberId)
+    .maybeSingle();
+  if (mErr) throw mErr;
+  if (!membership || membership.status !== 'active') {
+    throw Object.assign(new Error('You are not an active member of this group.'), { status: 404 });
+  }
+  if (membership.role === 'owner') {
+    throw Object.assign(new Error('The Owner cannot leave the group. Transfer ownership first.'), { status: 409 });
+  }
+
+  const reasons = await checkLeaveBlockers(membership.id);
+  if (reasons.length) {
+    throw Object.assign(new Error(reasons.join(' ')), { status: 409 });
+  }
+
+  const { data, error } = await supabase
+    .from('memberships')
+    .update({ status: 'exited' })
+    .eq('id', membership.id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup };

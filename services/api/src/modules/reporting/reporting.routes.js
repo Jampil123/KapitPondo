@@ -49,6 +49,29 @@ router.get(
   }
 );
 
+// Member-safe, GROUP-WIDE ledger — every posting in the group, by name and
+// amount, deliberately NOT self-scoped (unlike /reports/ledger below). This
+// is a real transparency policy, not an oversight: any active member can see
+// every other member's individual contribution/loan amounts here. Proof
+// images aren't exposed by this (or any ledger route) — a ledger row only
+// carries source_type/source_id, and fetching the underlying proof still
+// goes through the normal per-record access rules.
+router.get(
+  '/groups/:groupId/reports/fund-ledger',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const ledger = await service.groupLedger({
+        groupId: req.params.groupId,
+        entryType: req.query.entry_type,
+        limit: req.query.limit ? Number(req.query.limit) : 300,
+      });
+      res.json({ ledger });
+    } catch (err) { next(err); }
+  }
+);
+
 // The ledger feed. Members see only their own entries; officers see all.
 router.get(
   '/groups/:groupId/reports/ledger',

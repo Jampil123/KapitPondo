@@ -26,6 +26,8 @@ export interface MyGroup {
   role: GroupRole;
   status: MembershipStatus;
   heads: number;
+  /** Null while status is still 'pending' — set the moment an owner approves. */
+  joined_at: string | null;
   groups: Group;
 }
 
@@ -45,10 +47,11 @@ export function joinByCode(fund_code: string) {
   return api.post<{ membership?: unknown; group?: Group }>('/api/groups/join-by-code', { fund_code });
 }
 
-/** A group's officer, name + role only (no email/phone) — any active member can see this. */
+/** A group's officer, name + role (+ a verified badge) — no email/phone — any active member can see this. */
 export interface Officer {
   role: GroupRole;
   full_name: string | null;
+  verified: boolean;
 }
 
 export interface OfficersResponse {
@@ -61,9 +64,11 @@ export function listOfficers(groupId: string) {
   return api.get<OfficersResponse>(`/api/groups/${groupId}/officers`);
 }
 
-/** A group member's name + role only (no email/phone) — any active member can see this. */
+/** A group member's name + role + heads (no email/phone) — any active member can see this. heads is included since it determines year-end profit share. */
 export interface DirectoryEntry {
+  member_id: string;
   role: GroupRole;
+  heads: number;
   full_name: string | null;
 }
 
@@ -71,6 +76,11 @@ export interface DirectoryEntry {
 export async function listMemberDirectory(groupId: string) {
   const res = await api.get<{ members: DirectoryEntry[] }>(`/api/groups/${groupId}/members/directory`);
   return res.members;
+}
+
+/** POST /api/groups/:groupId/leave — self-service: the caller leaves this group. Throws (409) if they're the Owner, or have an active loan / unresolved penalty. */
+export function leaveGroup(groupId: string) {
+  return api.post<{ ok: true }>(`/api/groups/${groupId}/leave`);
 }
 
 // --- Member management (officer) — paths per the API reference ---------------

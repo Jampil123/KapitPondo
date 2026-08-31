@@ -13,6 +13,7 @@ import { useQuery } from '../../hooks/useApi';
 import {
   getSummary,
   getFundSummary,
+  getFundLedger,
   getMemberBalances,
   getLedger,
   getMyBalance,
@@ -40,6 +41,12 @@ export function useSummary(groupId: string) {
 export function useFundSummary(groupId: string) {
   const fn = useCallback(() => getFundSummary(groupId), [groupId]);
   return useQuery(fn, [groupId], fundWatch(groupId));
+}
+
+/** Member-safe, GROUP-WIDE ledger (any role) — every posting in the group, not just the caller's own. */
+export function useFundLedger(groupId: string, filters: LedgerFilters = {}) {
+  const fn = useCallback(() => getFundLedger(groupId, filters), [groupId, filters.entry_type, filters.limit]);
+  return useQuery(fn, [groupId, filters.entry_type, filters.limit], { table: 'ledger_entries', filter: `group_id=eq.${groupId}` });
 }
 
 export function useMemberBalances(groupId: string) {

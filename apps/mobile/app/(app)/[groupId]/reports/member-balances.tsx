@@ -1,10 +1,3 @@
-/**
- * app/(app)/[groupId]/reports/member-balances.tsx — Member Balances (officer).
- * Per-member paid-in/net-balance table — distinct from FundHero's group-wide
- * aggregate and from the Member-only personal ledger. Wraps useMemberBalances,
- * which was already wired to the officer-only /reports/member-balances endpoint
- * but had no screen using it anywhere in the app until now.
- */
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppBar } from '@/components/shared/AppBar';

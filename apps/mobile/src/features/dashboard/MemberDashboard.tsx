@@ -382,13 +382,13 @@ function FundComposition({ groupId }: { groupId: string }) {
           <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
         </View>
       </View>
-
-      <Text variant="caption" color="muted" style={{ marginTop: 12, paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border, lineHeight: 17 }}>
-        Money lent to members is still part of the fund. It returns with interest as loans are repaid.
-      </Text>
+      
     </View>
+    
   );
+  
 }
+
 
 const ACTIONS: ({ label: string; icon: any } & ({ route: string } | { soon: true }))[] = [
   { label: 'Contributions', icon: ArrowUpCircle, route: 'contributions' },
@@ -464,6 +464,9 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
 
       <SectionHead title="Group fund" />
       <FundComposition groupId={groupId} />
+      <Text variant="caption" color="muted" style={{lineHeight: 16, textAlign: 'justify' }}>
+        Money lent to members is still part of the fund. It returns with interest as loans are repaid.
+      </Text>
 
       <SectionHead title="Shortcuts" aside="View all" onAsidePress={() => go('more')} />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

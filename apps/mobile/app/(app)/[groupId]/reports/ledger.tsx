@@ -1,10 +1,3 @@
-/**
- * app/(app)/[groupId]/ledger.tsx — member's ledger & reports (M8).
- * Ledger tab: real personal ledger feed (useLedger — members see own entries).
- * Reports tab: the stats we can actually compute from useMyBalance; the design's
- * monthly bar chart + projected year-end share need aggregates our API doesn't
- * expose yet, so those are noted rather than faked.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -74,6 +74,18 @@ export async function getFundSummary(groupId: string) {
   return res.summary;
 }
 
+/**
+ * GET — member-safe, GROUP-WIDE ledger (any role) — every posting in the
+ * group, not just the caller's own. Deliberately separate from getLedger()
+ * below, which self-scopes to the caller for a member regardless of filters.
+ * A real transparency policy: any active member sees every other member's
+ * individual contribution/loan amounts through this endpoint.
+ */
+export async function getFundLedger(groupId: string, filters: LedgerFilters = {}) {
+  const res = await api.get<{ ledger: LedgerEntry[] }>(`/api/groups/${groupId}/reports/fund-ledger`, filters);
+  return res.ledger;
+}
+
 /** GET — the caller's own balance in this group (any role). */
 export function getMyBalance(groupId: string) {
   return api.get<MyBalance>(`/api/groups/${groupId}/reports/my-balance`);
