@@ -15,8 +15,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.johnp15.kapitpondo",
-      "largeHeap": true
+      "package": "com.johnp15.kapitpondo"
     },
     "web": {
       "output": "single",
@@ -44,7 +43,15 @@
       "expo-web-browser",
       "expo-font",
       "expo-status-bar",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "largeHeap": true
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
