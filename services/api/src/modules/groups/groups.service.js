@@ -218,7 +218,42 @@ async function updateMemberRole(groupId, memberId, role) {
     .select()
     .single();
   if (error) throw error;
+
+  if (data) {
+    const ROLE_LABEL = { member: 'Member', treasurer: 'Treasurer', auditor: 'Auditor' };
+    await notify({
+      memberId,
+      groupId,
+      type: 'membership.role_changed',
+      title: 'Your role changed',
+      message: `You are now a ${ROLE_LABEL[role] ?? role} in this group.`,
+    });
+  }
+
   return data;
+}
+
+// An officer pings a specific member who's behind — the only officer-
+// initiated notification in this module; every other notify() call here is
+// an automatic side effect of a state change (approve/reject/role change).
+async function nudgeMember(groupId, memberId) {
+  const { data: membership, error } = await supabase
+    .from('memberships')
+    .select('member_id')
+    .eq('group_id', groupId)
+    .eq('member_id', memberId)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (error) throw error;
+  if (!membership) throw Object.assign(new Error('Member not found in this group'), { status: 404 });
+
+  await notify({
+    memberId,
+    groupId,
+    type: 'balance.nudge',
+    title: 'A reminder from your group',
+    message: 'An officer noticed your contribution is behind. Please settle it when you can.',
+  });
 }
 
 async function removeMember(groupId, memberId) {
@@ -289,4 +324,4 @@ async function leaveGroup(groupId, memberId) {
   return data;
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup };
+module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup, nudgeMember };

@@ -116,3 +116,8 @@ export function setMemberRole(groupId: string, memberId: string, role: GroupRole
 export function removeMember(groupId: string, memberId: string) {
   return api.del(`/api/groups/${groupId}/members/${memberId}`);
 }
+
+/** POST — send a reminder push to a specific member (e.g. behind on contributions). Any officer. */
+export function nudgeMember(groupId: string, memberId: string) {
+  return api.post<{ ok: true }>(`/api/groups/${groupId}/members/${memberId}/nudge`);
+}

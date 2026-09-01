@@ -1,11 +1,3 @@
-/**
- * app/(app)/[groupId]/fund/index.tsx — Fund overview (member).
- * The transparency centerpiece: members contribute, so they can see the fund.
- * Uses the new member-safe /reports/fund-summary endpoint (aggregate-only —
- * same fields the officer-only /reports/summary already exposes, just gated
- * to members too) plus the existing member-accessible cycle-progress RPC for
- * the collection %.
- */
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';

@@ -157,6 +157,18 @@ router.patch('/groups/:groupId/members/:memberId/role', requireAuth,
   }
 );
 
+// Officer sends a reminder push to a specific member (e.g. behind on
+// contributions). Treasurer/Auditor/Owner — any officer, not owner-only.
+router.post('/groups/:groupId/members/:memberId/nudge', requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      await service.nudgeMember(req.params.groupId, req.params.memberId);
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  }
+);
+
 // Remove an active member (owner only)
 router.delete('/groups/:groupId/members/:memberId', requireAuth,
   requireGroupRole(['owner']),
