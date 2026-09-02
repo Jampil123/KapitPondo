@@ -1,33 +1,3 @@
-/**
- * app/(app)/[groupId]/reports/group-ledger.tsx — "Fund ledger" (member).
- * Rebuilt from an officer-oriented screen into a real member-facing feature:
- * the group's WHOLE ledger, not just the caller's own entries — a genuine
- * transparency policy (confirmed explicitly, not assumed), backed by a new
- * member-safe route (GET /reports/fund-ledger) that deliberately doesn't
- * self-scope, unlike every other member-facing ledger call in this app.
- *
- * Two adaptations from the design it's built from, both because the data
- * doesn't exist to back the literal copy:
- *   - No separate "recorded by X, verified by Y" — a ledger row only carries
- *     ONE officer (posted_by, "always the approving officer" per the posting
- *     RPCs). Who originally recorded the claim isn't on the ledger row
- *     itself. Shown as "confirmed by {officer}" instead of inventing a
- *     second name.
- *   - No "Interest earned" line in the composition — loan repayments post as
- *     ONE combined ledger credit (principal + interest together, see
- *     record_loan_repayment()'s single insert), so interest isn't separately
- *     summable from the ledger. The composition is derived by summing the
- *     entries actually fetched (grouped by entry_type), not group_summary()
- *     — that RPC only breaks out 5 of 9 entry_types (nothing for penalty/
- *     adjustment/reversal/fee), which would make the rows visibly not add
- *     up to their own total for a group with any of those postings.
- *   - The transparency banner doesn't claim proof images are private to
- *     "the sender and the officers" — the proofs bucket's RLS (migration
- *     0012) allows any authenticated app user to read a file if they have
- *     its exact path. This ledger doesn't expose paths (only source_id), so
- *     said plainly instead of promising a boundary the storage layer
- *     doesn't enforce.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -202,10 +172,8 @@ export default function GroupLedger() {
           {fund.loading ? (
             <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
           ) : (
-            <Text style={{ fontSize: 32, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(cash)}</Text>
+            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(cash)}</Text>
           )}
-          <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>Every entry below was confirmed by an officer before it posted</Text>
-
           {composition.length > 0 ? (
             <View style={{ marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border, gap: 8 }}>
               {composition.map((row) => (
@@ -223,6 +191,9 @@ export default function GroupLedger() {
             </View>
           ) : null}
         </View>
+        <Text variant="caption" color="muted" style={{ lineHeight: 16, textAlign: 'justify'  }}>
+          Every entry below was confirmed by an officer before it posted
+        </Text>
 
         {/* ---------------- Transparency banner ---------------- */}
         <View style={{ marginTop: 15, backgroundColor: intent.info.soft, borderRadius: 18, padding: 14, flexDirection: 'row', gap: 11, alignItems: 'flex-start' }}>

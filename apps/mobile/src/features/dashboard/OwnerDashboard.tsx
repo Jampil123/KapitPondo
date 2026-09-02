@@ -22,14 +22,13 @@
  *   recent activity         → useLedger               ✅ real (same hook TreasurerDashboard already uses)
  */
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, Modal } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, Pressable, ActivityIndicator, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useQuery } from '@/hooks/useApi';
 import {
   Users, Coins, AlertTriangle, SlidersHorizontal, UserCheck, CalendarClock,
-  Wallet, ScrollText, Receipt, CheckCircle2, Check, ArrowUpRight, ArrowDownRight, X,
+  Wallet, ScrollText, Receipt, CheckCircle2, Check, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -479,33 +478,62 @@ const ALL_ACTIONS: { label: string; icon: any; key: string }[] = [
   { label: 'Expenses', icon: Receipt, key: 'expenses/record' },
 ];
 
-function ManageSheet({ visible, onClose, go }: { visible: boolean; onClose: () => void; go: (r: string) => void }) {
-  const insets = useSafeAreaInsets();
+/**
+ * Every manage action in one horizontally-scrollable row, with a thin
+ * "scroll level" track beneath it showing how far through the row you are —
+ * standalone tiles don't hint that there's more off-screen, this does.
+ */
+function ManageRow({ go }: { go: (r: string) => void }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+  const [visibleWidth, setVisibleWidth] = useState(0);
+  const [contentWidth, setContentWidth] = useState(0);
+  const [scrollX, setScrollX] = useState(0);
+
+  const scrollable = contentWidth > visibleWidth + 1;
+  const thumbWidth = scrollable ? Math.max(28, (visibleWidth / contentWidth) * trackWidth) : trackWidth;
+  const maxScrollX = Math.max(1, contentWidth - visibleWidth);
+  const maxThumbTravel = Math.max(0, trackWidth - thumbWidth);
+  const thumbLeft = scrollable ? Math.min(maxThumbTravel, (scrollX / maxScrollX) * maxThumbTravel) : 0;
+
+  // Exactly 4 tiles fill the row's full width (same edges as the cards above/
+  // below it) — same math as the original static 4-up grid, just computed
+  // from the measured width instead of a '23%' flex width, since a
+  // horizontal ScrollView's content isn't stretched to fit its viewport.
+  const GAP = 10;
+  const tileWidth = visibleWidth > 0 ? (visibleWidth - GAP * 3) / 4 : 84;
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 16, paddingBottom: insets.bottom + 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14 }}>
-            <Text variant="h3" style={{ fontSize: 17, flex: 1 }}>Manage</Text>
-            <Pressable onPress={onClose} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-          </View>
-          <View style={{ gap: 10 }}>
-            {ALL_ACTIONS.map((a) => (
-              <Pressable
-                key={a.key}
-                onPress={() => { onClose(); go(a.key); }}
-                style={[{ flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: semantic.background, borderRadius: 14, padding: 13 }, SOFT_SHADOW]}
-              >
-                <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  <a.icon size={20} color={semantic.brandDark} />
-                </View>
-                <Text variant="label" style={{ flex: 1 }}>{a.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+    <View style={{ marginTop: 14 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        onLayout={(e) => setVisibleWidth(e.nativeEvent.layout.width)}
+        onContentSizeChange={(w) => setContentWidth(w)}
+        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setScrollX(e.nativeEvent.contentOffset.x)}
+        scrollEventThrottle={16}
+        contentContainerStyle={{ gap: GAP, paddingVertical: 6 }}
+      >
+        {ALL_ACTIONS.map((a) => (
+          <Pressable
+            key={a.key}
+            onPress={() => go(a.key)}
+            style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, SOFT_SHADOW]}
+          >
+            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
+            <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+
+      {scrollable ? (
+        <View
+          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
+          style={{ width: 56, height: 3, borderRadius: 1.5, backgroundColor: semantic.border, marginTop: 18, alignSelf: 'center', overflow: 'hidden' }}
+        >
+          <View style={{ width: thumbWidth, height: '100%', borderRadius: 1.5, backgroundColor: semantic.brand, transform: [{ translateX: thumbLeft }] }} />
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -556,7 +584,6 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
 
 export function OwnerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const [manageOpen, setManageOpen] = useState(false);
   const go = (sub: string) => router.push({ pathname: `/(app)/[groupId]/${sub}` as any, params: { groupId } });
 
   return (
@@ -569,20 +596,7 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <CollectionBlock groupId={groupId} go={go} />
 
-      <SectionHead title="Manage" aside="View all" onAsidePress={() => setManageOpen(true)} />
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        {PRIMARY_ACTIONS.map((a) => (
-          <Pressable
-            key={a.key}
-            onPress={() => go(a.key)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, SOFT_SHADOW]}
-          >
-            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
-            <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <ManageSheet visible={manageOpen} onClose={() => setManageOpen(false)} go={go} />
+      <ManageRow go={go} />
 
       <SectionHead title="Recent activity" aside="Group-wide" />
       <RecentActivity groupId={groupId} go={go} />

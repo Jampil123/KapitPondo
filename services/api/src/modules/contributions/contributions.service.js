@@ -27,6 +27,12 @@ async function createContribution(input) {
       proof_url: input.proofUrl,
       external_reference: input.externalReference,
       recorded_by: input.recordedBy,
+      // Distinguishes an officer recording someone else's payment from a
+      // member's own self-submission — both sit in the same 'submitted'
+      // queue, but the app splits them into separate review tabs (see
+      // contributions/confirm.tsx: Pending vs Awaiting Auditor) and the
+      // wording differs ("Auditor verifies" vs "officer confirms").
+      is_walk_in: input.isWalkIn ?? false,
       status: 'submitted',
     })
     .select()
@@ -35,11 +41,12 @@ async function createContribution(input) {
   return data;
 }
 
-async function listContributions({ groupId, membershipId, role, status, cycleId }) {
+async function listContributions({ groupId, membershipId, role, status, cycleId, filterMembershipId }) {
   let q = supabase.from('contributions')
-    .select('*, approver:members!approved_by(full_name)')
+    .select('*, approver:members!approved_by(full_name), memberships!membership_id(member_id, heads, members!member_id(full_name))')
     .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
+  else if (filterMembershipId) q = q.eq('membership_id', filterMembershipId); // officer explicitly scoping to one member
   if (status) q = q.eq('status', status);
   if (cycleId) q = q.eq('cycle_id', cycleId);
   const { data, error } = await q.order('created_at', { ascending: false });
@@ -50,25 +57,6 @@ async function listContributions({ groupId, membershipId, role, status, cycleId 
 async function getContribution(id) {
   const { data, error } = await supabase
     .from('contributions').select('*').eq('id', id).single();
-  if (error) throw error;
-  return data;
-}
-
-// Officer recording a WALK-IN member's cash/GCash payment (TC-018) — the
-// officer already physically confirmed the payment by receiving it, so this
-// posts straight to the ledger (status 'approved') via record_walkin_
-// contribution(), instead of the normal submitted → separate-officer-
-// approves flow used for a member's own self-submission.
-async function recordWalkInContribution(input) {
-  const { data, error } = await supabase.rpc('record_walkin_contribution', {
-    p_membership_id: input.membershipId,
-    p_cycle_id: input.cycleId,
-    p_group_id: input.groupId,
-    p_amount: input.amount,
-    p_payment_method: input.paymentMethod ?? null,
-    p_external_reference: input.externalReference ?? null,
-    p_officer_id: input.officerId,
-  });
   if (error) throw error;
   return data;
 }
@@ -116,6 +104,6 @@ async function rejectContribution({ contributionId, reason }) {
 }
 
 module.exports = {
-  createContribution, recordWalkInContribution, listContributions, getContribution, getActiveMembership,
+  createContribution, listContributions, getContribution, getActiveMembership,
   approveContribution, rejectContribution,
 };

@@ -1,24 +1,6 @@
-/**
- * api/contributions.ts
- * ----------------------------------------------------------------------------
- * Calls the contributions module of the API (M5). Screens use the hooks in
- * features/contributions, which wrap these.
- *
- * Two money flows share submitContribution():
- *   - Member's own claim: submit → approve (a DIFFERENT officer) → ledger posts.
- *     The "different officer" rule is enforced by the server (recorder ≠
- *     approver); if it's violated, approve() throws an ApiError you can
- *     surface to the user.
- *   - Officer recording a WALK-IN member's payment (membership_id set to
- *     someone else): posts straight to the ledger — status comes back
- *     'approved' immediately, no separate approve() call needed.
- */
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-// 'late' is set only by the server's lazy penalty sweep (penalties.service.js) —
-// a companion row for a missed period, created the first time an officer views
-// the group's contributions list after the due date passes.
 export type ContributionStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'late';
 export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
@@ -42,8 +24,14 @@ export interface Contribution {
   updated_at: string;
   /** Set by rejectContribution(); the API already selects '*', this type just didn't list it. */
   rejection_reason: string | null;
+  /** Who recorded this — the submitting member for a self-submission, or the officer for a walk-in. Null-safe: real column, wasn't listed before. */
+  recorded_by: string | null;
+  /** True when an officer recorded this on a member's behalf (TC-018) rather than the member submitting it themselves. Still goes through the same submitted → different-officer-approves flow; the app just shows it in a separate "Awaiting Auditor" tab. */
+  is_walk_in: boolean;
   /** Who approved this contribution — null until an officer confirms it. */
   approver: { full_name: string } | null;
+  /** The payer's membership + name, joined server-side (listContributions only). */
+  memberships: { member_id: string; heads: number; members: { full_name: string | null } | null } | null;
 }
 
 export interface SubmitContributionInput {
@@ -52,7 +40,7 @@ export interface SubmitContributionInput {
   payment_method?: PaymentMethod;
   proof_url?: string;
   external_reference?: string;
-  /** Officers only — record a walk-in payment on this member's behalf (TC-018). Posts straight to the ledger, no separate approval. */
+  /** Officers only — record a walk-in payment on this member's behalf (TC-018). Still goes to 'submitted', awaiting approval from a DIFFERENT officer — segregation of duties applies the same as a member's own claim. */
   membership_id?: string;
 }
 

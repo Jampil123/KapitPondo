@@ -80,6 +80,7 @@ export const loanPaymentStatus: Record<string, StatusMeta> = {
 export const distributionStatus: Record<string, StatusMeta> = {
   draft:     { intent: 'neutral', label: 'Draft' },
   previewed: { intent: 'info',    label: 'Preview' },
+  verified:  { intent: 'warning', label: 'Verified' },
   finalized: { intent: 'success', label: 'Finalized' },
 };
 

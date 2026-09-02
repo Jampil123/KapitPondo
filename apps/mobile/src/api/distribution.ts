@@ -29,16 +29,28 @@ export interface Distribution {
   total_amount: Money;
   rate: Money | null;
   status: DistributionStatus;
+  declared_by: string | null;
+  finalized_by: string | null;
   finalized_at: string | null;
+  verified_by: string | null; // migration 0028
+  verified_at: string | null; // migration 0028
+  verify_notes: string | null; // migration 0028
   created_at: string;
 }
 
+/** Server joins membership + member name via `getAllocations` — see distributions.service.js. */
 export interface DistributionAllocation {
   id: string;
   distribution_id: string;
   membership_id: string;
   amount: Money;
   ledger_entry_id: string | null; // set once finalized
+  created_at: string;
+  memberships: {
+    member_id: string;
+    heads: number;
+    members: { full_name: string | null } | null;
+  } | null;
 }
 
 export interface DistributionDetail {

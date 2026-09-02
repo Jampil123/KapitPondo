@@ -1,23 +1,3 @@
-/**
- * theme/colors.ts  — REGENERATED to match the real UI prototype.
- * ----------------------------------------------------------------------------
- * Palette extracted from KapitPondo_Auth.html. Surfaces/brand stay calm
- * steel-blue / slate — trustworthy, soft, financial. Text, however, is a true
- * neutral "ink" scale (no blue tint) so copy reads as ink-on-paper regardless
- * of which brand-colored surface it sits on:
- *   ink       (textPrimary)   — full emphasis, body copy & headings
- *   ink-soft  (textSecondary) — medium emphasis, captions & supporting text
- *   ink-faint (textMuted)     — low emphasis, hints & tertiary labels
- * Export NAMES/SHAPES are unchanged, so Text.tsx and StatusBadge.tsx keep
- * working without edits.
- *
- * Source tokens from the prototype:
- *   bg #F7FBFD · card #FFF · chip #D6E6EF · accent #7FA6B8 · accentDk #5E8497
- *   soft #EAF2F6 · line #E4EDF2
- *   ok #3E8E66 / okBg #E2F0E8 · dang #C25C5E / dangBg #F7E5E5 · warn #A87C2C / warnBg #F8EFDA
- */
-
-// --- Brand ramp (steel blue) -------------------------------------------------
 export const steel = {
   50: '#F7FBFD',
   100: '#EAF2F6',

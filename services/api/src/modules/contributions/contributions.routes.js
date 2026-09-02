@@ -5,15 +5,14 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
 const { checkLatePenaltiesIfDue } = require('../penalties/penalties.service');
 
-// Submit a contribution. Members record only their own (status 'submitted',
-// awaiting officer approval) via the plain member self-submit flow (no
-// membership_id in the body — that's how this tells the two flows apart).
-// Officers using the "Record new" flow explicitly pass membership_id — for
-// a walk-in member (TC-018) OR for their own membership — and either way it
-// posts straight to the ledger (status 'approved') instead of going through
-// the pending queue: the officer already physically confirmed the payment
-// by recording it themselves, whoever it's for, so there's no separate
-// claim left to verify the way there is for an unverified member self-report.
+// Submit a contribution — status 'submitted' either way, awaiting a
+// DIFFERENT officer's approval (segregation of duties, enforced below in the
+// /approve route regardless of who recorded it). Members record only their
+// own (no membership_id in the body — that's how this tells the two flows
+// apart). Officers using the "Record new" flow explicitly pass
+// membership_id — for a walk-in member (TC-018) OR for their own membership —
+// and either way it's tagged is_walk_in so the app can show it in "Awaiting
+// Auditor" instead of mixing it into members' own submitted proofs.
 router.post('/groups/:groupId/contributions',
   requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
@@ -43,26 +42,17 @@ router.post('/groups/:groupId/contributions',
         isWalkIn = true;
       }
 
-      const contribution = isWalkIn
-        ? await service.recordWalkInContribution({
-            membershipId: targetMembershipId,
-            cycleId: cycle_id,
-            groupId: req.params.groupId,
-            amount,
-            paymentMethod: payment_method,
-            externalReference: external_reference,
-            officerId: req.member.id,
-          })
-        : await service.createContribution({
-            membershipId: targetMembershipId,
-            cycleId: cycle_id,
-            groupId: req.params.groupId,
-            amount,
-            paymentMethod: payment_method,
-            proofUrl: proof_url,
-            externalReference: external_reference,
-            recordedBy: req.member.id,
-          });
+      const contribution = await service.createContribution({
+        membershipId: targetMembershipId,
+        cycleId: cycle_id,
+        groupId: req.params.groupId,
+        amount,
+        paymentMethod: payment_method,
+        proofUrl: proof_url,
+        externalReference: external_reference,
+        recordedBy: req.member.id,
+        isWalkIn,
+      });
       res.status(201).json({ contribution });
     } catch (err) { next(err); }
   }
@@ -90,6 +80,10 @@ router.get('/groups/:groupId/contributions',
         role: req.membership.role,
         status: req.query.status,
         cycleId: req.query.cycle_id,
+        // Officers filtering to one member's contributions (e.g. building that
+        // member's payment timeline before recording a walk-in) — a member
+        // caller is already scoped to their own rows above regardless of this.
+        filterMembershipId: req.query.membership_id,
       });
       res.json({ contributions });
     } catch (err) { next(err); }

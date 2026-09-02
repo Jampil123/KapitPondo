@@ -29,7 +29,7 @@ import {
 
 export function useDistributions(groupId: string) {
   const fn = useCallback(() => listDistributions(groupId), [groupId]);
-  return useQuery(fn, [groupId]);
+  return useQuery(fn, [groupId], { table: 'distributions', filter: `group_id=eq.${groupId}` });
 }
 
 /** Safe to call with no id yet (e.g. still resolving which distribution is latest). */
@@ -38,7 +38,14 @@ export function useDistribution(groupId: string, id?: string) {
     () => (id ? getDistribution(groupId, id) : Promise.resolve(null)),
     [groupId, id],
   );
-  return useQuery(fn, [groupId, id]);
+  return useQuery(
+    fn,
+    [groupId, id],
+    id ? [
+      { table: 'distributions', filter: `id=eq.${id}` },
+      { table: 'distribution_allocations', filter: `distribution_id=eq.${id}` },
+    ] : null,
+  );
 }
 
 export function usePreviewDistribution(groupId: string) {
