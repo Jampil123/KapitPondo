@@ -1,12 +1,9 @@
-// services/api/src/modules/expenses/expenses.routes.js
-// KapitPondo — Expenses routes (M7, FINAL)
-// Mount in app.js:  app.use('/api', require('./modules/expenses/expenses.routes'));
-
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./expenses.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Record an expense (treasurer or owner)
 router.post(
@@ -64,6 +61,11 @@ router.post(
         expenseId: req.params.id,
         approverId: req.member.id,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'approved', entityType: 'expense', entityId: req.params.id,
+        before: { status: expense.status }, after: { status: 'approved', amount: expense.amount, recorded_by: expense.recorded_by },
+      });
       res.json({ message: 'Expense approved', ledgerEntry });
     } catch (err) {
       if (err.message && err.message.includes('Insufficient fund')) {
@@ -92,6 +94,11 @@ router.post(
         return res.status(403).json({ error: 'You cannot reject an expense you recorded' });
       }
       const updated = await service.rejectExpense(req.params.id, req.body?.reason);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'expense', entityId: req.params.id,
+        before: { status: expense.status }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+      });
       res.json({ message: 'Expense rejected', expense: updated });
     } catch (err) { next(err); }
   }

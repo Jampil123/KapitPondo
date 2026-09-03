@@ -4,6 +4,7 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
 const { checkLatePenaltiesIfDue } = require('../penalties/penalties.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Submit a contribution — status 'submitted' either way, awaiting a
 // DIFFERENT officer's approval (segregation of duties, enforced below in the
@@ -107,6 +108,11 @@ router.post('/groups/:groupId/contributions/:id/approve',
         contributionId: req.params.id,
         approverId: req.member.id,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'approved', entityType: 'contribution', entityId: req.params.id,
+        before: { status: contribution.status }, after: { status: 'approved', amount: contribution.amount, recorded_by: contribution.recorded_by },
+      });
       res.json({ message: 'Contribution approved', ledgerEntry });
     } catch (err) {
       if (err.message && err.message.includes('must be confirmed by the Auditor')) {
@@ -128,6 +134,11 @@ router.post('/groups/:groupId/contributions/:id/reject',
         return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
       const updated = await service.rejectContribution({ contributionId: req.params.id, reason: req.body?.reason });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'contribution', entityId: req.params.id,
+        before: { status: contribution.status }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+      });
       res.json({ message: 'Contribution rejected', contribution: updated });
     } catch (err) { next(err); }
   }

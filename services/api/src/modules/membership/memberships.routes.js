@@ -3,6 +3,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./memberships.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Request to join a group (by fund_code → groupId resolved on client or here)
 router.post('/groups/:groupId/join', requireAuth, async (req, res, next) => {
@@ -43,6 +44,11 @@ router.post('/groups/:groupId/memberships/:id/approve', requireAuth,
       const membership = await service.approveMembership({
         membershipId: req.params.id, approverId: req.member.id,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'approved', entityType: 'membership_approval', entityId: req.params.id,
+        before: { status: 'pending' }, after: { status: 'active' },
+      });
       res.json({ message: 'Member approved', membership });
     } catch (err) { next(err); }
   }
@@ -58,7 +64,12 @@ router.patch('/groups/:groupId/memberships/:id/role', requireAuth,
       if (!allowed.includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
       }
-      const membership = await service.setRole({ membershipId: req.params.id, role });
+      const { membership, previousRole } = await service.setRole({ membershipId: req.params.id, role });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'role_changed', entityType: 'membership_role', entityId: req.params.id,
+        before: { role: previousRole }, after: { role },
+      });
       res.json({ message: 'Role updated', membership });
     } catch (err) { next(err); }
   }

@@ -43,7 +43,7 @@ async function createContribution(input) {
 
 async function listContributions({ groupId, membershipId, role, status, cycleId, filterMembershipId }) {
   let q = supabase.from('contributions')
-    .select('*, approver:members!approved_by(full_name), memberships!membership_id(member_id, heads, members!member_id(full_name))')
+    .select('*, recorder:members!recorded_by(full_name), approver:members!approved_by(full_name), memberships!membership_id(member_id, heads, members!member_id(full_name))')
     .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   else if (filterMembershipId) q = q.eq('membership_id', filterMembershipId); // officer explicitly scoping to one member

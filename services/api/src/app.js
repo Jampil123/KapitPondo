@@ -19,6 +19,7 @@ const chatRoutes = require('./modules/chat/chat.routes');
 const paymentsRoutes = require('./modules/payments/payments.routes'); // future plan, not live — see payments.routes.js
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
+const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api', chatRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', adminSecurityRoutes);
 app.use('/api', recoveryRoutes);
+app.use('/api', auditLogRoutes);
 
 // Error handler stays last.
 app.use(errorHandler);

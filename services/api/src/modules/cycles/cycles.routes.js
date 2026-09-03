@@ -3,6 +3,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./cycles.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Create a cycle (owner or treasurer)
 router.post('/groups/:groupId/cycles', requireAuth,
@@ -27,6 +28,11 @@ router.post('/groups/:groupId/cycles', requireAuth,
         minimumLoanAmount: req.body.minimum_loan_amount,
         earlyTerminationPenalty: req.body.early_termination_penalty,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'created', entityType: 'cycle', entityId: cycle.id,
+        before: null, after: { name: cycle.name, status: cycle.status, contribution_amount: cycle.contribution_amount, frequency: cycle.frequency },
+      });
       res.status(201).json({ cycle });
     } catch (err) { next(err); }
   }
@@ -49,6 +55,11 @@ router.post('/groups/:groupId/cycles/:id/activate', requireAuth,
   async (req, res, next) => {
     try {
       const cycle = await service.activateCycle(req.params.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'activated', entityType: 'cycle', entityId: req.params.id,
+        before: { status: 'draft' }, after: { status: 'active', name: cycle.name },
+      });
       res.json({ message: 'Cycle activated', cycle });
     } catch (err) {
       if (err.code === '23505') {
@@ -65,6 +76,11 @@ router.post('/groups/:groupId/cycles/:id/close', requireAuth,
   async (req, res, next) => {
     try {
       const cycle = await service.closeCycle(req.params.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'closed', entityType: 'cycle', entityId: req.params.id,
+        before: { status: 'active' }, after: { status: 'closed', name: cycle.name },
+      });
       res.json({ message: 'Cycle closed', cycle });
     } catch (err) { next(err); }
   }

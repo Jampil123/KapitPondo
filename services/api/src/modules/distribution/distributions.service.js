@@ -1,14 +1,6 @@
-// services/api/src/modules/distributions/distributions.service.js
-// KapitPondo — Distributions service (M9, FINAL)
-
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 
-// Preview a year-end distribution (computes the split; no money moves yet).
-// Every ACTIVE membership is included by heads regardless of
-// verification_status — see the comment on preview_distribution() in
-// migration 0028 for why (QA TC-038: verification gates privileges, not
-// ownership of contributed capital).
 async function previewDistribution({ groupId, period, declaredBy }) {
   const { data, error } = await supabase.rpc('preview_distribution', {
     p_group_id: groupId,
@@ -117,6 +109,9 @@ async function cancelPreview(distributionId) {
 
 // Set how many heads a membership carries (owner action)
 async function setHeads({ membershipId, heads }) {
+  const { data: before } = await supabase
+    .from('memberships').select('heads').eq('id', membershipId).maybeSingle();
+
   const { data, error } = await supabase
     .from('memberships')
     .update({ heads })
@@ -124,7 +119,7 @@ async function setHeads({ membershipId, heads }) {
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return { membership: data, previousHeads: before?.heads ?? null };
 }
 
 module.exports = {

@@ -3,6 +3,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./penalties.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Manually run the late-contribution check for this group (officers) —
 // always runs fresh (unthrottled), unlike the automatic trigger on viewing
@@ -59,6 +60,11 @@ router.post('/groups/:groupId/penalties/:id/waive',
       }
       const penalty = await service.waivePenalty({ penaltyId: req.params.id, waivedBy: req.member.id, reason: reason.trim() });
       if (!penalty) return res.status(409).json({ error: 'Penalty is not pending' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'waived', entityType: 'penalty', entityId: req.params.id,
+        before: { status: 'pending' }, after: { status: 'waived', reason: reason.trim(), amount: penalty.amount },
+      });
       res.json({ message: 'Penalty waived', penalty });
     } catch (err) { next(err); }
   }

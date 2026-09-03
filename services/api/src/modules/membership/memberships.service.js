@@ -37,10 +37,11 @@ async function approveMembership({ membershipId, approverId }) {
 
 // Change a member's role (owner only)
 async function setRole({ membershipId, role }) {
+  const { data: membership, error: mErr } = await supabase
+    .from('memberships').select('member_id, role').eq('id', membershipId).single();
+  if (mErr) throw mErr;
+
   if (role === 'treasurer' || role === 'auditor') {
-    const { data: membership, error: mErr } = await supabase
-      .from('memberships').select('member_id').eq('id', membershipId).single();
-    if (mErr) throw mErr;
     const { data: member, error: memberErr } = await supabase
       .from('members').select('verification_status').eq('id', membership.member_id).single();
     if (memberErr) throw memberErr;
@@ -55,7 +56,7 @@ async function setRole({ membershipId, role }) {
     .select()
     .single();
   if (error) throw error;
-  return data;
+  return { membership: data, previousRole: membership.role };
 }
 
 module.exports = { requestToJoin, listMemberships, approveMembership, setRole };

@@ -28,6 +28,8 @@ export interface Contribution {
   recorded_by: string | null;
   /** True when an officer recorded this on a member's behalf (TC-018) rather than the member submitting it themselves. Still goes through the same submitted → different-officer-approves flow; the app just shows it in a separate "Awaiting Auditor" tab. */
   is_walk_in: boolean;
+  /** Who recorded this, by name — the payer for a self-submission, an officer for a walk-in. */
+  recorder: { full_name: string } | null;
   /** Who approved this contribution — null until an officer confirms it. */
   approver: { full_name: string } | null;
   /** The payer's membership + name, joined server-side (listContributions only). */

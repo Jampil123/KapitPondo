@@ -1,12 +1,9 @@
-// services/api/src/modules/distributions/distributions.routes.js
-// KapitPondo — Distributions routes (M9, FINAL)
-// Mount in app.js:  app.use('/api', require('./modules/distributions/distributions.routes'));
-
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./distributions.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Set a member's OWN head count — self-service (member and officers alike),
 // not an owner-configures-everyone action. Affects their own distribution
@@ -24,7 +21,12 @@ router.patch(
       if (heads == null || Number(heads) < 1) {
         return res.status(400).json({ error: 'heads must be 1 or greater' });
       }
-      const membership = await service.setHeads({ membershipId: req.params.id, heads });
+      const { membership, previousHeads } = await service.setHeads({ membershipId: req.params.id, heads });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'heads_changed', entityType: 'membership_heads', entityId: req.params.id,
+        before: { heads: previousHeads }, after: { heads },
+      });
       res.json({ message: 'Heads updated', membership });
     } catch (err) { next(err); }
   }
@@ -75,6 +77,11 @@ router.post(
         notes: req.body?.notes,
       });
       if (!verified) return res.status(409).json({ error: 'Distribution is not in previewed status' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'verified', entityType: 'distribution', entityId: req.params.id,
+        before: { status: 'previewed' }, after: { status: 'verified', period: distribution.period, total_amount: distribution.total_amount },
+      });
       res.json({ message: 'Distribution verified — awaiting Owner finalization', distribution: verified });
     } catch (err) { next(err); }
   }
@@ -125,6 +132,11 @@ router.post(
       const finalized = await service.finalizeDistribution({
         distributionId: req.params.id,
         finalizedBy: req.member.id,
+      });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'finalized', entityType: 'distribution', entityId: req.params.id,
+        before: { status: 'verified' }, after: { status: 'finalized', total_amount: distribution.total_amount },
       });
       res.json({ message: 'Distribution finalized; fund balance is now 0', distribution: finalized });
     } catch (err) {

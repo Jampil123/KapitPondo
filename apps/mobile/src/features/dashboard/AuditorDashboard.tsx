@@ -735,7 +735,7 @@ function RecentVerifications({ groupId }: { groupId: string }) {
 // dedicated proof-review screen. Same routes AuditorNav's "More" sheet already uses.
 const LOOKUP_ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },
-  { label: 'Audit Log', icon: FileText, route: 'audit/postings' },
+  { label: 'Audit Log', icon: FileText, route: 'audit/log' },
   { label: 'Reports', icon: BarChart3, route: 'reports/member-balances' },
   { label: 'Proofs', icon: Receipt, route: 'audit/proofs' },
 ];

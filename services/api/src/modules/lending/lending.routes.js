@@ -7,6 +7,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./lending.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Apply for a loan — member supplies amount, term, purpose (NOT the rate).
 // Verified members only (TC-035) — the mobile UI already gated this
@@ -158,6 +159,12 @@ router.post(
         interestRate: interest_rate,
         approvedPrincipal: approved_principal,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'approved', entityType: 'loan_decision', entityId: req.params.id,
+        before: { status: loan.status, principal: loan.principal },
+        after: { status: 'approved', approved_principal: approvedLoan.approved_principal, interest_rate },
+      });
       res.json({ message: 'Loan approved — awaiting disbursement', loan: approvedLoan });
     } catch (err) {
       if (err.message && (err.message.includes('liquidity') || err.status === 409)) {
@@ -183,6 +190,11 @@ router.post(
         loanId: req.params.id,
         disburserId: req.member.id,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'disbursed', entityType: 'loan_disbursement', entityId: req.params.id,
+        before: { status: loan.status }, after: { status: 'active', principal: loan.approved_principal ?? loan.principal },
+      });
       res.json({ message: 'Loan disbursed', ledgerEntry });
     } catch (err) {
       if (err.message && err.message.includes('liquidity')) {
@@ -201,6 +213,11 @@ router.post(
   async (req, res, next) => {
     try {
       const loan = await service.rejectLoan(req.params.id, req.body?.reason);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'loan_decision', entityId: req.params.id,
+        before: { status: 'pending' }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+      });
       res.json({ message: 'Loan rejected', loan });
     } catch (err) {
       next(err);
@@ -311,6 +328,11 @@ router.post(
         paymentId: req.params.paymentId,
         approverId: req.member.id,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'confirmed', entityType: 'loan_payment', entityId: req.params.paymentId,
+        before: { status: payment.status }, after: { status: 'paid', amount: payment.amount, recorded_by: payment.recorded_by },
+      });
       res.json({ message: 'Repayment confirmed', ledgerEntry });
     } catch (err) {
       if (err.message && (err.message.includes('Approver cannot be') || err.message.includes('must be confirmed by the Auditor'))) {
@@ -334,6 +356,11 @@ router.post(
       }
       const updated = await service.rejectRepayment({ paymentId: req.params.paymentId, reason: req.body?.reason });
       if (!updated) return res.status(409).json({ error: 'Repayment is not pending confirmation' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'loan_payment', entityId: req.params.paymentId,
+        before: { status: payment.status }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+      });
       res.json({ message: 'Repayment rejected', payment: updated });
     } catch (err) { next(err); }
   }

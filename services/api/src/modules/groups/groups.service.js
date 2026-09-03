@@ -208,6 +208,14 @@ async function updateMemberRole(groupId, memberId, role) {
       throw Object.assign(new Error('Member must be verified before being appointed an officer'), { status: 409 });
     }
   }
+
+  // Fetch the role BEFORE updating — .update().select() only ever returns
+  // the new row, and the audit log needs the actual before value, not an
+  // assumption about what it must have been.
+  const { data: before } = await supabase
+    .from('memberships').select('role')
+    .eq('group_id', groupId).eq('member_id', memberId).maybeSingle();
+
   const { data, error } = await supabase
     .from('memberships')
     .update({ role })
@@ -230,7 +238,7 @@ async function updateMemberRole(groupId, memberId, role) {
     });
   }
 
-  return data;
+  return { membership: data, previousRole: before?.role ?? null };
 }
 
 // An officer pings a specific member who's behind — the only officer-

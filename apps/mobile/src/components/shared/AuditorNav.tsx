@@ -36,7 +36,7 @@ export function AuditorNav() {
         { label: 'Review postings', icon: ScrollText, route: 'audit/postings' },
         { label: 'Review proofs', icon: Receipt, route: 'audit/proofs' },
         { label: 'Verify year-end', icon: CalendarClock, route: 'distribution/year-end' },
-        { label: 'Audit log', icon: FileText, route: 'reports/group-ledger' },
+        { label: 'Audit log', icon: FileText, route: 'audit/log' },
         { label: 'Switch group', icon: Switch, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}

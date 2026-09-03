@@ -7,6 +7,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./ledger.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Initiate a reversal request (Treasurer or Owner). Requires a reason. Does
 // NOT touch the ledger yet — see /verify and /finalize below (TC-021).
@@ -29,6 +30,11 @@ router.post(
         groupId: req.params.groupId,
         reason: reason.trim(),
         initiatedBy: req.member.id,
+      });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'initiated', entityType: 'reversal_request', entityId: request.id,
+        before: { entry_stands: true }, after: { entry_id: req.params.entryId, reason: reason.trim(), amount: entry.amount },
       });
       res.status(201).json({ message: 'Reversal requested — awaiting Auditor verification', request });
     } catch (err) {
@@ -67,6 +73,11 @@ router.post(
         notes: req.body?.notes,
       });
       if (!request) return res.status(409).json({ error: 'Request is not pending verification' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'verified', entityType: 'reversal_request', entityId: req.params.id,
+        before: { status: 'pending_verification' }, after: { status: 'verified', notes: req.body?.notes ?? null },
+      });
       res.json({ message: 'Reversal verified — awaiting Owner approval', request });
     } catch (err) { next(err); }
   }
@@ -85,6 +96,11 @@ router.post(
         notes: req.body?.notes,
       });
       if (!request) return res.status(409).json({ error: 'Request is not pending verification' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'reversal_request', entityId: req.params.id,
+        before: { status: 'pending_verification' }, after: { status: 'rejected', notes: req.body?.notes ?? null },
+      });
       res.json({ message: 'Reversal request rejected', request });
     } catch (err) { next(err); }
   }
@@ -101,6 +117,11 @@ router.post(
       const { request, reversalEntry } = await service.finalizeReversal({
         requestId: req.params.id,
         finalizedBy: req.member.id,
+      });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'finalized', entityType: 'reversal_request', entityId: req.params.id,
+        before: { status: 'verified' }, after: { status: 'finalized', reversal_entry_id: reversalEntry?.id ?? null },
       });
       res.json({ message: 'Reversal finalized', request, reversalEntry });
     } catch (err) {
@@ -134,6 +155,11 @@ router.post(
         amount,
         reason: reason.trim(),
         postedBy: req.member.id,
+      });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'posted', entityType: 'ledger_adjustment', entityId: entry.id,
+        before: null, after: { direction, amount, reason: reason.trim(), membership_id },
       });
       res.json({ message: 'Adjustment posted', entry });
     } catch (err) { next(err); }

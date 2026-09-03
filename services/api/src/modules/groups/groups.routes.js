@@ -3,6 +3,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./groups.service');
+const { logAudit } = require('../../lib/auditLog');
 
 // Current member profile (auth middleware already resolved req.member)
 router.get('/me/profile', requireAuth, (req, res) => {
@@ -90,6 +91,11 @@ router.patch('/groups/:groupId/members/:memberId/approve', requireAuth,
   async (req, res, next) => {
     try {
       const membership = await service.approveMember(req.params.groupId, req.params.memberId);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'approved', entityType: 'membership_approval', entityId: req.params.memberId,
+        before: { status: 'pending' }, after: { status: 'active' },
+      });
       res.json({ membership });
     } catch (err) { next(err); }
   }
@@ -101,6 +107,11 @@ router.patch('/groups/:groupId/members/:memberId/reject', requireAuth,
   async (req, res, next) => {
     try {
       const membership = await service.rejectMember(req.params.groupId, req.params.memberId, req.body?.reason);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'rejected', entityType: 'membership_approval', entityId: req.params.memberId,
+        before: { status: 'pending' }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+      });
       res.json({ membership });
     } catch (err) { next(err); }
   }
@@ -151,7 +162,12 @@ router.patch('/groups/:groupId/members/:memberId/role', requireAuth,
       if (!['member', 'treasurer', 'auditor'].includes(role)) {
         return res.status(400).json({ error: 'role must be member, treasurer, or auditor' });
       }
-      const membership = await service.updateMemberRole(req.params.groupId, req.params.memberId, role);
+      const { membership, previousRole } = await service.updateMemberRole(req.params.groupId, req.params.memberId, role);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'role_changed', entityType: 'membership_role', entityId: req.params.memberId,
+        before: { role: previousRole }, after: { role },
+      });
       res.json({ membership });
     } catch (err) { next(err); }
   }
