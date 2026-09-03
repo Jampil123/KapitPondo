@@ -25,9 +25,16 @@ export interface Expense {
   /** Short-lived viewable URL for proof_url (private storage path) — regenerated on every fetch. */
   proof_signed_url: string | null;
   status: ExpenseStatus;
-  recorded_by: string | null; // membership id of recorder
-  approved_by: string | null; // membership id of approver (set on approve)
+  recorded_by: string | null; // member id of recorder
+  approved_by: string | null; // member id of approver (set on approve)
+  /** Set only when status is 'rejected' — real column added migration 0046. */
+  rejection_reason: string | null;
   created_at: string;
+  updated_at: string;
+  /** Who recorded this — null-safe join, listExpenses only. */
+  recorder: { full_name: string } | null;
+  /** Who approved it — null until approved. */
+  approver: { full_name: string } | null;
 }
 
 export interface RecordExpenseInput {
@@ -58,7 +65,7 @@ export function approveExpense(groupId: string, expenseId: string) {
   );
 }
 
-/** POST — reject an expense (status: rejected). */
+/** POST — reject an expense, with a reason the recorder can see (status: rejected). Officer other than the recorder. */
 export function rejectExpense(groupId: string, expenseId: string, reason?: string) {
   return api.post<{ expense: Expense }>(
     `/api/groups/${groupId}/expenses/${expenseId}/reject`,

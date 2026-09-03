@@ -229,38 +229,15 @@ router.post(
   }
 );
 
-// Record a repayment (officer records; segregation enforced in SQL).
-// Pass approver_id of a DIFFERENT officer to satisfy segregation of duties.
-router.post(
-  '/groups/:groupId/loans/:id/repayments',
-  requireAuth,
-  requireGroupRole(['treasurer', 'owner']),
-  async (req, res, next) => {
-    try {
-      const { amount, payment_method, proof_url, external_reference, approver_id } = req.body;
-      if (amount == null) return res.status(400).json({ error: 'amount is required' });
-      const ledgerEntry = await service.recordRepayment({
-        loanId: req.params.id,
-        amount,
-        recordedBy: req.member.id,
-        approverId: approver_id || req.member.id,
-        paymentMethod: payment_method,
-        proofUrl: proof_url,
-        externalReference: external_reference,
-      });
-      res.json({ message: 'Repayment recorded', ledgerEntry });
-    } catch (err) {
-      if (err.message && err.message.includes('Approver cannot be')) {
-        return res.status(403).json({ error: err.message });
-      }
-      next(err);
-    }
-  }
-);
-
-// Member submits a repayment claim + proof for THEIR OWN loan — no money
-// posts yet, a different officer confirms it (see /loans/repayments/:id/confirm
-// below). Distinct from the officer's direct /repayments record above.
+// Submit a repayment claim + proof — no money posts yet, a DIFFERENT officer
+// confirms it later (see /repayments/:paymentId/confirm below). Either the
+// borrower submitting their own claim, or an officer recording one on the
+// borrower's behalf (cash/GCash received in person) — the latter is tagged
+// is_walk_in so the app can tell them apart, same relationship as
+// contributions' is_walk_in. Both go through the identical confirm step;
+// there's no instant-post path anymore (see migration 0045 — the old
+// record_loan_repayment RPC posted in one call with no real second-person
+// check, same gap contributions' record_walkin_contribution had).
 router.post(
   '/groups/:groupId/loans/:id/repayments/submit',
   requireAuth,
@@ -273,7 +250,9 @@ router.post(
       if (loan.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Loan does not belong to this group' });
       }
-      if (loan.membership_id !== req.membership.id) {
+      const isOwnLoan = loan.membership_id === req.membership.id;
+      const isOfficer = ['treasurer', 'auditor', 'owner'].includes(req.membership.role);
+      if (!isOwnLoan && !isOfficer) {
         return res.status(403).json({ error: 'You can only submit a repayment for your own loan' });
       }
       const payment = await service.submitRepayment({
@@ -283,6 +262,7 @@ router.post(
         paymentMethod: payment_method,
         proofUrl: proof_url,
         externalReference: external_reference,
+        isWalkIn: !isOwnLoan,
       });
       res.status(201).json({ message: 'Repayment submitted for confirmation', payment });
     } catch (err) { next(err); }
@@ -333,7 +313,7 @@ router.post(
       });
       res.json({ message: 'Repayment confirmed', ledgerEntry });
     } catch (err) {
-      if (err.message && err.message.includes('Approver cannot be')) {
+      if (err.message && (err.message.includes('Approver cannot be') || err.message.includes('must be confirmed by the Auditor'))) {
         return res.status(403).json({ error: err.message });
       }
       next(err);

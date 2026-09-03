@@ -69,20 +69,30 @@ router.post(
       if (err.message && err.message.includes('Insufficient fund')) {
         return res.status(409).json({ error: err.message });
       }
+      if (err.message && err.message.includes('must be confirmed by the Auditor')) {
+        return res.status(403).json({ error: err.message });
+      }
       next(err);
     }
   }
 );
 
-// Reject an expense (officer)
+// Reject an expense, with a reason the recorder can see (officer, not the recorder)
 router.post(
   '/groups/:groupId/expenses/:id/reject',
   requireAuth,
   requireGroupRole(['owner', 'auditor']),
   async (req, res, next) => {
     try {
-      const expense = await service.rejectExpense(req.params.id);
-      res.json({ message: 'Expense rejected', expense });
+      const expense = await service.getExpense(req.params.id);
+      if (expense.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Expense does not belong to this group' });
+      }
+      if (expense.recorded_by === req.member.id) {
+        return res.status(403).json({ error: 'You cannot reject an expense you recorded' });
+      }
+      const updated = await service.rejectExpense(req.params.id, req.body?.reason);
+      res.json({ message: 'Expense rejected', expense: updated });
     } catch (err) { next(err); }
   }
 );

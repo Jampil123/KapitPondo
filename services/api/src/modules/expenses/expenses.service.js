@@ -23,7 +23,9 @@ async function createExpense(input) {
 }
 
 async function listExpenses({ groupId, status }) {
-  let q = supabase.from('expenses').select('*').eq('group_id', groupId);
+  let q = supabase.from('expenses')
+    .select('*, recorder:members!recorded_by(full_name), approver:members!approved_by(full_name)')
+    .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });
   if (error) throw error;
@@ -45,10 +47,10 @@ async function approveExpense({ expenseId, approverId }) {
   return data;
 }
 
-async function rejectExpense(expenseId) {
+async function rejectExpense(expenseId, reason) {
   const { data, error } = await supabase
     .from('expenses')
-    .update({ status: 'rejected', updated_at: new Date().toISOString() })
+    .update({ status: 'rejected', rejection_reason: reason ?? null, updated_at: new Date().toISOString() })
     .eq('id', expenseId)
     .eq('status', 'submitted')
     .select()

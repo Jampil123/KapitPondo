@@ -28,7 +28,6 @@ import {
   approveLoan,
   disburseLoan,
   rejectLoan,
-  recordRepayment,
   submitRepayment,
   listRepayments,
   confirmRepayment,
@@ -36,7 +35,6 @@ import {
   type ApplyLoanInput,
   type LoanStatus,
   type LoanPaymentStatus,
-  type RecordRepaymentInput,
   type SubmitRepaymentInput,
 } from '../../api/lending';
 
@@ -109,14 +107,7 @@ export function useCancelLoan(groupId: string) {
   return useAction((loanId: string) => cancelLoan(groupId, loanId));
 }
 
-/** Direct-record path — officer received the payment in person, posts immediately, no confirm step. */
-export function useRecordRepayment(groupId: string) {
-  return useAction((loanId: string, input: RecordRepaymentInput) =>
-    recordRepayment(groupId, loanId, input),
-  );
-}
-
-/** Member submits a repayment claim + proof for their own loan — needs a different officer to confirmRepayment(). */
+/** Submit a repayment claim + proof — the borrower's own, or an officer recording on the borrower's behalf. Needs a different officer to confirmRepayment(). */
 export function useSubmitRepayment(groupId: string) {
   return useAction((loanId: string, input: SubmitRepaymentInput) =>
     submitRepayment(groupId, loanId, input),

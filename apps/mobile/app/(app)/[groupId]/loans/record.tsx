@@ -1,30 +1,21 @@
 /**
- * app/(app)/[groupId]/contributions/record.tsx — Treasurer records a single
- * member's walk-in payment (cash/GCash/bank received outside the app).
- * Redesigned per the "treasurer-record-payment" reference, adapted to what's
- * actually real:
+ * app/(app)/[groupId]/loans/record.tsx — Treasurer records a single member's
+ * loan repayment (cash/GCash/bank received outside the app). Mirrors
+ * contributions/record.tsx: submits a claim (status 'submitted', tagged
+ * is_walk_in) instead of posting instantly — a DIFFERENT officer must
+ * confirm it via confirm_loan_repayment before it reaches the ledger (see
+ * migration 0045). When the recorder holds the Treasurer role specifically,
+ * that confirmer must be the Auditor.
  *
- *   - a walk-in submission goes through the SAME submitted → a-different-
- *     officer-approves pipeline as a member's own self-submission (see
- *     contributions.routes.js/service.js) — it's tagged is_walk_in so the
- *     app shows it under "Awaiting Auditor" instead of mixing it with
- *     members' own proofs, but it does NOT post immediately. Segregation of
- *     duties applies here too: the recorder can't be the approver.
- *   - paid_date is set to today at APPROVAL time (current_date, hardcoded in
- *     approve_contribution) — so there's no "date received" field; backdating
- *     it would be a lie.
- *   - a short/over amount just posts as typed; there's no partial-payment or
- *     advance-credit concept anywhere in the ledger, so no fake choice
- *     buttons — just an honest mismatch note.
- *   - periods aren't tagged explicitly; a member's rows fill periods in
- *     chronological order (see periods.ts). "Recording against" shows
- *     whichever period that next fill will land on — informational, not a
- *     selectable dropdown, since picking one out of order wouldn't do
- *     anything different server-side.
- *   - proof upload reuses the same path contribute.tsx already uses for
- *     member self-submissions.
+ * The interest-first allocation preview shown here is the REAL formula from
+ * confirm_loan_repayment (checked before building):
+ *   interest  = min(round(outstanding_balance * interest_rate, 2), amount)
+ *   principal = min(amount - interest, outstanding_balance)
+ * computed live client-side so the Treasurer can check it against the proof
+ * before submitting — the server recomputes it independently at confirm
+ * time (it doesn't trust this preview), so it can't drift out of sync.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -37,13 +28,9 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
-import { useQuery } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
-import { listMembers } from '@/api/groups';
-import type { PaymentMethod } from '@/api/contributions';
-import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
-import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { buildTimeline, periodLabel } from '@/features/contributions/periods';
+import type { PaymentMethod } from '@/api/lending';
+import { useLoan, useSubmitRepayment } from '@/features/lending/lending.hooks';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
@@ -78,7 +65,7 @@ const METHODS: { key: PaymentMethod; icon: any; tileLabel: string; refLabel: str
   },
 ];
 
-function Notice({ tone, title, body }: { tone: 'info' | 'warning' | 'danger'; title: string; body: string }) {
+function Notice({ tone, title, body }: { tone: 'info' | 'warning' | 'danger' | 'success'; title: string; body: string }) {
   const t = intent[tone];
   return (
     <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start', backgroundColor: t.soft, borderRadius: 16, padding: 14 }}>
@@ -93,26 +80,28 @@ function Notice({ tone, title, body }: { tone: 'info' | 'warning' | 'danger'; ti
   );
 }
 
-export default function RecordPayment() {
-  const { groupId, membershipId } = useLocalSearchParams<{ groupId: string; membershipId: string }>();
+function AllocRow({ label, value, tone }: { label: string; value: string; tone?: 'int' | 'pri' | 'bal' }) {
+  const color = tone === 'int' ? intent.warning.text : tone === 'pri' ? semantic.brandDark : semantic.textPrimary;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 4 }}>
+      <Text variant="caption" color="secondary" style={{ fontWeight: tone === 'bal' ? '700' : '500' }}>{label}</Text>
+      <Text style={{ marginLeft: 'auto', fontFamily: tone === 'bal' ? 'Poppins_700Bold' : 'Poppins_600SemiBold', fontSize: tone === 'bal' ? 14.5 : 12.5, color }}>{value}</Text>
+    </View>
+  );
+}
+
+export default function RecordLoanRepayment() {
+  const { groupId, loanId } = useLocalSearchParams<{ groupId: string; loanId: string }>();
   const router = useRouter();
   const { member } = useAuth();
 
-  const { cycle } = useActiveCycle(groupId!);
-  const membersQ = useQuery(() => listMembers(groupId!), [groupId]);
-  const target = membersQ.data?.find((m) => m.id === membershipId) ?? null;
+  const { data, loading } = useLoan(groupId!, loanId);
+  const loan = data?.loan ?? null;
+  const submit = useSubmitRepayment(groupId!);
 
-  const memberContribs = useContributions(groupId!, cycle?.id ? { membership_id: membershipId, cycle_id: cycle.id } : {});
-  const submit = useSubmitContribution(groupId!);
-
-  const nextEntry = useMemo(() => {
-    if (!cycle || !target) return null;
-    const timeline = buildTimeline(cycle, memberContribs.data ?? [], target.heads);
-    return timeline.find((e) => e.kind === 'due' || e.kind === 'late') ?? null;
-  }, [cycle, target, memberContribs.data]);
-
-  const isSelf = !!target && target.member_id === member?.id;
-  const expected = nextEntry?.amount ?? 0;
+  const isSelf = !!loan && loan.membership?.member_id === member?.id;
+  const outstanding = Number(loan?.outstanding_balance ?? 0);
+  const rate = Number(loan?.interest_rate ?? 0);
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('gcash');
@@ -120,18 +109,17 @@ export default function RecordPayment() {
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // `expected` only resolves once cycle/roster/this member's contributions have
-  // all loaded (three separate async fetches) — a lazy useState initializer
-  // would run before any of that settles and never gets a second chance, so
-  // the field prefill needs to react to the data actually arriving instead.
-  useEffect(() => {
-    if (expected > 0 && !amount) setAmount(String(expected));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expected]);
-
   const methodCfg = METHODS.find((m) => m.key === method)!;
   const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
-  const mismatch = amtNum > 0 && expected > 0 && Math.abs(amtNum - expected) > 0.01;
+
+  const alloc = useMemo(() => {
+    if (!amtNum) return null;
+    const interest = Math.min(Math.round(outstanding * rate * 100) / 100, amtNum);
+    const principal = Math.min(amtNum - interest, outstanding);
+    const balanceAfter = Math.max(outstanding - principal, 0);
+    return { interest, principal, balanceAfter, settles: balanceAfter <= 0.01 };
+  }, [amtNum, outstanding, rate]);
+
   const needsRef = methodCfg.required && !reference.trim();
 
   async function pickProof() {
@@ -142,24 +130,22 @@ export default function RecordPayment() {
   }
 
   async function onSubmit() {
-    if (!cycle || !target) return;
+    if (!loan) return;
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter the amount received.');
     if (needsRef) return Alert.alert('Reference needed', `Enter a ${methodCfg.refLabel.toLowerCase()}.`);
     setSaving(true);
     try {
       let proof_url: string | undefined;
-      if (proofUri) proof_url = await uploadImage('proofs', proofUri, 'contribution');
-      const ok = await submit.run({
-        cycle_id: cycle.id,
-        membership_id: target.id,
+      if (proofUri) proof_url = await uploadImage('proofs', proofUri, 'repayment');
+      const ok = await submit.run(loan.id, {
         amount: amt,
         payment_method: method,
         external_reference: reference || undefined,
         proof_url,
       });
       if (ok !== undefined) {
-        Alert.alert('Recorded', `${target.members?.full_name ?? 'Member'}'s payment of ${formatPeso(amt)} was submitted — the Auditor needs to confirm it before it posts.`);
+        Alert.alert('Recorded', `${loan.membership?.members?.full_name ?? 'Member'}'s repayment of ${formatPeso(amt)} was submitted — the Auditor needs to confirm it before it posts.`);
         router.back();
       } else if (submit.error) {
         Alert.alert('Could not record', submit.error.message);
@@ -171,46 +157,31 @@ export default function RecordPayment() {
     }
   }
 
-  const disabled = !amtNum || needsRef || !target || !cycle;
-  const barNote = !amtNum ? 'Enter the amount received'
-    : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required`
-    : 'Goes to the Auditor for confirmation';
+  const disabled = !amtNum || needsRef || !loan;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Record a payment" subtitle="For money received outside the app" />
+      <AppBar title="Record a repayment" subtitle="For money received outside the app" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled">
 
-        {!target || !cycle || membersQ.loading ? (
+        {loading || !loan ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : (
           <>
-            {/* ---------------- Who + expected ---------------- */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
-              <Avatar name={target.members?.full_name ?? 'Member'} size={48} />
+              <Avatar name={loan.membership?.members?.full_name ?? 'Member'} size={48} />
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{target.members?.full_name ?? 'Member'}</Text>
+                <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{loan.membership?.members?.full_name ?? 'Member'}</Text>
                 <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
-                  {target.heads} head{target.heads === 1 ? '' : 's'}{isSelf ? ' · you' : ''}
+                  {formatPeso(outstanding)} outstanding{isSelf ? ' · you' : ''}
                 </Text>
               </View>
-            </View>
-
-            <View style={[{ padding: 14, flexDirection: 'row', alignItems: 'baseline' }, cardStyle]}>
-              <View>
-                <Text variant="label" style={{ fontSize: 12.5, color: semantic.textSecondary }}>Expected</Text>
-                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>
-                  {nextEntry ? `Recording against ${periodLabel(nextEntry.periodStart, cycle.frequency, true)}` : 'No open period for this cycle'}
-                </Text>
-              </View>
-              <Text style={{ marginLeft: 'auto', fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(expected)}</Text>
             </View>
 
             {isSelf ? (
-              <Notice tone="warning" title="You're recording your own payment" body="That's allowed, but you can't be the one who confirms it — a payment you record always waits for the Auditor to approve." />
+              <Notice tone="warning" title="You're recording your own repayment" body="That's allowed, but you can't be the one who confirms it — a repayment you record always waits for the Auditor to approve." />
             ) : null}
 
-            {/* ---------------- What was paid ---------------- */}
             <View>
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>What was paid</Text>
               <View style={[cardStyle, { padding: 13, gap: 4 }]}>
@@ -221,25 +192,31 @@ export default function RecordPayment() {
                     value={amount}
                     onChangeText={setAmount}
                     keyboardType="numeric"
-                    placeholder={String(expected)}
+                    placeholder={String(outstanding)}
                     placeholderTextColor={semantic.textMuted}
                     style={{ flex: 1, fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}
                   />
                 </View>
               </View>
 
-              {mismatch ? (
-                <View style={{ marginTop: 10 }}>
-                  <Notice
-                    tone="warning"
-                    title={`${formatPeso(Math.abs(amtNum - expected))} ${amtNum < expected ? 'less' : 'more'} than expected`}
-                    body={`Expected ${formatPeso(expected)}, entering ${formatPeso(amtNum)}. It posts exactly as entered — double-check before recording.`}
-                  />
+              {alloc ? (
+                <View style={[{ marginTop: 10, padding: 13 }, cardStyle, alloc.settles ? { borderWidth: 1.5, borderColor: intent.success.base } : undefined]}>
+                  {alloc.settles ? (
+                    <View style={{ marginBottom: 10, backgroundColor: intent.success.soft, borderRadius: 10, padding: 10 }}>
+                      <Text variant="label" style={{ fontSize: 12, color: intent.success.text }}>This settles the loan</Text>
+                      <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 15 }}>After this payment, {loan.membership?.members?.full_name ?? 'they'} owe nothing — the loan closes and they become eligible to borrow again.</Text>
+                    </View>
+                  ) : null}
+                  <Text variant="overline" color="muted" style={{ marginBottom: 4 }}>How this will be applied</Text>
+                  <AllocRow label="Interest first" value={formatPeso(alloc.interest)} tone="int" />
+                  <AllocRow label="Then principal" value={formatPeso(alloc.principal)} tone="pri" />
+                  <View style={{ borderTopWidth: 1, borderColor: semantic.border, marginTop: 6, paddingTop: 6 }}>
+                    <AllocRow label="Balance after" value={alloc.settles ? `${formatPeso(0)} · settled` : formatPeso(alloc.balanceAfter)} tone="bal" />
+                  </View>
                 </View>
               ) : null}
             </View>
 
-            {/* ---------------- How it was received ---------------- */}
             <View>
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>How it was received</Text>
               <View style={[cardStyle, { padding: 13, gap: 13 }]}>
@@ -283,14 +260,15 @@ export default function RecordPayment() {
               </View>
             </View>
 
-            {/* ---------------- Notices ---------------- */}
-            <Notice tone="info" title="Recorded by you, confirmed by the Auditor" body="A payment you record must be confirmed by the Auditor before it posts to the ledger. Your name stays on the entry permanently." />
+            <Notice tone="info" title="Recorded by you, confirmed by the Auditor" body="A repayment you record must be confirmed by the Auditor before it posts to the ledger. Your name stays on the entry permanently." />
             {methodCfg.warn ? (
               <Notice tone="danger" title={method === 'cash' ? 'Cash has no external record' : 'No reference number for this entry'} body="Attach a photo of a signed slip or write down how it was received — without something, this posting rests on your word alone." />
             ) : null}
 
-            <Button label="Record payment" onPress={onSubmit} loading={saving} disabled={disabled} />
-            <Text variant="caption" color={disabled ? 'secondary' : 'secondary'} style={{ textAlign: 'center', marginTop: -8 }}>{barNote}</Text>
+            <Button label="Record repayment" onPress={onSubmit} loading={saving} disabled={disabled} />
+            <Text variant="caption" color="secondary" style={{ textAlign: 'center', marginTop: -8 }}>
+              {!amtNum ? 'Enter the amount received' : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required` : 'Goes to the Auditor for confirmation'}
+            </Text>
           </>
         )}
       </ScrollView>

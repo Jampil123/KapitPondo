@@ -176,21 +176,8 @@ async function disburseLoan({ loanId, disburserId }) {
   return data;
 }
 
-async function recordRepayment(input) {
-  const { data, error } = await supabase.rpc('record_loan_repayment', {
-    p_loan_id: input.loanId,
-    p_amount: input.amount,
-    p_recorded_by: input.recordedBy,
-    p_approver_id: input.approverId,
-    p_payment_method: input.paymentMethod || null,
-    p_proof_url: input.proofUrl || null,
-    p_external_reference: input.externalReference || null,
-  });
-  if (error) throw error;
-  return data;
-}
-
-// Member submits a repayment claim + proof — no money moves yet (see
+// A member's own claim, or an officer recording one on the borrower's
+// behalf (isWalkIn) — either way no money moves yet (see
 // submit_loan_repayment()). Confirmed later by a DIFFERENT officer via
 // confirmRepayment(), same "claim now, post on confirm" shape as a
 // member's own contribution submission.
@@ -202,6 +189,7 @@ async function submitRepayment(input) {
     p_payment_method: input.paymentMethod || null,
     p_proof_url: input.proofUrl || null,
     p_external_reference: input.externalReference || null,
+    p_is_walk_in: input.isWalkIn ?? false,
   });
   if (error) throw error;
   return data;
@@ -337,7 +325,6 @@ module.exports = {
   cancelLoan,
   approveLoan,
   disburseLoan,
-  recordRepayment,
   submitRepayment,
   listRepayments,
   getRepayment,

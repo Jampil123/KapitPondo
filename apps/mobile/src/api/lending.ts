@@ -81,6 +81,12 @@ export interface LoanPayment {
   /** Set only when status is 'rejected'. */
   rejection_reason: string | null;
   created_at: string;
+  /** Bumped by rejectRepayment() — the only timestamp for "when was this returned". */
+  updated_at: string;
+  /** True when an officer recorded this on the borrower's behalf (cash/GCash received in person) rather than the borrower submitting it themselves. Still goes through the same submitted → different-officer-confirms flow — see confirm_loan_repayment (migration 0045). */
+  is_walk_in: boolean;
+  /** Raw member id of whoever recorded this — the borrower for a self-submission, or the officer for a walk-in. Null-safe: real column. */
+  recorded_by: string | null;
   /** Who recorded this repayment (the member who submitted it, or the officer who recorded it directly). Null for gateway-auto-confirmed payments — see auto_confirmed. */
   recorder: { full_name: string } | null;
   /** The different officer who confirmed/verified it (segregation of duties) — null while 'submitted', and null for gateway-auto-confirmed payments. */
@@ -181,27 +187,6 @@ export function rejectLoan(groupId: string, loanId: string, reason?: string) {
   );
 }
 
-export interface RecordRepaymentInput {
-  amount: string; // clean decimal string
-  payment_method?: PaymentMethod;
-  proof_url?: string;
-  external_reference?: string;
-  /** A different officer who approves this repayment (segregation of duties). */
-  approver_id?: string;
-}
-
-/**
- * POST — record a loan repayment DIRECTLY (officer received it in person).
- * Server allocates interest first, then principal, and posts the ledger
- * entry immediately (record_loan_repayment RPC) — no confirmation step.
- */
-export function recordRepayment(groupId: string, loanId: string, input: RecordRepaymentInput) {
-  return api.post<{ message: string; ledgerEntry: unknown }>(
-    `/api/groups/${groupId}/loans/${loanId}/repayments`,
-    input,
-  );
-}
-
 export interface SubmitRepaymentInput {
   amount: string; // clean decimal string
   payment_method?: PaymentMethod;
@@ -210,9 +195,14 @@ export interface SubmitRepaymentInput {
 }
 
 /**
- * POST — member submits a repayment claim + proof for THEIR OWN loan. No
- * money posts yet — a different officer must confirmRepayment() it first.
- * Mirrors the contribution submit→approve flow.
+ * POST — submit a repayment claim + proof. No money posts yet — a different
+ * officer must confirmRepayment() it first. Either the borrower submitting
+ * their own claim, or an officer recording one on the borrower's behalf
+ * (server tags it is_walk_in based on whether the caller owns the loan) —
+ * both go through the same confirm step. Mirrors the contribution
+ * submit→approve flow; there's no instant-post path anymore (the old
+ * recordRepayment/record_loan_repayment posted in one call with no real
+ * second-person check — see migration 0045).
  */
 export function submitRepayment(groupId: string, loanId: string, input: SubmitRepaymentInput) {
   return api.post<{ message: string; payment: LoanPayment }>(
