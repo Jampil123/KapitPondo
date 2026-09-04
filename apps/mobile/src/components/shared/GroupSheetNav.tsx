@@ -1,19 +1,3 @@
-/**
- * components/shared/GroupSheetNav.tsx
- * ----------------------------------------------------------------------------
- * Generic 5-slot bottom nav (Chat · Home · + · Profile · More) with the
- * elevated center button and bottom sheets — the zip's pattern. The CHROME is
- * shared; each role passes its own sheet configs, so OrganizerNav and MemberNav
- * are just configs (no duplicated bar code). Home is a direct nav (like
- * Profile) back to the group's dashboard — no sheet needed.
- *
- * Sheet items route to a group-scoped screen, jump to the groups list
- * ('@groups'), run a callback, or show "Soon".
- *
- * Chrome is a floating dark pill, glyphs only (no labels) — the active tab
- * sits in a lit recess with a small glowing dash above it, and the center
- * action is a glowing blue FAB, matching the reference redesign.
- */
 import { useState } from 'react';
 import { View, Pressable, Modal, Alert } from 'react-native';
 import { router, usePathname, useLocalSearchParams } from 'expo-router';
@@ -60,13 +44,19 @@ function NavItem({ icon: Icon, onPress, active }: { icon: any; onPress: () => vo
 }
 
 export function GroupSheetNav({
-  chat, add, more, centerIcon: CenterIcon = Plus, onCenterPress,
+  chat, add, more, centerIcon: CenterIcon = Plus, onCenterPress, moreIcon: MoreIcon = Menu, onMorePress, onChatPress,
 }: {
-  chat: SheetConfig; add: SheetConfig; more: SheetConfig;
+  chat?: SheetConfig; add: SheetConfig; more?: SheetConfig;
   /** Override the center FAB glyph — e.g. Search for a role that never creates entries. */
   centerIcon?: any;
   /** Override what the center FAB does — defaults to opening the `add` sheet. */
   onCenterPress?: () => void;
+  /** Override the "More" tab glyph — e.g. a 4-tile grid for a role whose More is a real page, not a sheet. */
+  moreIcon?: any;
+  /** Override what the "More" tab does — defaults to opening the `more` sheet. */
+  onMorePress?: () => void;
+  /** Override what the "Chat" tab does — defaults to opening the `chat` sheet. */
+  onChatPress?: () => void;
 }) {
   const insets = useSafeAreaInsets();
   const path = usePathname();
@@ -75,6 +65,8 @@ export function GroupSheetNav({
 
   const isHome = path === `/(app)/${groupId}`;
   const isProfile = path.endsWith('/profile');
+  const isMore = path.endsWith('/more');
+  const isMessages = path.endsWith('/messages');
 
   function handleItem(it: SheetItem) {
     setActive(null);
@@ -96,7 +88,7 @@ export function GroupSheetNav({
         }}
       >
         <NavItem icon={Home} active={isHome} onPress={() => router.push({ pathname: '/(app)/[groupId]', params: { groupId } })} />
-        <NavItem icon={MessageCircle} onPress={() => setActive(chat)} />
+        <NavItem icon={MessageCircle} active={onChatPress ? isMessages : undefined} onPress={onChatPress ?? (() => chat && setActive(chat))} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Pressable
             onPress={onCenterPress ?? (() => setActive(add))}
@@ -110,7 +102,7 @@ export function GroupSheetNav({
           </Pressable>
         </View>
         <NavItem icon={User} active={isProfile} onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
-        <NavItem icon={Menu} onPress={() => setActive(more)} />
+        <NavItem icon={MoreIcon} active={onMorePress ? isMore : undefined} onPress={onMorePress ?? (() => more && setActive(more))} />
       </View>
 
       <Modal visible={!!active} transparent animationType="slide" onRequestClose={() => setActive(null)}>

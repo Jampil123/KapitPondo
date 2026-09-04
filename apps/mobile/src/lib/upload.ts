@@ -64,3 +64,28 @@ export async function uploadAvatar(memberId: string, localUri: string): Promise<
   if (error) throw error;
   return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
 }
+
+/**
+ * Upload a photo shared in group chat to the public `chat-media` bucket
+ * (see 0049_chat_media.sql) and return its public URL — same "no signed-URL
+ * exchange" tradeoff as avatars, since a chat image isn't sensitive the way
+ * an ID document or payment proof is.
+ */
+export async function uploadChatImage(groupId: string, localUri: string): Promise<string> {
+  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const path = `${groupId}/${Date.now()}.${ext}`;
+
+  const base64 = await FileSystem.readAsStringAsync(localUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  const { error } = await supabase.storage
+    .from('chat-media')
+    .upload(path, decode(base64), {
+      contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
+      upsert: false,
+    });
+
+  if (error) throw error;
+  return supabase.storage.from('chat-media').getPublicUrl(path).data.publicUrl;
+}

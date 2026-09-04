@@ -1,31 +1,19 @@
-/**
- * components/shared/MemberNav.tsx — member's bottom nav (config over GroupSheetNav).
- * Member actions (contribute / loan / repay / ledger) route to member
- * screens once they exist; marked "Soon" until then. "Repay a loan" submits
- * a claim + proof for a different officer to confirm (migration 0037) — a
- * member can also just pay the treasurer directly and have THEM record it,
- * see loans/index.tsx.
- */
-import {
-  ArrowUpCircle, Coins, Repeat, MessageCircle, Users, LifeBuoy, Repeat as Switch,
-} from 'lucide-react-native';
+import { ArrowUpCircle, Coins, Repeat } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
 
 export function MemberNav() {
+  const router = useRouter();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+
   return (
     <GroupSheetNav
-      chat={{ title: 'Group chats', items: [
-        { label: 'Group feed', icon: MessageCircle, route: 'chat/general' },
-      ] }}
+      onMorePress={() => router.push({ pathname: '/(app)/[groupId]/more' as any, params: { groupId } })}
+      onChatPress={() => router.push({ pathname: '/(app)/[groupId]/messages' as any, params: { groupId } })}
       add={{ title: 'What would you like to do?', items: [
         { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
         { label: 'Request a loan', icon: Coins, route: 'loans/request' },
         { label: 'Repay a loan', icon: Repeat, route: 'loans/repay' },
-      ] }}
-      more={{ title: 'More', items: [
-        { label: 'Group & officers', icon: Users, route: 'group' },
-        { label: 'Switch group', icon: Switch, route: '@groups' },
-        { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}
     />
   );

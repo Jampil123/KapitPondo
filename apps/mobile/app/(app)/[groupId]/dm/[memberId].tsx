@@ -1,11 +1,15 @@
 /**
- * app/(app)/[groupId]/chat/[channel].tsx — group chat (officers or general).
- * Reached from GroupSheetNav's Chat sheet via route 'chat/officers' | 'chat/general'.
+ * app/(app)/[groupId]/dm/[memberId].tsx — 1:1 conversation with another
+ * active member of this group (an officer or a plain member — same screen,
+ * see directMessages.routes.js: any two active members can message each
+ * other). Reached by tapping a row under "Contact an officer"/"Members" on
+ * messages.tsx. Mirrors chat/[channel].tsx's composer (sticker tray, photo
+ * picker, gradient send button) — a DM is just a different message source.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { Send, MessageCircle, Image as ImageIcon, Smile } from 'lucide-react-native';
@@ -15,65 +19,37 @@ import { LoadingState } from '@/components/shared/LoadingState';
 import { MessageBubble } from '@/components/chat/MessageBubble';
 import { semantic } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
-import { useActiveGroup } from '@/context/GroupContext';
 import { usePresentMembers } from '@/context/PresenceContext';
-import { can } from '@/constants/roles';
 import { useQuery } from '@/hooks/useApi';
-import { listOfficers } from '@/api/groups';
+import { listMemberDirectory } from '@/api/groups';
 import { uploadChatImage } from '@/lib/upload';
-import { useMessages, useSendMessage } from '@/features/chat/chat.hooks';
-import type { ChatChannel } from '@/api/messages';
+import { useDirectMessages, useSendDirectMessage } from '@/features/chat/directMessages.hooks';
 
 const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
 const STICKERS = ['👍', '😊', '🎉', '🙏', '❤️', '😂', '✅', '💰'];
 
-/** "Ana, Jay, Marites +13 more" — a name list that degrades gracefully once
- *  a group has more members than fit in an AppBar subtitle line. */
-function nameList(names: (string | null)[], max = 3): string {
-  const clean = names.map((n) => n ?? 'Unnamed');
-  if (clean.length === 0) return '';
-  const shown = clean.slice(0, max).join(', ');
-  const rest = clean.length - max;
-  return rest > 0 ? `${shown} +${rest} more` : shown;
-}
+const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
-/** "Ana is active now" / "5 active now" / "No one else is active right now" —
- *  driven by real Supabase Realtime presence (PresenceContext), not a guess. */
-function activeNowLabel(others: { full_name: string | null }[]): string {
-  if (others.length === 0) return 'No one else is active right now';
-  if (others.length === 1) return `${others[0].full_name ?? 'Someone'} is active now`;
-  return `${others.length} active now`;
-}
-
-export default function Chat() {
-  const { groupId, channel } = useLocalSearchParams<{ groupId: string; channel: ChatChannel }>();
-  const { role, group } = useActiveGroup();
+export default function DirectMessage() {
+  const { groupId, memberId } = useLocalSearchParams<{ groupId: string; memberId: string }>();
   const { member } = useAuth();
+  const present = usePresentMembers();
+  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
+  const other = directory.data?.find((m) => m.member_id === memberId);
+  const isOnline = present.some((p) => p.member_id === memberId);
+
   const [draft, setDraft] = useState('');
   const [showStickers, setShowStickers] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const officers = useQuery(() => listOfficers(groupId!), [groupId]);
-  const present = usePresentMembers();
 
-  // Access guard: a plain member deep-linking to /chat/officers gets bounced.
-  // Mirrors the backend's 403 (constants/roles.ts's convention: UI must follow
-  // the same guard the API enforces so nothing renders that the API would
-  // then reject).
-  const allowed = channel === 'officers' ? can(role, 'viewOfficersChat') : can(role, 'viewGeneralChat');
-  useEffect(() => {
-    if (role && !allowed) router.back();
-  }, [role, allowed]);
-
-  const { messages, loading, loadingMore, loadMore } = useMessages(groupId, channel);
-  const { send, sending } = useSendMessage(groupId, channel);
-
-  if (!role || !allowed) return null; // brief flash before the redirect above fires
+  const { messages, loading, loadingMore, loadMore } = useDirectMessages(groupId, memberId, member?.id);
+  const { send, sending } = useSendDirectMessage(groupId!, memberId!);
 
   async function onSend() {
     const body = draft.trim();
     if (!body) return;
     setDraft('');
-    await send(body); // realtime echo appends it — see chat.hooks.ts
+    await send(body); // realtime echo appends it — see directMessages.hooks.ts
   }
 
   async function onSendSticker(emoji: string) {
@@ -87,16 +63,12 @@ export default function Chat() {
       Alert.alert('Permission needed', 'Allow photo access to share a picture here.');
       return;
     }
-    const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      quality: 0.7,
-    });
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, quality: 0.7 });
     if (res.canceled) return;
     setUploadingImage(true);
     try {
       const imageUrl = await uploadChatImage(groupId!, res.assets[0].uri);
-      await send('', imageUrl); // realtime echo appends it — see chat.hooks.ts
+      await send('', imageUrl);
     } catch (e) {
       Alert.alert('Upload failed', (e as Error).message);
     } finally {
@@ -104,27 +76,14 @@ export default function Chat() {
     }
   }
 
-  const title = channel === 'officers' ? 'Officers room' : (group?.name ?? 'Group chat');
-  const othersPresent = present.filter((p) => p.member_id !== member?.id);
-  const subtitle = channel === 'officers'
-    ? (officers.data ? `${nameList(officers.data.officers.map((o) => o.full_name))} · private` : undefined)
-    : activeNowLabel(othersPresent);
+  const title = other?.full_name ?? 'Member';
+  const subtitle = other ? `${ROLE_LABEL[other.role] ?? other.role}${isOnline ? ' · Active now' : ''}` : undefined;
 
   return (
-    // KeyboardAvoidingView wraps everything (including the AppBar) so its
-    // 'padding' behavior measures from the true screen edge — no manual
-    // keyboardVerticalOffset needed (matches groups/create.tsx, join.tsx).
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: semantic.background }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: semantic.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <AppBar title={title} subtitle={subtitle} />
 
-        {/* Full-page chat body: the role nav bar is hidden on this route
-            (see [groupId]/_layout.tsx), so this is the whole screen below
-            the AppBar. Tapping anywhere in it (outside the composer's own
-            controls) dismisses the keyboard. */}
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={{ flex: 1 }}>
             {loading ? (
@@ -134,7 +93,7 @@ export default function Chat() {
                 <MessageCircle size={40} color={semantic.textMuted} />
                 <Text variant="h3" style={{ fontSize: 16 }}>No messages yet</Text>
                 <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-                  Be the first to say something here.
+                  Say hello to {other?.full_name ?? 'them'}.
                 </Text>
               </View>
             ) : (
@@ -142,9 +101,7 @@ export default function Chat() {
                 data={messages}
                 inverted
                 keyExtractor={(m) => m.id}
-                renderItem={({ item }) => (
-                  <MessageBubble message={item} isOwn={item.sender_id === member?.id} />
-                )}
+                renderItem={({ item }) => <MessageBubble message={item} isOwn={item.sender_id === member?.id} />}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 ListFooterComponent={loadingMore ? <LoadingState fullscreen={false} /> : null}
@@ -176,12 +133,7 @@ export default function Chat() {
         ) : null}
 
         <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, borderTopWidth: showStickers ? 0 : 1, borderColor: semantic.border, backgroundColor: semantic.surface }}>
-          <Pressable
-            onPress={onPickImage}
-            disabled={uploadingImage}
-            hitSlop={6}
-            style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}
-          >
+          <Pressable onPress={onPickImage} disabled={uploadingImage} hitSlop={6} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
             {uploadingImage ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <ImageIcon size={23} color={semantic.brandDark} strokeWidth={1.8} />}
           </Pressable>
 

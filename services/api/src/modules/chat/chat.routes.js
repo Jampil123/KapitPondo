@@ -32,12 +32,16 @@ router.get('/groups/:groupId/messages', requireAuth,
   }
 );
 
-// POST /api/groups/:groupId/messages  { channel, body }
+// POST /api/groups/:groupId/messages  { channel, body, image_url? }
+// A message needs body OR image_url — never neither (mirrors the DB check
+// constraint in 0049_chat_media.sql). image_url is trusted as-is: it must
+// already point at the public `chat-media` bucket (the client uploads there
+// directly with its own authenticated Supabase session before calling this).
 router.post('/groups/:groupId/messages', requireAuth,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
-      const { channel, body } = req.body;
+      const { channel, body, image_url } = req.body;
       if (!isValidChannel(channel)) {
         return res.status(400).json({ error: "channel must be 'officers' or 'general'" });
       }
@@ -45,7 +49,8 @@ router.post('/groups/:groupId/messages', requireAuth,
         return res.status(403).json({ error: 'Only officers can post in the officers room' });
       }
       const trimmed = typeof body === 'string' ? body.trim() : '';
-      if (!trimmed) {
+      const imageUrl = typeof image_url === 'string' && image_url.trim() ? image_url.trim() : null;
+      if (!trimmed && !imageUrl) {
         return res.status(400).json({ error: 'Message cannot be empty' });
       }
       if (trimmed.length > MAX_BODY_LEN) {
@@ -57,6 +62,7 @@ router.post('/groups/:groupId/messages', requireAuth,
         senderId: req.member.id,
         senderName: req.member.full_name,
         body: trimmed,
+        imageUrl,
       });
       res.status(201).json({ message });
     } catch (err) { next(err); }

@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, Modal, Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ShieldCheck, CheckCircle2, ArrowUpRight, ArrowDownRight, Undo2, Check, ChevronDown,
-  ScrollText, FileText, BarChart3, Receipt,
+  ScrollText, FileText, BarChart3, Receipt, X, AlertTriangle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
@@ -11,6 +11,8 @@ import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
+import { useQuery } from '@/hooks/useApi';
+import { listMembers } from '@/api/groups';
 import { useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
@@ -22,6 +24,21 @@ import type { Contribution } from '@/api/contributions';
 import type { Expense } from '@/api/expenses';
 import type { LoanPayment } from '@/api/lending';
 import type { ReversalRequest } from '@/api/ledger';
+
+const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+
+function timeAgo(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (isNaN(then)) return '';
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  if (days === 1) return '1 day ago';
+  return `${days} days ago`;
+}
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -290,9 +307,34 @@ function QueueCard({ aged, children }: { aged?: boolean; children: React.ReactNo
   );
 }
 
-function QueueActions({ busy, onReject, onVerify }: { busy: boolean; onReject: () => void; onVerify: () => void }) {
+/**
+ * `proofUrl` drives what the first slot shows: a real "Proof" button when
+ * one's attached, or a plain-spoken "No proof" warning when it isn't —
+ * the Auditor should never have to tap through to discover that.
+ * `proofUrl === undefined` (as opposed to null) hides the slot entirely,
+ * for entity types that don't carry proof at all (e.g. reversal requests).
+ */
+function QueueActions({ busy, proofUrl, onViewProof, onReject, onVerify }: {
+  busy: boolean;
+  proofUrl?: string | null;
+  onViewProof?: () => void;
+  onReject: () => void;
+  onVerify: () => void;
+}) {
   return (
-    <View style={{ flexDirection: 'row', gap: 9, padding: 14, paddingTop: 0 }}>
+    <View style={{ flexDirection: 'row', gap: 8, padding: 14, paddingTop: 0 }}>
+      {proofUrl !== undefined ? (
+        proofUrl ? (
+          <Pressable disabled={busy} onPress={onViewProof} style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', backgroundColor: semantic.surfaceAlt, opacity: busy ? 0.5 : 1 }}>
+            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Proof</Text>
+          </Pressable>
+        ) : (
+          <View style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5, backgroundColor: intent.danger.soft }}>
+            <AlertTriangle size={12} color={intent.danger.text} />
+            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>No proof</Text>
+          </View>
+        )
+      ) : null}
       <Pressable disabled={busy} onPress={onReject} style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', borderWidth: 1.5, borderColor: semantic.border, opacity: busy ? 0.5 : 1 }}>
         <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>Reject</Text>
       </Pressable>
@@ -322,6 +364,7 @@ function VerificationQueue({ groupId }: { groupId: string }) {
   const repayments = useRepayments(groupId, 'submitted');
   const reversals = useReversalRequests(groupId, 'pending_verification');
   const balances = useMemberBalances(groupId);
+  const members = useQuery(() => listMembers(groupId), [groupId]);
 
   const approveContrib = useApproveContribution(groupId);
   const rejectContrib = useRejectContribution(groupId);
@@ -335,12 +378,23 @@ function VerificationQueue({ groupId }: { groupId: string }) {
   const [actingId, setActingId] = useState<string | null>(null);
   const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [filter, setFilter] = useState<FilterKey>('all');
+  const [viewProof, setViewProof] = useState<{ title: string; url: string } | null>(null);
 
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>();
-    (balances.data ?? []).forEach((b) => m.set(b.membership_id, b.full_name ?? 'Member'));
+  // Keyed by MEMBERSHIP id — matches contribution.membership_id (the payer).
+  const payerByMembership = useMemo(() => {
+    const m = new Map<string, { full_name: string; heads: number }>();
+    (balances.data ?? []).forEach((b) => m.set(b.membership_id, { full_name: b.full_name ?? 'Member', heads: b.heads }));
     return m;
   }, [balances.data]);
+  // Keyed by MEMBER id — matches contribution/expense/loan_payment.recorded_by
+  // (the recorder, who may be the payer themselves or a different officer).
+  // A separate map on purpose: membership_id and member_id are not the same
+  // key space, so reusing payerByMembership here would silently miss.
+  const roleByMember = useMemo(() => {
+    const m = new Map<string, string>();
+    (members.data ?? []).forEach((mm) => m.set(mm.member_id, mm.role));
+    return m;
+  }, [members.data]);
 
   const contribRows = contribs.data ?? [];
   const expenseRows = expenses.data ?? [];
@@ -382,7 +436,7 @@ function VerificationQueue({ groupId }: { groupId: string }) {
     <>
       <SectionHead title="Waiting for you" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} tone={total > 0 ? 'hot' : 'calm'} />
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 7, paddingBottom: 2 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 7, paddingBottom: 2, paddingRight: 16 }}>
         {FILTERS.map((f) => {
           const active = filter === f.key;
           return (
@@ -420,22 +474,37 @@ function VerificationQueue({ groupId }: { groupId: string }) {
           {showContribs && contribRows.map((c: Contribution) => {
             const age = ageLabel(c.created_at);
             const busy = actingId === c.id;
+            const payer = payerByMembership.get(c.membership_id);
+            const recorderName = c.recorder?.full_name ?? 'Member';
+            const recorderRole = c.recorded_by ? roleByMember.get(c.recorded_by) : null;
             return (
               <QueueCard key={c.id} aged={age.aged}>
-                <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flex: 1 }}>
+                <View style={{ padding: 14, paddingBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text variant="overline" color="muted">Contribution</Text>
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{nameById.get(c.membership_id) ?? 'Member'}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      <Text variant="caption" color="secondary">{shortDate(c.created_at)}</Text>
-                      {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
-                    </View>
+                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(c.amount)}</Text>
                   </View>
-                  <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(c.amount)}</Text>
+                  <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>
+                    {payer?.full_name ?? 'Member'}{payer?.heads ? ` · ${payer.heads} head${payer.heads === 1 ? '' : 's'}` : ''}
+                  </Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+                    <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>
+                        Recorded by <Text style={{ color: semantic.textSecondary }}>{recorderName}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
+                      </Text>
+                    </View>
+                    {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
+                    <Text variant="caption" color="secondary">{timeAgo(c.created_at)}</Text>
+                    {c.external_reference ? <Text variant="caption" color="secondary">· ref {c.external_reference}</Text> : null}
+                  </View>
                 </View>
                 <QueueActions
                   busy={busy}
-                  onReject={() => setRejectTarget({ type: 'contribution', id: c.id, label: `${nameById.get(c.membership_id) ?? 'this'} contribution` })}
+                  proofUrl={c.proof_signed_url}
+                  onViewProof={() => c.proof_signed_url && setViewProof({ title: `Contribution · ${payer?.full_name ?? 'Member'}`, url: c.proof_signed_url })}
+                  onReject={() => setRejectTarget({ type: 'contribution', id: c.id, label: `${payer?.full_name ?? 'this'} contribution` })}
                   onVerify={() => handleVerify({ type: 'contribution', id: c.id, label: '' })}
                 />
               </QueueCard>
@@ -445,21 +514,30 @@ function VerificationQueue({ groupId }: { groupId: string }) {
           {showExpenses && expenseRows.map((e: Expense) => {
             const age = ageLabel(e.created_at);
             const busy = actingId === e.id;
+            const recorderName = e.recorder?.full_name ?? 'an officer';
+            const recorderRole = e.recorded_by ? roleByMember.get(e.recorded_by) : null;
             return (
               <QueueCard key={e.id} aged={age.aged}>
-                <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flex: 1 }}>
+                <View style={{ padding: 14, paddingBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text variant="overline" color="muted">Expense{e.category ? ` · ${e.category}` : ''}</Text>
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{e.description ?? 'Group expense'}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                      <Text variant="caption" color="secondary">Recorded by {e.recorded_by ? (nameById.get(e.recorded_by) ?? 'an officer') : 'an officer'}</Text>
-                      {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
-                    </View>
+                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(e.amount)}</Text>
                   </View>
-                  <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(e.amount)}</Text>
+                  <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_600Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{e.description ?? 'Group expense'}</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+                    <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
+                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_600Bold', color: semantic.textSecondary }}>
+                        Recorded by <Text style={{ color: semantic.textPrimary }}>{recorderName}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
+                      </Text>
+                    </View>
+                    {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
+                  </View>
+                  <Text variant="caption" color="secondary" style={{ marginTop: 6 }}>{timeAgo(e.created_at)}</Text>
                 </View>
                 <QueueActions
                   busy={busy}
+                  proofUrl={e.proof_signed_url}
+                  onViewProof={() => e.proof_signed_url && setViewProof({ title: e.description ?? 'Expense', url: e.proof_signed_url })}
                   onReject={() => setRejectTarget({ type: 'expense', id: e.id, label: 'this expense' })}
                   onVerify={() => handleVerify({ type: 'expense', id: e.id, label: '' })}
                 />
@@ -471,21 +549,31 @@ function VerificationQueue({ groupId }: { groupId: string }) {
             const age = ageLabel(p.created_at);
             const busy = actingId === p.id;
             const name = p.loans?.membership?.members?.full_name ?? 'Member';
+            const recorderRole = p.recorded_by ? roleByMember.get(p.recorded_by) : null;
             return (
               <QueueCard key={p.id} aged={age.aged}>
-                <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flex: 1 }}>
+                <View style={{ padding: 14, paddingBottom: 10 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text variant="overline" color="muted">Loan repayment</Text>
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{name}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                      <Text variant="caption" color="secondary">{p.recorder?.full_name ? `Recorded by ${p.recorder.full_name} · ` : ''}{shortDate(p.created_at)}</Text>
+                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(p.amount)}</Text>
+                  </View>
+                  <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{name}</Text>
+                  {p.recorder?.full_name ? (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
+                      <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
+                        <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>
+                          Recorded by <Text style={{ color: semantic.textPrimary }}>{p.recorder.full_name}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
+                        </Text>
+                      </View>
                       {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
                     </View>
-                  </View>
-                  <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(p.amount)}</Text>
+                  ) : null}
+                  <Text variant="caption" color="secondary" style={{ marginTop: 6 }}>{timeAgo(p.created_at)}</Text>
                 </View>
                 <QueueActions
                   busy={busy}
+                  proofUrl={p.proof_signed_url}
+                  onViewProof={() => p.proof_signed_url && setViewProof({ title: `Repayment · ${name}`, url: p.proof_signed_url })}
                   onReject={() => setRejectTarget({ type: 'repayment', id: p.id, label: `${name}'s repayment` })}
                   onVerify={() => handleVerify({ type: 'repayment', id: p.id, label: '' })}
                 />
@@ -503,13 +591,15 @@ function VerificationQueue({ groupId }: { groupId: string }) {
                     <Undo2 size={18} color={semantic.brandDark} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text variant="overline" color="muted">Reversing entry</Text>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text variant="overline" color="muted">Reversing entry</Text>
+                      {r.entry ? <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.entry.amount)}</Text> : null}
+                    </View>
                     <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>
                       {r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry'}{r.entry?.description ? ` · ${r.entry.description}` : ''}
                     </Text>
                     {age.aged ? <View style={{ marginTop: 4 }}><Tag tone="age">{age.label}</Tag></View> : null}
                   </View>
-                  {r.entry ? <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.entry.amount)}</Text> : null}
                 </View>
 
                 <View style={{ marginHorizontal: 14, marginBottom: 12, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }}>
@@ -558,6 +648,20 @@ function VerificationQueue({ groupId }: { groupId: string }) {
         onCancel={() => setRejectTarget(null)}
         onConfirm={handleRejectConfirm}
       />
+
+      <Modal visible={!!viewProof} transparent animationType="fade" onRequestClose={() => setViewProof(null)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewProof(null)}>
+          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
+              <Text variant="label" style={{ flex: 1 }} numberOfLines={1}>{viewProof?.title}</Text>
+              <Pressable onPress={() => setViewProof(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
+            </View>
+            {viewProof?.url ? (
+              <Image source={{ uri: viewProof.url }} style={{ width: '100%', height: 360 }} resizeMode="contain" />
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
     </>
   );
 }

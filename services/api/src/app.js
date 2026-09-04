@@ -16,6 +16,8 @@ const reportsRoutes = require('./modules/reporting/reporting.routes');
 const ledgerRoutes = require('./modules/ledger/ledger.routes');
 const penaltiesRoutes = require('./modules/penalties/penalties.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
+const announcementsRoutes = require('./modules/announcements/announcements.routes');
+const directMessagesRoutes = require('./modules/directMessages/directMessages.routes');
 const paymentsRoutes = require('./modules/payments/payments.routes'); // future plan, not live — see payments.routes.js
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
@@ -43,6 +45,8 @@ app.use('/api', reportsRoutes);
 app.use('/api', ledgerRoutes);
 app.use('/api', penaltiesRoutes);
 app.use('/api', chatRoutes);
+app.use('/api', announcementsRoutes);
+app.use('/api', directMessagesRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', adminSecurityRoutes);
 app.use('/api', recoveryRoutes);

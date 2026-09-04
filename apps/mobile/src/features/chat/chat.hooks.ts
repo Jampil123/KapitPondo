@@ -92,6 +92,6 @@ export function useMessages(groupId: string | undefined, channel: ChatChannel) {
  *  case if the POST succeeds but the realtime echo is briefly delayed. `sending`
  *  should disable the composer's send button for that (typically sub-second) gap. */
 export function useSendMessage(groupId: string, channel: ChatChannel) {
-  const { run, loading, error } = useAction((body: string) => sendMessage(groupId, channel, body));
+  const { run, loading, error } = useAction((body: string, imageUrl?: string | null) => sendMessage(groupId, channel, body, imageUrl));
   return { send: run, sending: loading, error };
 }

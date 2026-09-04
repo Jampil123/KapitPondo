@@ -279,7 +279,7 @@ function CycleDots({ groupId }: { groupId: string }) {
         </View>
       ) : null}
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         <LegendDot color={intent.success.base} label="Posted" />
         <LegendDot color={intent.info.base} label="Under review" />
         <LegendDot color={semantic.brand} label="Due" />
@@ -361,7 +361,7 @@ function FundComposition({ groupId }: { groupId: string }) {
   return (
     <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, CARD_SHADOW]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 13 }}>
-        <Text variant="label">Total fund value</Text>
+        <Text variant="label">Total Group Fund</Text>
         <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(total)}</Text>
       </View>
 
@@ -370,7 +370,7 @@ function FundComposition({ groupId }: { groupId: string }) {
         <View style={{ width: (lentPct + '%') as any, backgroundColor: intent.warning.base }} />
       </View>
 
-      <View style={{ gap: 8 }}>
+      <View style={{ gap: 5 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: semantic.brand }} />
           <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Cash on hand</Text>
@@ -462,7 +462,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
      
       <MyPosition groupId={groupId} />
 
-      <SectionHead title="Group fund" />
+      {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
       <Text variant="caption" color="muted" style={{lineHeight: 16, textAlign: 'justify' }}>
         Money lent to members is still part of the fund. It returns with interest as loans are repaid.

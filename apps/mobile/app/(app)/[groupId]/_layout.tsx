@@ -10,6 +10,7 @@ import { View } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import { semantic } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
+import { PresenceProvider } from '@/context/PresenceContext';
 import { OrganizerNav } from '@/components/shared/OrganizerNav';
 import { TreasurerNav } from '@/components/shared/TreasurerNav';
 import { AuditorNav } from '@/components/shared/AuditorNav';
@@ -29,24 +30,26 @@ export default function GroupLayout() {
   const hideNav = segments.length > 1;
 
   return (
-    <View style={{ flex: 1 }}>
+    <PresenceProvider>
       <View style={{ flex: 1 }}>
-        {/* Opening a dashboard tile/feature (contributions, loans, fund,
-            standing, ...) slides in from the right; back/close reverses it —
-            set as the default here so every screen under this Stack gets it
-            without needing a per-screen override. */}
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: semantic.background },
-            animation: 'slide_from_right',
-          }}
-        />
+        <View style={{ flex: 1 }}>
+          {/* Opening a dashboard tile/feature (contributions, loans, fund,
+              standing, ...) slides in from the right; back/close reverses it —
+              set as the default here so every screen under this Stack gets it
+              without needing a per-screen override. */}
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: semantic.background },
+              animation: 'slide_from_right',
+            }}
+          />
+        </View>
+        {!hideNav && role === 'owner' && <OrganizerNav />}
+        {!hideNav && role === 'treasurer' && <TreasurerNav />}
+        {!hideNav && role === 'auditor' && <AuditorNav />}
+        {!hideNav && role === 'member' && <MemberNav />}
       </View>
-      {!hideNav && role === 'owner' && <OrganizerNav />}
-      {!hideNav && role === 'treasurer' && <TreasurerNav />}
-      {!hideNav && role === 'auditor' && <AuditorNav />}
-      {!hideNav && role === 'member' && <MemberNav />}
-    </View>
+    </PresenceProvider>
   );
 }

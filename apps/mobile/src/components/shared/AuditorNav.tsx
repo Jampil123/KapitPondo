@@ -11,7 +11,7 @@
  */
 import {
   ArrowUpCircle, Coins, Repeat, ScrollText, Receipt, CalendarClock, FileText,
-  MessageCircle, LifeBuoy, Repeat as Switch, Search,
+  LifeBuoy, Repeat as Switch, Search,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
@@ -24,9 +24,7 @@ export function AuditorNav() {
     <GroupSheetNav
       centerIcon={Search}
       onCenterPress={() => router.push({ pathname: '/(app)/[groupId]/reports/group-ledger' as any, params: { groupId } })}
-      chat={{ title: 'Group chats', items: [
-        { label: 'Officers room', icon: MessageCircle, route: 'chat/officers' },
-      ] }}
+      onChatPress={() => router.push({ pathname: '/(app)/[groupId]/messages' as any, params: { groupId } })}
       add={{ title: 'What would you like to do?', items: [
         { label: 'Submit a contribution', icon: ArrowUpCircle, route: 'contributions/contribute' },
         { label: 'Request a loan', icon: Coins, route: 'loans/request' },

@@ -1,20 +1,17 @@
-/**
- * components/shared/TreasurerNav.tsx — treasurer bottom nav (config over GroupSheetNav).
- * Treasurer record/confirm actions route to sub-screens once built ("Soon" for
- * now); Year-End preview routes to the real distribution screen.
- */
 import {
   ArrowUpRight, Repeat, Coins, Minus, SlidersHorizontal, CalendarClock,
-  MessageCircle, ScrollText, LifeBuoy, Repeat as Switch,
+  ScrollText, LifeBuoy, Repeat as Switch,
 } from 'lucide-react-native';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
 
 export function TreasurerNav() {
+  const router = useRouter();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+
   return (
     <GroupSheetNav
-      chat={{ title: 'Group chats', items: [
-        { label: 'Officers room', icon: MessageCircle, route: 'chat/officers' },
-      ] }}
+      onChatPress={() => router.push({ pathname: '/(app)/[groupId]/messages' as any, params: { groupId } })}
       add={{ title: 'Record a transaction', items: [
         { label: 'Record contribution', icon: ArrowUpRight, route: 'contributions/confirm' },
         { label: 'Repayments', icon: Repeat, route: 'loans/record-repayment' },

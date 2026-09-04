@@ -9,7 +9,7 @@ async function listMessages({ groupId, channel, limit, before }) {
   const pageSize = Math.min(Number(limit) || DEFAULT_LIMIT, MAX_LIMIT);
   let query = supabase
     .from('messages')
-    .select('id, group_id, channel, sender_id, sender_name, body, created_at')
+    .select('id, group_id, channel, sender_id, sender_name, body, image_url, created_at')
     .eq('group_id', groupId)
     .eq('channel', channel)
     .order('created_at', { ascending: false })
@@ -22,11 +22,11 @@ async function listMessages({ groupId, channel, limit, before }) {
   return data;
 }
 
-async function sendMessage({ groupId, channel, senderId, senderName, body }) {
+async function sendMessage({ groupId, channel, senderId, senderName, body, imageUrl }) {
   const { data, error } = await supabase
     .from('messages')
-    .insert({ group_id: groupId, channel, sender_id: senderId, sender_name: senderName, body })
-    .select('id, group_id, channel, sender_id, sender_name, body, created_at')
+    .insert({ group_id: groupId, channel, sender_id: senderId, sender_name: senderName, body, image_url: imageUrl ?? null })
+    .select('id, group_id, channel, sender_id, sender_name, body, image_url, created_at')
     .single();
   if (error) throw error;
   return data;

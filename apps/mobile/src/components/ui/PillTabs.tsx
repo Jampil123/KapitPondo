@@ -15,7 +15,7 @@ export function PillTabs<T extends string>({ options, value, onChange }: {
   onChange: (key: T) => void;
 }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingVertical: 2 }}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7, paddingVertical: 2, paddingRight: 16 }}>
       {options.map((o) => {
         const active = o.key === value;
         return (
