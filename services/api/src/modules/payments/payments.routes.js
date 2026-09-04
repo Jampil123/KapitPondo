@@ -1,39 +1,185 @@
 // services/api/src/modules/payments/payments.routes.js
-// KapitPondo — payment gateway webhook (FUTURE PLAN, not live yet).
+// KapitPondo — PayMongo checkout (loan repayments + contributions) and the
+// webhook that confirms them. See services/api/src/integrations/payments/
+// paymongo.js for the actual API client + signature verification.
 //
-// PLANNED SHAPE for when a real provider (PayMongo, per `payment_method`'s
-// existing 'paymongo' value) is actually configured:
-//   1. Member taps "Pay with GCash" on loans/repay.tsx.
-//   2. Backend creates a PayMongo Checkout Session for the loan's amount,
-//      with metadata { loan_id, membership_id } attached, and returns the
-//      checkout URL for the app to open (a new POST /groups/:groupId/
-//      loans/:id/repayments/checkout endpoint, not built yet — no reason to
-//      scaffold the outbound half until the inbound webhook below is real).
+// Flow:
+//   1. Member taps "Pay online" on loans/repay.tsx or contributions/contribute.tsx.
+//   2. Backend creates a PayMongo Checkout Session with metadata identifying
+//      what the payment is for, returns the checkout URL for the app to open.
 //   3. Member completes payment on PayMongo's hosted checkout (GCash, Maya,
 //      card — whichever rail they pick; KapitPondo doesn't touch that part).
-//   4. PayMongo POSTs a SIGNED webhook event here. The real handler must:
-//        - verify the `Paymongo-Signature` header against
-//          process.env.PAYMONGO_WEBHOOK_SECRET (reject anything unsigned —
-//          this endpoint being public is exactly why that check is
-//          non-negotiable before ever calling autoConfirmRepayment)
-//        - read event.data.attributes.data.attributes.metadata.loan_id
-//        - call service.autoConfirmRepayment({ loanId, amount,
-//          gatewayProvider: 'paymongo', gatewayReference: event.data.id,
-//          gatewayStatus: event.data.attributes.type, gatewayPayload: event })
+//   4. PayMongo POSTs a SIGNED webhook event here. The signature is verified
+//      against PAYMONGO_WEBHOOK_SECRET before anything in the payload is
+//      trusted — this endpoint is public, so that check is non-negotiable.
 //      No screenshot, no reference-number typing — the webhook itself IS
 //      the proof (harder to fake than a photo, and it already carries the
 //      reference number that used to have to be typed in by hand).
 //
-// Returns 501 until PAYMONGO_SECRET_KEY / PAYMONGO_WEBHOOK_SECRET actually
-// exist in the environment — this must never fake a "payment confirmed"
-// response just because the route exists.
+// Both checkout + webhook return 501 until PAYMONGO_SECRET_KEY /
+// PAYMONGO_WEBHOOK_SECRET actually exist in the environment — this must
+// never fake a "payment confirmed" response just because the route exists.
 const express = require('express');
 const router = express.Router();
+const requireAuth = require('../../middleware/auth');
+const requireGroupRole = require('../../middleware/requireGroupRole');
+const supabase = require('../../config/supabase');
+const paymongo = require('../../integrations/payments/paymongo');
+const lendingService = require('../lending/lending.service');
+const contributionsService = require('../contributions/contributions.service');
+const service = require('./payments.service');
 
+// expo.json's "scheme" — the checkout session redirects here after payment;
+// the app doesn't actually need to read anything off this URL (the webhook
+// is what confirms the payment), it just closes the in-app browser.
+const APP_SCHEME = 'kapitpondo';
+
+function requirePaymongoConfigured(req, res, next) {
+  if (!process.env.PAYMONGO_SECRET_KEY) {
+    return res.status(501).json({ error: 'PayMongo integration is not configured yet — set PAYMONGO_SECRET_KEY.' });
+  }
+  next();
+}
+
+// POST /api/groups/:groupId/loans/:id/repayments/checkout  { amount }
+router.post(
+  '/groups/:groupId/loans/:id/repayments/checkout',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  requirePaymongoConfigured,
+  async (req, res, next) => {
+    try {
+      const { amount } = req.body;
+      if (amount == null || Number(amount) <= 0) {
+        return res.status(400).json({ error: 'amount must be greater than zero' });
+      }
+
+      const loan = await lendingService.getLoan(req.params.id);
+      if (loan.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      if (loan.membership_id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only pay off your own loan' });
+      }
+
+      const session = await paymongo.createCheckoutSession({
+        amount,
+        description: 'Loan repayment',
+        metadata: {
+          kind: 'loan_repayment',
+          loan_id: loan.id,
+          membership_id: req.membership.id,
+          group_id: req.params.groupId,
+        },
+        successUrl: `${APP_SCHEME}://groups/${req.params.groupId}/loans/${loan.id}?checkout=success`,
+        cancelUrl: `${APP_SCHEME}://groups/${req.params.groupId}/loans/${loan.id}?checkout=cancelled`,
+      });
+
+      res.json({ checkout_url: session.checkoutUrl });
+    } catch (err) { next(err); }
+  }
+);
+
+// POST /api/groups/:groupId/cycles/:cycleId/contributions/checkout  { amount }
+router.post(
+  '/groups/:groupId/cycles/:cycleId/contributions/checkout',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  requirePaymongoConfigured,
+  async (req, res, next) => {
+    try {
+      const { amount } = req.body;
+      if (amount == null || Number(amount) <= 0) {
+        return res.status(400).json({ error: 'amount must be greater than zero' });
+      }
+
+      const { data: cycle, error: cycleErr } = await supabase
+        .from('cycles').select('group_id').eq('id', req.params.cycleId).maybeSingle();
+      if (cycleErr) throw cycleErr;
+      if (!cycle || cycle.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Cycle does not belong to this group' });
+      }
+
+      const session = await paymongo.createCheckoutSession({
+        amount,
+        description: 'Contribution',
+        metadata: {
+          kind: 'contribution',
+          membership_id: req.membership.id,
+          cycle_id: req.params.cycleId,
+          group_id: req.params.groupId,
+        },
+        successUrl: `${APP_SCHEME}://groups/${req.params.groupId}/contributions?checkout=success`,
+        cancelUrl: `${APP_SCHEME}://groups/${req.params.groupId}/contributions?checkout=cancelled`,
+      });
+
+      res.json({ checkout_url: session.checkoutUrl });
+    } catch (err) { next(err); }
+  }
+);
+
+// POST /api/webhooks/paymongo — PUBLIC, signature-verified (no requireAuth:
+// this is called by PayMongo's servers, not a logged-in member). Reads
+// req.rawBody (see app.js's express.json({ verify }) config) since the HMAC
+// must be computed over PayMongo's exact bytes, not the re-serialized body.
 router.post('/webhooks/paymongo', async (req, res) => {
-  res.status(501).json({
-    error: 'PayMongo integration is not configured yet — this endpoint is a planned scaffold, not live.',
-  });
+  const secret = process.env.PAYMONGO_WEBHOOK_SECRET;
+  if (!secret) {
+    return res.status(501).json({
+      error: 'PayMongo integration is not configured yet — this endpoint is a planned scaffold, not live.',
+    });
+  }
+
+  const signature = req.headers['paymongo-signature'];
+  if (!paymongo.verifyWebhookSignature(req.rawBody, signature, secret)) {
+    return res.status(400).json({ error: 'Invalid signature' });
+  }
+
+  try {
+    const event = req.body;
+    const eventType = event?.data?.attributes?.type;
+    const payment = event?.data?.attributes?.data;
+    const metadata = payment?.attributes?.metadata;
+
+    // Only a completed checkout payment triggers a ledger post — every
+    // other event type (session expired, payment failed, etc.) is just
+    // acknowledged so PayMongo stops retrying it.
+    if (eventType !== 'checkout_session.payment.paid' || !metadata?.kind) {
+      return res.status(200).json({ received: true });
+    }
+
+    const amountPesos = Number(payment.attributes.amount) / 100;
+    const gatewayReference = event.data.id;
+
+    if (metadata.kind === 'loan_repayment') {
+      await service.autoConfirmRepayment({
+        loanId: metadata.loan_id,
+        amount: amountPesos,
+        gatewayProvider: 'paymongo',
+        gatewayReference,
+        gatewayStatus: eventType,
+        gatewayPayload: event,
+      });
+    } else if (metadata.kind === 'contribution') {
+      await contributionsService.autoConfirmContribution({
+        membershipId: metadata.membership_id,
+        cycleId: metadata.cycle_id,
+        groupId: metadata.group_id,
+        amount: amountPesos,
+        gatewayProvider: 'paymongo',
+        gatewayReference,
+        gatewayStatus: eventType,
+        gatewayPayload: event,
+      });
+    }
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    // 500 (not 200) so PayMongo retries — swallowing a failed ledger post
+    // here would silently lose a real payment.
+    console.error('[paymongo webhook] processing failed:', err.message);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
 });
 
 module.exports = router;

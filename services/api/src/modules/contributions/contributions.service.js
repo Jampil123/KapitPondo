@@ -103,7 +103,28 @@ async function rejectContribution({ contributionId, reason }) {
   return data;
 }
 
+// Called by the PayMongo webhook once a signed event confirms a checkout
+// payment actually succeeded. Posts an already-approved contribution + its
+// ledger credit in one shot — see 0051_paymongo_contributions.sql's
+// auto_confirm_contribution() (mirrors record_walkin_contribution's shape)
+// for exactly what this posts. Never call this from anything except a
+// verified webhook — there's no human recorder/approver pair backing it.
+async function autoConfirmContribution({ membershipId, cycleId, groupId, amount, gatewayProvider, gatewayReference, gatewayStatus, gatewayPayload }) {
+  const { data, error } = await supabase.rpc('auto_confirm_contribution', {
+    p_membership_id: membershipId,
+    p_cycle_id: cycleId,
+    p_group_id: groupId,
+    p_amount: amount,
+    p_gateway_provider: gatewayProvider,
+    p_gateway_reference: gatewayReference,
+    p_gateway_status: gatewayStatus || 'paid',
+    p_gateway_payload: gatewayPayload || null,
+  });
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   createContribution, listContributions, getContribution, getActiveMembership,
-  approveContribution, rejectContribution,
+  approveContribution, rejectContribution, autoConfirmContribution,
 };

@@ -18,7 +18,7 @@ const penaltiesRoutes = require('./modules/penalties/penalties.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
 const announcementsRoutes = require('./modules/announcements/announcements.routes');
 const directMessagesRoutes = require('./modules/directMessages/directMessages.routes');
-const paymentsRoutes = require('./modules/payments/payments.routes'); // future plan, not live — see payments.routes.js
+const paymentsRoutes = require('./modules/payments/payments.routes'); // PayMongo checkout + webhook — see payments.routes.js
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
 const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
@@ -26,7 +26,13 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+// `verify` stashes the exact request bytes on req.rawBody — payments.routes.js's
+// PayMongo webhook needs those (not the re-serialized JSON object) to check
+// the Paymongo-Signature HMAC. Harmless for every other route, which never
+// reads req.rawBody.
+app.use(express.json({
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
 
 app.get('/', (req, res) => res.send('KapitPondo API is running'));
 app.use('/health', healthRoute);

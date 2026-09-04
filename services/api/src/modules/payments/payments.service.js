@@ -1,12 +1,11 @@
 // services/api/src/modules/payments/payments.service.js
-// KapitPondo — payment gateway integration (FUTURE PLAN, not live).
-//
-// This module exists ahead of any real gateway credentials so the shape is
-// ready the moment PayMongo (or another provider) is actually wired up —
-// `payment_method` already anticipated 'paymongo' as a value; nothing has
-// ever written it. Nothing here is reachable in a way that posts real
-// money yet — payments.routes.js's webhook endpoint returns 501 until a
-// real integration replaces it.
+// KapitPondo — PayMongo loan-repayment confirmation. Called only from
+// payments.routes.js's webhook handler once a signed PayMongo event
+// confirms a checkout payment succeeded. Still returns 501 (see
+// payments.routes.js's requirePaymongoConfigured / webhook guard) until
+// PAYMONGO_SECRET_KEY / PAYMONGO_WEBHOOK_SECRET are set in the environment
+// — this must never fake a "payment confirmed" response just because the
+// route exists.
 
 const supabase = require('../../config/supabase');
 
