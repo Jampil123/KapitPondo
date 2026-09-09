@@ -71,8 +71,11 @@ router.post(
           membership_id: req.membership.id,
           group_id: req.params.groupId,
         },
-        successUrl: `${APP_SCHEME}://groups/${req.params.groupId}/loans/${loan.id}?checkout=success`,
-        cancelUrl: `${APP_SCHEME}://groups/${req.params.groupId}/loans/${loan.id}?checkout=cancelled`,
+        // Expo Router's `(app)` route group doesn't appear in the URL, and
+        // there's no loans/[id] screen (yet) — land on the loans list,
+        // which does exist and will show the now-approved repayment.
+        successUrl: `${APP_SCHEME}://${req.params.groupId}/loans?checkout=success`,
+        cancelUrl: `${APP_SCHEME}://${req.params.groupId}/loans?checkout=cancelled`,
       });
 
       res.json({ checkout_url: session.checkoutUrl });
@@ -109,8 +112,13 @@ router.post(
           cycle_id: req.params.cycleId,
           group_id: req.params.groupId,
         },
-        successUrl: `${APP_SCHEME}://groups/${req.params.groupId}/contributions?checkout=success`,
-        cancelUrl: `${APP_SCHEME}://groups/${req.params.groupId}/contributions?checkout=cancelled`,
+        // Lands back on the SAME contribute screen (not just the list) —
+        // on Android, openAuthSessionAsync's redirect is a real deep link
+        // that Expo Router navigates to, remounting this screen fresh. It
+        // reads `checkout` off the URL to resume the processing/done UI
+        // instead of just dumping the member on the list.
+        successUrl: `${APP_SCHEME}://${req.params.groupId}/contributions/contribute?checkout=success`,
+        cancelUrl: `${APP_SCHEME}://${req.params.groupId}/contributions/contribute?checkout=cancelled`,
       });
 
       res.json({ checkout_url: session.checkoutUrl });
@@ -141,15 +149,18 @@ router.post('/webhooks/paymongo', async (req, res) => {
     const payment = event?.data?.attributes?.data;
     const metadata = payment?.attributes?.metadata;
 
-    // Only a completed checkout payment triggers a ledger post — every
-    // other event type (session expired, payment failed, etc.) is just
-    // acknowledged so PayMongo stops retrying it.
-    if (eventType !== 'checkout_session.payment.paid' || !metadata?.kind) {
+    // Only a completed payment triggers a ledger post — every other event
+    // type (payment.failed, refund.*, etc.) is just acknowledged so
+    // PayMongo stops retrying it. PayMongo's real event name is
+    // "payment.paid" (there is no "checkout_session.payment.paid" — a
+    // Checkout Session's underlying Payment inherits the session's
+    // metadata and fires this same event once it clears).
+    if (eventType !== 'payment.paid' || !metadata?.kind) {
       return res.status(200).json({ received: true });
     }
 
     const amountPesos = Number(payment.attributes.amount) / 100;
-    const gatewayReference = event.data.id;
+    const gatewayReference = payment.id;
 
     if (metadata.kind === 'loan_repayment') {
       await service.autoConfirmRepayment({
