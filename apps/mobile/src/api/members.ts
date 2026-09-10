@@ -24,6 +24,7 @@ export interface Member {
   verification_rejection_reason: string | null;
   id_document_url: string | null;
   id_document_back_url: string | null;
+  id_document_qr_data: string | null;
   id_type: string | null;
   selfie_url: string | null;
   first_name: string | null;
@@ -78,6 +79,7 @@ export async function updateProfile(input: UpdateProfileInput) {
 export interface SubmitIdentityInput {
   id_document_url: string;
   id_document_back_url?: string;
+  id_document_qr_data?: string;
   full_name?: string;
   phone?: string;
   id_type?: string;
@@ -106,4 +108,33 @@ export interface SubmitIdentityInput {
 export async function submitIdentity(input: SubmitIdentityInput) {
   const res = await api.post<{ message: string; member: Member }>('/api/me/identity', input);
   return res.member;
+}
+
+export interface IdFieldsSuggestion {
+  first_name: string | null;
+  middle_name: string | null;
+  last_name: string | null;
+  birthday: string | null;
+  nationality: string | null;
+  region: string | null;
+  province: string | null;
+  city: string | null;
+  barangay: string | null;
+  street_address: string | null;
+  confidence: 'high' | 'medium' | 'low';
+  notes: string | null;
+}
+
+/**
+ * POST /api/me/identity/extract-fields — reads the ID photo (not yet
+ * uploaded) and suggests personal-info field values for step 3 of the
+ * identity wizard. A draft only — the member still reviews/edits everything
+ * before submitIdentity() is called; this never verifies identity itself.
+ */
+export async function extractIdFields(imageBase64: string, mediaType: string) {
+  const res = await api.post<{ fields: IdFieldsSuggestion }>('/api/me/identity/extract-fields', {
+    image_base64: imageBase64,
+    media_type: mediaType,
+  });
+  return res.fields;
 }

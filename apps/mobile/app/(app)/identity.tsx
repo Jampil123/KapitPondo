@@ -3,20 +3,21 @@ import { View, ScrollView, Pressable, Image, Alert, Modal, ActivityIndicator } f
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
-import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone } from 'lucide-react-native';
+import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone, Sparkles } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Stepper } from '@/components/ui/Stepper';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { AddressPickerSheet } from '@/components/ui/AddressPickerSheet';
 import { ScreenHeader } from '@/components/shared/ScreenHeader';
 import { semantic, shadowToken } from '@/theme/colors';
-import { uploadImage } from '@/lib/upload';
-import { submitIdentity } from '@/api/members';
+import { uploadImage, readImageBase64 } from '@/lib/upload';
+import { submitIdentity, extractIdFields } from '@/api/members';
 import { ID_TYPES, idTypeLabel } from '@/constants/idTypes';
 import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
 import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employmentStatus';
+import { searchProvinces, searchCities, searchBarangays } from '@/constants/phAddress';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 
@@ -28,6 +29,7 @@ type IdentityDraft = {
   idType: string | null;
   idImageUri: string | null;
   idBackImageUri: string | null;
+  idBackQrData: string | null;
   selfieUri: string | null;
   firstName: string; middleName: string; lastName: string; birthday: string;
   nationality: string; email: string;
@@ -112,6 +114,7 @@ export default function Identity() {
   const [idPickerOpen, setIdPickerOpen] = useState(false);
   const [idImageUri, setIdImageUri] = useState<string | null>(null);
   const [idBackImageUri, setIdBackImageUri] = useState<string | null>(null);
+  const [idBackQrData, setIdBackQrData] = useState<string | null>(null);
 
   // Step 2
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -129,6 +132,18 @@ export default function Identity() {
   const [barangay, setBarangay] = useState('');
   const [streetAddress, setStreetAddress] = useState('');
   const [zipCode, setZipCode] = useState('');
+  const [provincePickerOpen, setProvincePickerOpen] = useState(false);
+  const [cityPickerOpen, setCityPickerOpen] = useState(false);
+  const [barangayPickerOpen, setBarangayPickerOpen] = useState(false);
+
+  // Auto-fill from the ID photo — runs once per captured front photo (see
+  // the effect below), never overwrites a field the member already has a
+  // value in. Purely advisory (see gemini.js's ID_STRUCTURE_PROMPT): the
+  // member reviews/edits every field before submitting either way.
+  const [ocrStatus, setOcrStatus] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
+  const [ocrAttemptedFor, setOcrAttemptedFor] = useState<string | null>(null);
+  const [ocrFilledCount, setOcrFilledCount] = useState(0);
+  const [ocrNotes, setOcrNotes] = useState<string | null>(null);
   const [sourceOfFunds, setSourceOfFunds] = useState<string | null>(null);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [employmentStatus, setEmploymentStatus] = useState<string | null>(null);
@@ -152,6 +167,7 @@ export default function Identity() {
           if (d.idType !== undefined) setIdType(d.idType);
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
           if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
+          if (d.idBackQrData !== undefined) setIdBackQrData(d.idBackQrData);
           if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
           if (d.firstName !== undefined) setFirstName(d.firstName);
           if (d.middleName !== undefined) setMiddleName(d.middleName);
@@ -178,12 +194,13 @@ export default function Identity() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // identity-capture.tsx (the dedicated front/back capture flow) writes its
-  // shots straight into this same draft rather than returning them as route
-  // params — the camera hand-off can kill/relaunch the app mid-capture (see
-  // the DRAFT_KEY comment above), which would lose in-flight params but not
-  // an already-persisted draft. Re-reading here on focus is what actually
-  // picks those shots up when the user returns from that screen.
+  // identity-capture.tsx and selfie-capture.tsx (the dedicated capture
+  // flows) write their shots straight into this same draft rather than
+  // returning them as route params — the camera hand-off can kill/relaunch
+  // the app mid-capture (see the DRAFT_KEY comment above), which would lose
+  // in-flight params but not an already-persisted draft. Re-reading here on
+  // focus is what actually picks those shots up when the user returns from
+  // one of those screens.
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -193,6 +210,8 @@ export default function Identity() {
           const d: Partial<IdentityDraft> = JSON.parse(raw);
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
           if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
+          if (d.idBackQrData !== undefined) setIdBackQrData(d.idBackQrData);
+          if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
         } catch {
           // Best-effort — the mount-time hydration above already covers the normal case.
         }
@@ -206,7 +225,7 @@ export default function Identity() {
   useEffect(() => {
     if (!hydrated) return;
     const draft: IdentityDraft = {
-      step, idType, idImageUri, idBackImageUri, selfieUri,
+      step, idType, idImageUri, idBackImageUri, idBackQrData, selfieUri,
       firstName, middleName, lastName, birthday, nationality, email,
       region, province, city, barangay, streetAddress, zipCode,
       sourceOfFunds, employmentStatus, occupation,
@@ -216,25 +235,46 @@ export default function Identity() {
     }, 400);
     return () => clearTimeout(t);
   }, [
-    hydrated, step, idType, idImageUri, idBackImageUri, selfieUri,
+    hydrated, step, idType, idImageUri, idBackImageUri, idBackQrData, selfieUri,
     firstName, middleName, lastName, birthday, nationality, email,
     region, province, city, barangay, streetAddress, zipCode,
     sourceOfFunds, employmentStatus, occupation,
   ]);
 
-  async function takeSelfie() {
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow camera access to take a selfie.');
-      return;
-    }
-    const res = await ImagePicker.launchCameraAsync({
-      mediaTypes: ['images'],
-      cameraType: ImagePicker.CameraType.front,
-      quality: 0.8,
-    });
-    if (!res.canceled) setSelfieUri(res.assets[0].uri);
-  }
+  // Auto-fill personal info from the ID front photo as soon as step 3 is
+  // reached. Only fires once per captured photo (ocrAttemptedFor guards
+  // against re-running on every step revisit, but re-runs if the member
+  // retakes the front photo). Only fills fields that are still empty —
+  // never overwrites something the member already typed or already
+  // auto-filled and then edited.
+  useEffect(() => {
+    if (step !== 3 || !idImageUri || ocrAttemptedFor === idImageUri) return;
+    setOcrAttemptedFor(idImageUri);
+    setOcrStatus('scanning');
+    (async () => {
+      try {
+        const { base64, mediaType } = await readImageBase64(idImageUri);
+        const fields = await extractIdFields(base64, mediaType);
+        let filled = 0;
+        if (!firstName && fields.first_name) { setFirstName(fields.first_name); filled++; }
+        if (!middleName && fields.middle_name) { setMiddleName(fields.middle_name); filled++; }
+        if (!lastName && fields.last_name) { setLastName(fields.last_name); filled++; }
+        if (!birthday && fields.birthday) { setBirthday(fields.birthday); filled++; }
+        if (!nationality && fields.nationality) { setNationality(fields.nationality); filled++; }
+        if (!region && fields.region) { setRegion(fields.region); filled++; }
+        if (!province && fields.province) { setProvince(fields.province); filled++; }
+        if (!city && fields.city) { setCity(fields.city); filled++; }
+        if (!barangay && fields.barangay) { setBarangay(fields.barangay); filled++; }
+        if (!streetAddress && fields.street_address) { setStreetAddress(fields.street_address); filled++; }
+        setOcrFilledCount(filled);
+        setOcrNotes(fields.notes);
+        setOcrStatus('done');
+      } catch {
+        setOcrStatus('error');
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, idImageUri, ocrAttemptedFor]);
 
   const canNext1 = !!idType && !!idImageUri && !!idBackImageUri;
   const canNext2 = !!selfieUri;
@@ -254,6 +294,7 @@ export default function Identity() {
       await submitIdentity({
         id_document_url: idFrontPath,
         id_document_back_url: idBackPath,
+        id_document_qr_data: idBackQrData ?? undefined,
         selfie_url: selfiePath,
         id_type: idType,
         email: email.trim() || undefined,
@@ -393,7 +434,7 @@ export default function Identity() {
             </View>
 
             <Pressable
-              onPress={takeSelfie}
+              onPress={() => router.push('/(app)/selfie-capture' as any)}
               style={{
                 alignItems: 'center', gap: 10,
                 borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16,
@@ -416,7 +457,7 @@ export default function Identity() {
             </Pressable>
 
             {selfieUri ? (
-              <Pressable onPress={takeSelfie} style={{ alignSelf: 'center', marginBottom: 18 }}>
+              <Pressable onPress={() => router.push('/(app)/selfie-capture' as any)} style={{ alignSelf: 'center', marginBottom: 18 }}>
                 <Text variant="label" color="brand">Retake</Text>
               </Pressable>
             ) : null}
@@ -458,8 +499,29 @@ export default function Identity() {
               </Text>
             </View>
 
+            {ocrStatus === 'scanning' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+                <ActivityIndicator size="small" color={semantic.brand} />
+                <Text variant="bodySmall" color="secondary">Scanning your ID for details…</Text>
+              </View>
+            )}
+            {ocrStatus === 'done' && ocrFilledCount > 0 && (
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
+                <Sparkles size={16} color={semantic.brandDark} />
+                <Text variant="bodySmall" color="secondary" style={{ flex: 1 }}>
+                  Auto-filled {ocrFilledCount} field{ocrFilledCount === 1 ? '' : 's'} from your ID — please review before continuing.
+                  {ocrNotes ? ` ${ocrNotes}` : ''}
+                </Text>
+              </View>
+            )}
+            {ocrStatus === 'error' && (
+              <Text variant="bodySmall" color="secondary" style={{ marginBottom: 16 }}>
+                Couldn't auto-read your ID — no problem, just fill in your details below.
+              </Text>
+            )}
+
             <SectionLabel>Personal Information</SectionLabel>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18 }, shadowToken.card]}>
+            <View style={{ marginBottom: 18 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <Field label="First Name" placeholder="Juan" value={firstName} onChangeText={setFirstName} />
@@ -480,7 +542,7 @@ export default function Identity() {
             </View>
 
             <SectionLabel>Contact Information</SectionLabel>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18, gap: 4 }, shadowToken.card]}>
+            <View style={{ marginBottom: 18, gap: 4 }}>
               <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <Phone size={16} color={semantic.textMuted} />
@@ -499,23 +561,66 @@ export default function Identity() {
             </View>
 
             <SectionLabel>Residential Address</SectionLabel>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18 }, shadowToken.card]}>
+            <View style={{ marginBottom: 18 }}>
               <Field label="Region (Optional)" placeholder="Region IV-A (CALABARZON)" value={region} onChangeText={setRegion} />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Field label="Province" placeholder="Laguna" value={province} onChangeText={setProvince} />
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Province</Text>
+                  <Pressable
+                    onPress={() => setProvincePickerOpen(true)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+                      paddingVertical: 14, paddingHorizontal: 14, marginBottom: 15,
+                    }}
+                  >
+                    <Text variant="body" numberOfLines={1} style={{ flex: 1, color: province ? semantic.textPrimary : semantic.textMuted }}>
+                      {province || 'Select'}
+                    </Text>
+                    <ChevronDown size={18} color={semantic.textMuted} />
+                  </Pressable>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Field label="City / Municipality" placeholder="Calamba" value={city} onChangeText={setCity} />
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>City / Municipality</Text>
+                  <Pressable
+                    onPress={() => province && setCityPickerOpen(true)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+                      paddingVertical: 14, paddingHorizontal: 14, marginBottom: 15,
+                      opacity: province ? 1 : 0.55,
+                    }}
+                  >
+                    <Text variant="body" numberOfLines={1} style={{ flex: 1, color: city ? semantic.textPrimary : semantic.textMuted }}>
+                      {city || (province ? 'Select' : 'Pick a province first')}
+                    </Text>
+                    <ChevronDown size={18} color={semantic.textMuted} />
+                  </Pressable>
                 </View>
               </View>
-              <Field label="Barangay" placeholder="Barangay Halang" value={barangay} onChangeText={setBarangay} />
+
+              <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Barangay</Text>
+              <Pressable
+                onPress={() => city && setBarangayPickerOpen(true)}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+                  paddingVertical: 14, paddingHorizontal: 14, marginBottom: 15,
+                  opacity: city ? 1 : 0.55,
+                }}
+              >
+                <Text variant="body" style={{ flex: 1, color: barangay ? semantic.textPrimary : semantic.textMuted }}>
+                  {barangay || (city ? 'Select barangay' : 'Pick a city/municipality first')}
+                </Text>
+                <ChevronDown size={18} color={semantic.textMuted} />
+              </Pressable>
+
               <Field label="Street Address" placeholder="House No., Street, Subdivision" value={streetAddress} onChangeText={setStreetAddress} />
               <Field label="Zip Code (Optional)" placeholder="4027" keyboardType="numbers-and-punctuation" value={zipCode} onChangeText={setZipCode} />
             </View>
 
             <SectionLabel>Financial Information</SectionLabel>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18 }, shadowToken.card]}>
+            <View style={{ marginBottom: 18 }}>
               <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Source of Funds</Text>
               <Pressable
                 onPress={() => setSourcePickerOpen(true)}
@@ -582,6 +687,9 @@ export default function Identity() {
                 <View style={{ flex: 1, gap: 6 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Back</Text>
                   {idBackImageUri ? <Image source={{ uri: idBackImageUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
+                  <Text variant="caption" color="secondary">
+                    {idBackQrData ? 'QR code captured' : 'No QR code detected'}
+                  </Text>
                 </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -673,6 +781,36 @@ export default function Identity() {
         selected={employmentStatus}
         onSelect={(v) => { setEmploymentStatus(v); setEmploymentPickerOpen(false); }}
         onClose={() => setEmploymentPickerOpen(false)}
+        insets={insets}
+      />
+      <AddressPickerSheet
+        visible={provincePickerOpen}
+        title="Select province"
+        placeholder="Search province"
+        getOptions={searchProvinces}
+        selected={province}
+        onSelect={(v) => { setProvince(v); setCity(''); setBarangay(''); setProvincePickerOpen(false); }}
+        onClose={() => setProvincePickerOpen(false)}
+        insets={insets}
+      />
+      <AddressPickerSheet
+        visible={cityPickerOpen}
+        title="Select city / municipality"
+        placeholder="Search city or municipality"
+        getOptions={(q) => searchCities(province, q)}
+        selected={city}
+        onSelect={(v) => { setCity(v); setBarangay(''); setCityPickerOpen(false); }}
+        onClose={() => setCityPickerOpen(false)}
+        insets={insets}
+      />
+      <AddressPickerSheet
+        visible={barangayPickerOpen}
+        title="Select barangay"
+        placeholder="Search barangay"
+        getOptions={(q) => searchBarangays(city, q)}
+        selected={barangay}
+        onSelect={(v) => { setBarangay(v); setBarangayPickerOpen(false); }}
+        onClose={() => setBarangayPickerOpen(false)}
         insets={insets}
       />
     </SafeAreaView>

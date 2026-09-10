@@ -2,23 +2,37 @@
  * app/(app)/identity-capture.tsx — dedicated front/back ID capture flow,
  * reached from identity.tsx step 1's "ID Photos" tile.
  *
- * Each shot is scanned on-device for blur (lib/blurDetection.ts) before
- * being accepted; a blurry shot prompts a retake but can be kept anyway
- * (the scan is advisory, not a hard gate). Accepted shots are written
- * straight into identity.tsx's own AsyncStorage draft (DRAFT_KEY) as they're
- * taken, rather than carried back as route params — the camera hand-off
- * (launchCameraAsync backgrounds the app for the system camera) can get the
- * process killed and relaunched, which would lose an in-flight param but not
- * an already-persisted draft. identity.tsx picks the new URIs up via
+ * Uses a live camera preview (expo-camera) rather than the system camera app
+ * (expo-image-picker's launchCameraAsync) so a card-shaped guide overlay can
+ * be drawn on top of it for both sides. The back step also live-scans for a
+ * QR code — expo-camera's barcode scanning is built-in, no separate decode
+ * library needed — since the PhilSys National ID carries one on the back.
+ *
+ * IMPORTANT — what the QR step is and isn't: PhilSys's QR payload is
+ * cryptographically signed by PSA, and this only decodes and surfaces that
+ * raw payload for the reviewer. It does NOT verify the signature (that needs
+ * PSA's actual public key/spec, which isn't available here), so a
+ * detected/missing QR is shown as a soft signal for manual review, never as
+ * proof either way of the ID's authenticity.
+ *
+ * Each shot (camera or gallery) is also scanned on-device for blur
+ * (lib/blurDetection.ts) before being accepted — advisory, not a hard gate.
+ *
+ * Accepted shots are written straight into identity.tsx's own AsyncStorage
+ * draft (DRAFT_KEY) as they're taken, rather than carried back as route
+ * params — the camera hand-off can get the process killed and relaunched on
+ * some devices, which would lose an in-flight param but not an
+ * already-persisted draft. identity.tsx picks the new data up via
  * useFocusEffect when this screen is popped.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Info, Check } from 'lucide-react-native';
+import { CameraView, useCameraPermissions, scanFromURLAsync, type BarcodeScanningResult } from 'expo-camera';
+import { Camera, Info, Check, QrCode } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Stepper } from '@/components/ui/Stepper';
@@ -28,6 +42,7 @@ import { scanForBlur } from '@/lib/blurDetection';
 
 const DRAFT_KEY = 'identity_draft_v1';
 const CAPTURE_STEPS = ['Front', 'Back'];
+const CARD_ASPECT_RATIO = 1.586; // standard ID card ratio (CR80), width:height
 
 const GUIDES = [
   'ID must be fully visible inside the frame',
@@ -49,9 +64,15 @@ async function mergeIntoDraft(patch: Record<string, unknown>) {
 
 export default function IdentityCapture() {
   const router = useRouter();
+  const cameraRef = useRef<CameraView>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+
   const [side, setSide] = useState<Side>('front');
   const [frontUri, setFrontUri] = useState<string | null>(null);
   const [backUri, setBackUri] = useState<string | null>(null);
+  const [backQrData, setBackQrData] = useState<string | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [liveQr, setLiveQr] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
 
   // Prefill from any photos already captured in a prior visit to this screen.
@@ -63,37 +84,53 @@ export default function IdentityCapture() {
         const d = JSON.parse(raw);
         if (d.idImageUri) setFrontUri(d.idImageUri);
         if (d.idBackImageUri) setBackUri(d.idBackImageUri);
+        if (d.idBackQrData !== undefined) setBackQrData(d.idBackQrData);
       } catch {
         // Start fresh.
       }
     })();
   }, []);
 
+  // Reset the live-scan session state when switching sides (not on every render).
+  useEffect(() => {
+    setLiveQr(null);
+    setCameraReady(false);
+  }, [side]);
+
   const uri = side === 'front' ? frontUri : backUri;
   const setUri = side === 'front' ? setFrontUri : setBackUri;
+  const showCamera = !uri;
 
-  function acceptShot(pickedUri: string) {
-    setUri(pickedUri);
-    mergeIntoDraft(side === 'front' ? { idImageUri: pickedUri } : { idBackImageUri: pickedUri });
+  function handleBarcodeScanned(result: BarcodeScanningResult) {
+    if (side === 'back' && result.data) setLiveQr(result.data);
   }
 
-  async function capture(fromLibrary: boolean) {
-    const perm = fromLibrary
-      ? await ImagePicker.requestMediaLibraryPermissionsAsync()
-      : await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
+  function acceptShot(pickedUri: string, qrData: string | null) {
+    setUri(pickedUri);
+    if (side === 'front') {
+      mergeIntoDraft({ idImageUri: pickedUri });
+    } else {
+      setBackQrData(qrData);
+      mergeIntoDraft({ idBackImageUri: pickedUri, idBackQrData: qrData });
+    }
+  }
+
+  function afterCapture(pickedUri: string, qrData: string | null) {
+    if (side === 'back' && !qrData) {
       Alert.alert(
-        'Permission needed',
-        fromLibrary ? 'Allow photo access to choose an ID photo.' : 'Allow camera access to capture your ID.',
+        'No QR code detected',
+        "We couldn't find a QR code on this shot. A genuine PhilSys National ID has one on the back — you can continue, but this submission may need extra manual review.",
+        [
+          { text: 'Retake', style: 'cancel' },
+          { text: 'Continue Anyway', onPress: () => acceptShot(pickedUri, null) },
+        ],
       );
       return;
     }
-    const res = fromLibrary
-      ? await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 })
-      : await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (res.canceled) return;
-    const pickedUri = res.assets[0].uri;
+    acceptShot(pickedUri, qrData);
+  }
 
+  async function checkBlurThenAccept(pickedUri: string, qrData: string | null) {
     setScanning(true);
     const { blurry } = await scanForBlur(pickedUri);
     setScanning(false);
@@ -104,12 +141,48 @@ export default function IdentityCapture() {
         'This shot may be too blurry to read clearly. Retake for a sharper scan?',
         [
           { text: 'Retake', style: 'cancel' },
-          { text: 'Use Anyway', onPress: () => acceptShot(pickedUri) },
+          { text: 'Use Anyway', onPress: () => afterCapture(pickedUri, qrData) },
         ],
       );
       return;
     }
-    acceptShot(pickedUri);
+    afterCapture(pickedUri, qrData);
+  }
+
+  async function takeShot() {
+    if (!cameraRef.current || !cameraReady || scanning) return;
+    const photo = await cameraRef.current.takePictureAsync({ quality: 0.8 });
+    if (!photo?.uri) return;
+    checkBlurThenAccept(photo.uri, side === 'back' ? liveQr : null);
+  }
+
+  async function pickFromLibrary() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to choose an ID photo.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (res.canceled) return;
+    const pickedUri = res.assets[0].uri;
+
+    let qrData: string | null = null;
+    if (side === 'back') {
+      try {
+        const results = await scanFromURLAsync(pickedUri, ['qr']);
+        qrData = results[0]?.data ?? null;
+      } catch {
+        qrData = null;
+      }
+    }
+    checkBlurThenAccept(pickedUri, qrData);
+  }
+
+  function retake() {
+    setUri(null);
+    if (side === 'back') setBackQrData(null);
+    setLiveQr(null);
+    setCameraReady(false);
   }
 
   function next() {
@@ -133,51 +206,107 @@ export default function IdentityCapture() {
         <View style={{ gap: 5, marginBottom: 18 }}>
           <Text variant="h1" style={{ fontSize: 21 }}>Capture the {side === 'front' ? 'Front' : 'Back'}</Text>
           <Text variant="body" color="secondary">
-            Place your ID's {side === 'front' ? 'front side' : 'back side'} flat, in good lighting, and fill the frame.
+            {side === 'front'
+              ? 'Align the front of your ID inside the frame, in good lighting.'
+              : "Align the back of your ID inside the frame — we'll also look for its QR code."}
           </Text>
         </View>
 
-        <Pressable
-          onPress={() => capture(false)}
-          disabled={scanning}
-          style={{
-            alignItems: 'center', gap: 10,
-            borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16,
-            paddingVertical: 26, paddingHorizontal: 18, backgroundColor: semantic.surfaceAlt, marginBottom: 12,
-          }}
-        >
-          {scanning ? (
-            <>
-              <ActivityIndicator color={semantic.brand} />
-              <Text variant="caption" color="secondary">Checking photo quality…</Text>
-            </>
-          ) : uri ? (
-            <Image source={{ uri }} style={{ width: '100%', height: 170, borderRadius: 12 }} resizeMode="cover" />
-          ) : (
-            <>
-              <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
-                <Camera size={26} color={semantic.brandDark} />
+        {!permission ? (
+          <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
+            <ActivityIndicator color={semantic.brand} />
+          </View>
+        ) : !permission.granted && showCamera ? (
+          <View style={{
+            height: 320, borderRadius: 20, backgroundColor: semantic.surfaceAlt,
+            alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 24, marginBottom: 18,
+          }}>
+            <Camera size={32} color={semantic.brandDark} />
+            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
+              KapitPondo needs camera access to capture your ID.
+            </Text>
+            <Button label="Grant Camera Access" onPress={requestPermission} />
+            <Pressable onPress={pickFromLibrary}>
+              <Text variant="label" color="brand">Choose from Gallery instead</Text>
+            </Pressable>
+          </View>
+        ) : showCamera ? (
+          <View style={{ marginBottom: 12 }}>
+            <View style={{ height: 420, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' }}>
+              <CameraView
+                ref={cameraRef}
+                style={{ flex: 1 }}
+                facing="back"
+                onCameraReady={() => setCameraReady(true)}
+                barcodeScannerSettings={side === 'back' ? { barcodeTypes: ['qr'] } : undefined}
+                onBarcodeScanned={side === 'back' ? handleBarcodeScanned : undefined}
+              />
+              <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+                <View style={{
+                  width: '84%', aspectRatio: CARD_ASPECT_RATIO,
+                  borderWidth: 3, borderColor: liveQr && side === 'back' ? '#5FD68A' : 'rgba(255,255,255,0.9)',
+                  borderRadius: 18,
+                }} />
               </View>
-              <Text variant="label">Tap to open the camera</Text>
-              <Text variant="caption" color="secondary" style={{ textAlign: 'center' }}>
-                We'll check the shot for blur before you continue.
-              </Text>
-            </>
-          )}
-        </Pressable>
+              {side === 'back' && (
+                <View style={{
+                  position: 'absolute', top: 14, alignSelf: 'center',
+                  flexDirection: 'row', alignItems: 'center', gap: 6,
+                  backgroundColor: liveQr ? 'rgba(63,158,110,0.92)' : 'rgba(20,24,26,0.55)',
+                  borderRadius: 20, paddingVertical: 6, paddingHorizontal: 12,
+                }}>
+                  <QrCode size={14} color="#fff" />
+                  <Text variant="caption" color="inherit" style={{ color: '#fff', fontWeight: '600' }}>
+                    {liveQr ? 'QR code detected' : 'Looking for QR code…'}
+                  </Text>
+                </View>
+              )}
+              {scanning && (
+                <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
+                  <ActivityIndicator color="#fff" />
+                  <Text variant="caption" color="inherit" style={{ color: '#fff', marginTop: 8 }}>Checking photo quality…</Text>
+                </View>
+              )}
+            </View>
 
-        <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 18 }}>
-          {uri ? (
-            <Pressable onPress={() => capture(false)}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 28, marginTop: 16 }}>
+              <View style={{ width: 46, alignItems: 'flex-start' }}>
+                <Pressable onPress={pickFromLibrary}>
+                  <Text variant="label" color="brand">Gallery</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={takeShot}
+                disabled={!cameraReady || scanning}
+                style={{
+                  width: 68, height: 68, borderRadius: 34, backgroundColor: '#fff',
+                  borderWidth: 4, borderColor: semantic.brand, alignItems: 'center', justifyContent: 'center',
+                  opacity: cameraReady && !scanning ? 1 : 0.5,
+                }}
+              >
+                <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: semantic.brand }} />
+              </Pressable>
+              <View style={{ width: 46 }} />
+            </View>
+          </View>
+        ) : (
+          <View style={{ marginBottom: 12 }}>
+            <Image source={{ uri: uri! }} style={{ width: '100%', height: 220, borderRadius: 16 }} resizeMode="cover" />
+            {side === 'back' && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}>
+                <QrCode size={15} color={backQrData ? '#3E8E66' : semantic.textMuted} />
+                <Text variant="caption" color="secondary">
+                  {backQrData ? 'QR code captured for reviewer' : 'No QR code detected on this shot'}
+                </Text>
+              </View>
+            )}
+            <Pressable onPress={retake} style={{ alignSelf: 'center', marginTop: 12 }}>
               <Text variant="label" color="brand">Retake</Text>
             </Pressable>
-          ) : null}
-          <Pressable onPress={() => capture(true)}>
-            <Text variant="label" color="brand">Choose from Gallery</Text>
-          </Pressable>
-        </View>
+          </View>
+        )}
 
-        <View style={{ marginBottom: 18 }}>
+        <View style={{ marginTop: 18, marginBottom: 18 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
             <Info size={17} color={semantic.brandDark} />
             <Text variant="label">Photo guidelines</Text>

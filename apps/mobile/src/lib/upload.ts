@@ -18,6 +18,14 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { decode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
+/** Reads a local image file as base64 + a guessed media type, for sending to an API (e.g. OCR/AI) rather than to storage. */
+export async function readImageBase64(localUri: string): Promise<{ base64: string; mediaType: string }> {
+  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
+  const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  return { base64, mediaType };
+}
+
 export async function uploadImage(
   bucket: 'id-documents' | 'proofs',
   localUri: string,

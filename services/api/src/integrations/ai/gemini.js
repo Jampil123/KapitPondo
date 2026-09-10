@@ -95,6 +95,72 @@ async function structureProofImage({ imageBase64, mediaType }) {
   return parsed;
 }
 
+const ID_FIELDS_SCHEMA = {
+  type: 'object',
+  properties: {
+    first_name: { type: ['string', 'null'] },
+    middle_name: { type: ['string', 'null'] },
+    last_name: { type: ['string', 'null'] },
+    // ISO 8601 date (YYYY-MM-DD) if legible, else null.
+    birthday: { type: ['string', 'null'] },
+    nationality: { type: ['string', 'null'] },
+    region: { type: ['string', 'null'] },
+    province: { type: ['string', 'null'] },
+    city: { type: ['string', 'null'] },
+    barangay: { type: ['string', 'null'] },
+    street_address: { type: ['string', 'null'] },
+    confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+    // e.g. "middle name not printed on this ID type" — shown to the member
+    // so they know what to double-check/fill in themselves.
+    notes: { type: ['string', 'null'] },
+  },
+  required: [
+    'first_name', 'middle_name', 'last_name', 'birthday', 'nationality',
+    'region', 'province', 'city', 'barangay', 'street_address', 'confidence', 'notes',
+  ],
+};
+
+const ID_STRUCTURE_PROMPT = `You read Philippine government-issued ID cards (PhilSys National ID, driver's license, passport, UMID, PRC ID, voter's ID, postal ID, SSS ID, GSIS eCard) and extract exactly what's printed on them, to save a member from retyping their own details into a form.
+
+Rules:
+- Report only what is actually printed/visible on the ID. Never guess, invent, or infer a value that isn't legible or isn't printed at all — return null for it, and say why in "notes" if it's worth flagging (e.g. "no middle name printed on this ID type").
+- Filipino IDs commonly print the name as "Last Name, First Name, Middle Name" — split it into first_name/middle_name/last_name correctly rather than copying the printed order.
+- "birthday" is in YYYY-MM-DD form, or null if not legible — never a guess.
+- Split the printed address into region/province/city/barangay/street_address as best you can tell from how it's written; leave a part null if it isn't distinguishable in the text. Do not include a zip code even if one is printed — this schema has no field for it.
+- You are not verifying this person's identity or the ID's authenticity — a human reviews and can edit every field before it's submitted. Your output is only a draft to save typing.
+
+Extract the personal details from the attached ID photo.`;
+
+/**
+ * Reads a not-yet-uploaded ID photo (the front of the ID captured in the
+ * identity wizard) and returns suggested personal-info form values. Purely
+ * advisory, same rule as structureProofImage — this never verifies identity
+ * or writes to the database; the member still reviews every field before
+ * the normal /me/identity submit endpoint is called.
+ */
+async function structureIdImage({ imageBase64, mediaType }) {
+  const interaction = await client().interactions.create({
+    model: VISION_MODEL,
+    input: [
+      { type: 'text', text: ID_STRUCTURE_PROMPT },
+      { type: 'image', data: imageBase64, mime_type: mediaType },
+    ],
+    response_format: {
+      type: 'text',
+      mime_type: 'application/json',
+      schema: ID_FIELDS_SCHEMA,
+    },
+  });
+
+  let parsed;
+  try {
+    parsed = JSON.parse(interaction.output_text);
+  } catch {
+    throw Object.assign(new Error('Could not read this ID photo — try a clearer photo.'), { status: 422 });
+  }
+  return parsed;
+}
+
 const CHAT_SYSTEM = `You are KapitPondo's in-app assistant for members of a paluwagan (rotating cooperative fund) group. You have tools that look up the CURRENT member's own real data and their own group's real data — use them whenever a question needs an actual number or fact instead of guessing or speaking in generalities.
 
 How KapitPondo works: members contribute on a recurring cycle, can request loans against the group's fund, and repay them. Every money-affecting action requires TWO different people — whoever records a transaction can never be the one who approves it (segregation of duties). Roles: Owner (governance, authorizes loans, finalizes year-end distribution), Treasurer (records contributions/repayments/disbursements/expenses), Auditor (verifies the Treasurer's postings and proofs), Member (contributes, requests/repays loans, can hold an officer role too).
@@ -156,4 +222,4 @@ async function chatWithMember({ message, history = [], tools = [], executeTool }
   return interaction.output_text ?? '';
 }
 
-module.exports = { structureProofImage, chatWithMember };
+module.exports = { structureProofImage, structureIdImage, chatWithMember };

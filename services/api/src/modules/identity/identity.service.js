@@ -20,7 +20,7 @@ async function writeAudit(actorId, action, targetId, metadata) {
 
 // Member submits (or resubmits) their identity document → status becomes 'pending'
 async function submitDocument({
-  memberId, idDocumentUrl, idDocumentBackUrl, fullName, phone, idType, selfieUrl, email,
+  memberId, idDocumentUrl, idDocumentBackUrl, idDocumentQrData, fullName, phone, idType, selfieUrl, email,
   firstName, middleName, lastName, birthday,
   nationality, region, province, city, barangay, streetAddress, zipCode,
   sourceOfFunds, employmentStatus, occupation,
@@ -33,6 +33,7 @@ async function submitDocument({
     submitted_at: new Date().toISOString(), // distinct from updated_at, which later approve/reject calls overwrite
   };
   if (idDocumentBackUrl) update.id_document_back_url = idDocumentBackUrl;
+  if (idDocumentQrData) update.id_document_qr_data = idDocumentQrData;
   if (fullName) update.full_name = fullName;
   if (phone) update.phone = phone;
   if (idType) update.id_type = idType;

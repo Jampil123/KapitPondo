@@ -24,6 +24,7 @@ type Applicant = {
   id_document_signed_url?: string;
   id_document_back_url?: string;
   id_document_back_signed_url?: string;
+  id_document_qr_data?: string;
   selfie_url?: string;
   selfie_signed_url?: string;
 };
@@ -270,6 +271,24 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                     )}
                   </div>
                 </div>
+              </div>
+
+              <div className="text-[13px] font-semibold text-ink mb-2.5">Back QR code</div>
+              <div className="bg-surface-alt rounded-2xl p-3.5 mb-5">
+                {a?.id_document_qr_data ? (
+                  <>
+                    <div className="text-[11px] font-mono text-ink break-all">{a.id_document_qr_data}</div>
+                    <div className="text-[11px] text-muted mt-2">
+                      Decoded on-device from the ID's QR code. This is the raw payload only — not a cryptographic
+                      signature check against PSA, so verify authenticity by inspection, not by this text alone.
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[13px] text-muted">
+                    No QR code was detected on the submitted back photo. A genuine PhilSys National ID has one —
+                    treat this as a prompt for closer manual review, not proof the ID is fake.
+                  </div>
+                )}
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted selfie</div>
