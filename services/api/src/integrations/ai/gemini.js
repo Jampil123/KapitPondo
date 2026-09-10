@@ -103,8 +103,9 @@ const ID_FIELDS_SCHEMA = {
     last_name: { type: ['string', 'null'] },
     // ISO 8601 date (YYYY-MM-DD) if legible, else null.
     birthday: { type: ['string', 'null'] },
+    sex: { type: ['string', 'null'], enum: ['male', 'female', null] },
+    id_number: { type: ['string', 'null'] },
     nationality: { type: ['string', 'null'] },
-    region: { type: ['string', 'null'] },
     province: { type: ['string', 'null'] },
     city: { type: ['string', 'null'] },
     barangay: { type: ['string', 'null'] },
@@ -115,8 +116,8 @@ const ID_FIELDS_SCHEMA = {
     notes: { type: ['string', 'null'] },
   },
   required: [
-    'first_name', 'middle_name', 'last_name', 'birthday', 'nationality',
-    'region', 'province', 'city', 'barangay', 'street_address', 'confidence', 'notes',
+    'first_name', 'middle_name', 'last_name', 'birthday', 'sex', 'id_number', 'nationality',
+    'province', 'city', 'barangay', 'street_address', 'confidence', 'notes',
   ],
 };
 
@@ -126,7 +127,9 @@ Rules:
 - Report only what is actually printed/visible on the ID. Never guess, invent, or infer a value that isn't legible or isn't printed at all — return null for it, and say why in "notes" if it's worth flagging (e.g. "no middle name printed on this ID type").
 - Filipino IDs commonly print the name as "Last Name, First Name, Middle Name" — split it into first_name/middle_name/last_name correctly rather than copying the printed order.
 - "birthday" is in YYYY-MM-DD form, or null if not legible — never a guess.
-- Split the printed address into region/province/city/barangay/street_address as best you can tell from how it's written; leave a part null if it isn't distinguishable in the text. Do not include a zip code even if one is printed — this schema has no field for it.
+- "sex" is "male" or "female" exactly as printed (M/F expands to that), or null if not printed on this ID type.
+- "id_number" is the ID's own printed number/serial (e.g. the PhilSys number, license number, passport number) — whatever number uniquely identifies this specific document, not a barcode/QR payload.
+- Split the printed address into province/city/barangay/street_address as best you can tell from how it's written; leave a part null if it isn't distinguishable in the text. Do not include a region or zip code even if printed — this schema has no field for either.
 - You are not verifying this person's identity or the ID's authenticity — a human reviews and can edit every field before it's submitted. Your output is only a draft to save typing.
 
 Extract the personal details from the attached ID photo.`;

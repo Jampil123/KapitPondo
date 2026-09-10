@@ -28,7 +28,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera, Info, Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { ScreenHeader } from '@/components/shared/ScreenHeader';
+import { VerificationStepHeader } from '@/components/shared/VerificationStepHeader';
 import { semantic } from '@/theme/colors';
 import { scanForBlur } from '@/lib/blurDetection';
 
@@ -117,10 +117,9 @@ export default function SelfieCapture() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
-      <ScreenHeader back />
+      <VerificationStepHeader title="Take a Selfie" step={2} totalSteps={4} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 32 }}>
-        <View style={{ gap: 5, marginBottom: 18 }}>
-          <Text variant="h1" style={{ fontSize: 21 }}>Take a Selfie</Text>
+        <View style={{ marginBottom: 18 }}>
           <Text variant="body" color="secondary">
             We'll match this selfie against your ID photo to confirm it's really you.
           </Text>

@@ -27,10 +27,17 @@ export interface Member {
   id_document_qr_data: string | null;
   id_type: string | null;
   selfie_url: string | null;
+  /** Short-lived signed URLs — present on GET /api/me/profile (and the admin
+   *  equivalent), absent from list endpoints that only select a few columns. */
+  id_document_signed_url?: string | null;
+  id_document_back_signed_url?: string | null;
+  selfie_signed_url?: string | null;
   first_name: string | null;
   middle_name: string | null;
   last_name: string | null;
   birthday: string | null;
+  sex: string | null;
+  id_number: string | null;
   nationality: string | null;
   region: string | null;
   province: string | null;
@@ -89,6 +96,8 @@ export interface SubmitIdentityInput {
   middle_name?: string;
   last_name?: string;
   birthday?: string;
+  sex?: string;
+  id_number?: string;
   nationality?: string;
   region?: string;
   province?: string;
@@ -115,8 +124,9 @@ export interface IdFieldsSuggestion {
   middle_name: string | null;
   last_name: string | null;
   birthday: string | null;
+  sex: string | null;
+  id_number: string | null;
   nationality: string | null;
-  region: string | null;
   province: string | null;
   city: string | null;
   barangay: string | null;
@@ -132,9 +142,13 @@ export interface IdFieldsSuggestion {
  * before submitIdentity() is called; this never verifies identity itself.
  */
 export async function extractIdFields(imageBase64: string, mediaType: string) {
-  const res = await api.post<{ fields: IdFieldsSuggestion }>('/api/me/identity/extract-fields', {
-    image_base64: imageBase64,
-    media_type: mediaType,
-  });
+  // A full-resolution camera photo (not a small screenshot) takes Gemini's
+  // vision call noticeably longer than the client's normal 10s default —
+  // give it real room before the request gets aborted client-side.
+  const res = await api.post<{ fields: IdFieldsSuggestion }>(
+    '/api/me/identity/extract-fields',
+    { image_base64: imageBase64, media_type: mediaType },
+    { timeoutMs: 30_000 },
+  );
   return res.fields;
 }

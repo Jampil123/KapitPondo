@@ -167,7 +167,7 @@ export function ProfileBody() {
           {vmeta.btn ? (
             <Button
               label={vmeta.btn}
-              onPress={() => router.push('/(app)/identity' as any)}
+              onPress={() => router.push((status === 'pending' ? '/(app)/my-submission' : '/(app)/identity') as any)}
               style={{ marginTop: 13 }}
             />
           ) : null}

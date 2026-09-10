@@ -3,14 +3,13 @@ import { View, ScrollView, Pressable, Image, Alert, Modal, ActivityIndicator } f
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone, Sparkles } from 'lucide-react-native';
+import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { Stepper } from '@/components/ui/Stepper';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { AddressPickerSheet } from '@/components/ui/AddressPickerSheet';
-import { ScreenHeader } from '@/components/shared/ScreenHeader';
+import { VerificationStepHeader } from '@/components/shared/VerificationStepHeader';
 import { semantic, shadowToken } from '@/theme/colors';
 import { uploadImage, readImageBase64 } from '@/lib/upload';
 import { submitIdentity, extractIdFields } from '@/api/members';
@@ -18,22 +17,22 @@ import { ID_TYPES, idTypeLabel } from '@/constants/idTypes';
 import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
 import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employmentStatus';
 import { searchProvinces, searchCities, searchBarangays } from '@/constants/phAddress';
+import { SEX_OPTIONS, sexLabel } from '@/constants/sex';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 
-const STEP_LABELS = ['ID', 'Selfie', 'Info', 'Review'];
+const STEP_TITLES = ['Capture your ID', 'Take a Selfie', 'Confirm your Info', 'Review & Submit'];
 const DRAFT_KEY = 'identity_draft_v1';
 
 type IdentityDraft = {
   step: number;
   idType: string | null;
   idImageUri: string | null;
-  idBackImageUri: string | null;
-  idBackQrData: string | null;
   selfieUri: string | null;
   firstName: string; middleName: string; lastName: string; birthday: string;
+  sex: string | null; idNumber: string;
   nationality: string; email: string;
-  region: string; province: string; city: string; barangay: string;
+  province: string; city: string; barangay: string;
   streetAddress: string; zipCode: string;
   sourceOfFunds: string | null; employmentStatus: string | null; occupation: string;
 };
@@ -113,8 +112,6 @@ export default function Identity() {
   const [idType, setIdType] = useState<string | null>(null);
   const [idPickerOpen, setIdPickerOpen] = useState(false);
   const [idImageUri, setIdImageUri] = useState<string | null>(null);
-  const [idBackImageUri, setIdBackImageUri] = useState<string | null>(null);
-  const [idBackQrData, setIdBackQrData] = useState<string | null>(null);
 
   // Step 2
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -124,9 +121,11 @@ export default function Identity() {
   const [middleName, setMiddleName] = useState(meta.middle_name ?? '');
   const [lastName, setLastName] = useState(meta.last_name ?? '');
   const [birthday, setBirthday] = useState(meta.birthday ?? '');
+  const [sex, setSex] = useState<string | null>(null);
+  const [sexPickerOpen, setSexPickerOpen] = useState(false);
+  const [idNumber, setIdNumber] = useState('');
   const [nationality, setNationality] = useState('Filipino');
   const [email, setEmail] = useState('');
-  const [region, setRegion] = useState('');
   const [province, setProvince] = useState('');
   const [city, setCity] = useState('');
   const [barangay, setBarangay] = useState('');
@@ -142,8 +141,6 @@ export default function Identity() {
   // member reviews/edits every field before submitting either way.
   const [ocrStatus, setOcrStatus] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [ocrAttemptedFor, setOcrAttemptedFor] = useState<string | null>(null);
-  const [ocrFilledCount, setOcrFilledCount] = useState(0);
-  const [ocrNotes, setOcrNotes] = useState<string | null>(null);
   const [sourceOfFunds, setSourceOfFunds] = useState<string | null>(null);
   const [sourcePickerOpen, setSourcePickerOpen] = useState(false);
   const [employmentStatus, setEmploymentStatus] = useState<string | null>(null);
@@ -166,16 +163,15 @@ export default function Identity() {
           if (d.step) setStep(d.step);
           if (d.idType !== undefined) setIdType(d.idType);
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
-          if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
-          if (d.idBackQrData !== undefined) setIdBackQrData(d.idBackQrData);
           if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
           if (d.firstName !== undefined) setFirstName(d.firstName);
           if (d.middleName !== undefined) setMiddleName(d.middleName);
           if (d.lastName !== undefined) setLastName(d.lastName);
           if (d.birthday !== undefined) setBirthday(d.birthday);
+          if (d.sex !== undefined) setSex(d.sex);
+          if (d.idNumber !== undefined) setIdNumber(d.idNumber);
           if (d.nationality !== undefined) setNationality(d.nationality);
           if (d.email !== undefined) setEmail(d.email);
-          if (d.region !== undefined) setRegion(d.region);
           if (d.province !== undefined) setProvince(d.province);
           if (d.city !== undefined) setCity(d.city);
           if (d.barangay !== undefined) setBarangay(d.barangay);
@@ -209,8 +205,6 @@ export default function Identity() {
           if (!raw) return;
           const d: Partial<IdentityDraft> = JSON.parse(raw);
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
-          if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
-          if (d.idBackQrData !== undefined) setIdBackQrData(d.idBackQrData);
           if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
         } catch {
           // Best-effort — the mount-time hydration above already covers the normal case.
@@ -225,9 +219,9 @@ export default function Identity() {
   useEffect(() => {
     if (!hydrated) return;
     const draft: IdentityDraft = {
-      step, idType, idImageUri, idBackImageUri, idBackQrData, selfieUri,
-      firstName, middleName, lastName, birthday, nationality, email,
-      region, province, city, barangay, streetAddress, zipCode,
+      step, idType, idImageUri, selfieUri,
+      firstName, middleName, lastName, birthday, sex, idNumber, nationality, email,
+      province, city, barangay, streetAddress, zipCode,
       sourceOfFunds, employmentStatus, occupation,
     };
     const t = setTimeout(() => {
@@ -235,9 +229,9 @@ export default function Identity() {
     }, 400);
     return () => clearTimeout(t);
   }, [
-    hydrated, step, idType, idImageUri, idBackImageUri, idBackQrData, selfieUri,
-    firstName, middleName, lastName, birthday, nationality, email,
-    region, province, city, barangay, streetAddress, zipCode,
+    hydrated, step, idType, idImageUri, selfieUri,
+    firstName, middleName, lastName, birthday, sex, idNumber, nationality, email,
+    province, city, barangay, streetAddress, zipCode,
     sourceOfFunds, employmentStatus, occupation,
   ]);
 
@@ -255,60 +249,65 @@ export default function Identity() {
       try {
         const { base64, mediaType } = await readImageBase64(idImageUri);
         const fields = await extractIdFields(base64, mediaType);
-        let filled = 0;
-        if (!firstName && fields.first_name) { setFirstName(fields.first_name); filled++; }
-        if (!middleName && fields.middle_name) { setMiddleName(fields.middle_name); filled++; }
-        if (!lastName && fields.last_name) { setLastName(fields.last_name); filled++; }
-        if (!birthday && fields.birthday) { setBirthday(fields.birthday); filled++; }
-        if (!nationality && fields.nationality) { setNationality(fields.nationality); filled++; }
-        if (!region && fields.region) { setRegion(fields.region); filled++; }
-        if (!province && fields.province) { setProvince(fields.province); filled++; }
-        if (!city && fields.city) { setCity(fields.city); filled++; }
-        if (!barangay && fields.barangay) { setBarangay(fields.barangay); filled++; }
-        if (!streetAddress && fields.street_address) { setStreetAddress(fields.street_address); filled++; }
-        setOcrFilledCount(filled);
-        setOcrNotes(fields.notes);
+        if (!firstName && fields.first_name) setFirstName(fields.first_name);
+        if (!middleName && fields.middle_name) setMiddleName(fields.middle_name);
+        if (!lastName && fields.last_name) setLastName(fields.last_name);
+        if (!birthday && fields.birthday) setBirthday(fields.birthday);
+        if (!sex && fields.sex) setSex(fields.sex);
+        if (!idNumber && fields.id_number) setIdNumber(fields.id_number);
+        if (!nationality && fields.nationality) setNationality(fields.nationality);
+        if (!province && fields.province) setProvince(fields.province);
+        if (!city && fields.city) setCity(fields.city);
+        if (!barangay && fields.barangay) setBarangay(fields.barangay);
+        if (!streetAddress && fields.street_address) setStreetAddress(fields.street_address);
         setOcrStatus('done');
-      } catch {
+      } catch (e) {
+        // Swallowed from the member's point of view (this is an unattended,
+        // best-effort scan) — logged so a real failure (bad endpoint, model
+        // error, timeout) is diagnosable instead of just "didn't work".
+        console.warn('[identity] ID auto-fill failed:', (e as Error).message ?? e);
         setOcrStatus('error');
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, idImageUri, ocrAttemptedFor]);
 
-  const canNext1 = !!idType && !!idImageUri && !!idBackImageUri;
+  const canNext1 = !!idType && !!idImageUri;
   const canNext2 = !!selfieUri;
   const canNext3 =
-    !!firstName.trim() && !!lastName.trim() && !!nationality.trim() &&
-    !!province.trim() && !!city.trim() && !!barangay.trim() && !!streetAddress.trim() &&
+    !!firstName.trim() && !!lastName.trim() && !!birthday.trim() && !!sex && !!idNumber.trim() && !!nationality.trim() &&
+    !!province.trim() && !!city.trim() && !!barangay.trim() && !!streetAddress.trim() && !!zipCode.trim() &&
     !!sourceOfFunds && !!employmentStatus;
   const canSubmit = agreed;
 
+  // Step 3 stays hidden behind a loading screen until the ID scan for this
+  // photo has actually finished (or the member retook the photo, which
+  // starts a fresh scan) — see the auto-fill effect above.
+  const ocrLoading = !!idImageUri && (ocrAttemptedFor !== idImageUri || ocrStatus === 'scanning');
+
   async function onSubmit() {
-    if (!idImageUri || !idBackImageUri || !selfieUri || !idType || !canNext3 || !canSubmit) return;
+    if (!idImageUri || !selfieUri || !idType || !canNext3 || !canSubmit) return;
     setLoading(true);
     try {
-      const idFrontPath = await uploadImage('id-documents', idImageUri, 'kyc-front');
-      const idBackPath = await uploadImage('id-documents', idBackImageUri, 'kyc-back');
+      const idFrontPath = await uploadImage('id-documents', idImageUri, 'kyc');
       const selfiePath = await uploadImage('id-documents', selfieUri, 'selfie');
       await submitIdentity({
         id_document_url: idFrontPath,
-        id_document_back_url: idBackPath,
-        id_document_qr_data: idBackQrData ?? undefined,
         selfie_url: selfiePath,
         id_type: idType,
         email: email.trim() || undefined,
         first_name: firstName.trim(),
         middle_name: middleName.trim() || undefined,
         last_name: lastName.trim(),
-        birthday: birthday.trim() || undefined,
+        birthday: birthday.trim(),
+        sex: sex ?? undefined,
+        id_number: idNumber.trim(),
         nationality: nationality.trim(),
-        region: region.trim() || undefined,
         province: province.trim(),
         city: city.trim(),
         barangay: barangay.trim(),
         street_address: streetAddress.trim(),
-        zip_code: zipCode.trim() || undefined,
+        zip_code: zipCode.trim(),
         source_of_funds: sourceOfFunds ?? undefined,
         employment_status: employmentStatus ?? undefined,
         occupation: occupation.trim() || undefined,
@@ -332,16 +331,17 @@ export default function Identity() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
-      <ScreenHeader back />
-      <View style={{ paddingHorizontal: 22, marginBottom: 18 }}>
-        <Stepper steps={STEP_LABELS} current={step} />
-      </View>
+      <VerificationStepHeader
+        title={STEP_TITLES[step - 1]}
+        step={step}
+        totalSteps={4}
+        onBack={() => (step > 1 ? setStep(step - 1) : router.back())}
+      />
 
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32 }}>
         {step === 1 && (
           <>
-            <View style={{ gap: 5, marginBottom: 18 }}>
-              <Text variant="h1" style={{ fontSize: 21 }}>Identity Verification</Text>
+            <View style={{ marginBottom: 18 }}>
               <Text variant="body" color="secondary">
                 To keep KapitPondo secure, tell us which ID you're using and upload a clear photo of it.
               </Text>
@@ -362,40 +362,31 @@ export default function Identity() {
               <ChevronDown size={18} color={semantic.textMuted} />
             </Pressable>
 
-            <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>ID Photos (Front &amp; Back)</Text>
+            <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>ID Photo</Text>
             <Pressable
               onPress={() => router.push('/(app)/identity-capture' as any)}
               style={{
                 alignItems: 'center', gap: 10,
                 borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16,
-                paddingVertical: idImageUri && idBackImageUri ? 14 : 26, paddingHorizontal: 18,
+                paddingVertical: 26, paddingHorizontal: 18,
                 backgroundColor: semantic.surfaceAlt, marginBottom: 8,
               }}
             >
-              {idImageUri && idBackImageUri ? (
-                <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text variant="caption" color="secondary">Front</Text>
-                    <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 100, borderRadius: 10 }} resizeMode="cover" />
-                  </View>
-                  <View style={{ flex: 1, gap: 4 }}>
-                    <Text variant="caption" color="secondary">Back</Text>
-                    <Image source={{ uri: idBackImageUri }} style={{ width: '100%', height: 100, borderRadius: 10 }} resizeMode="cover" />
-                  </View>
-                </View>
+              {idImageUri ? (
+                <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 170, borderRadius: 12 }} resizeMode="cover" />
               ) : (
                 <>
                   <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
                     <Camera size={26} color={semantic.brandDark} />
                   </View>
-                  <Text variant="label">Tap to capture the front and back</Text>
+                  <Text variant="label">Tap to capture your ID</Text>
                   <Text variant="caption" color="secondary" style={{ textAlign: 'center' }}>
                     Supports JPG and PNG. Maximum file size: 5 MB.
                   </Text>
                 </>
               )}
             </Pressable>
-            {idImageUri && idBackImageUri ? (
+            {idImageUri ? (
               <Pressable onPress={() => router.push('/(app)/identity-capture' as any)} style={{ alignSelf: 'center', marginBottom: 18 }}>
                 <Text variant="label" color="brand">Retake</Text>
               </Pressable>
@@ -426,8 +417,7 @@ export default function Identity() {
 
         {step === 2 && (
           <>
-            <View style={{ gap: 5, marginBottom: 18 }}>
-              <Text variant="h1" style={{ fontSize: 21 }}>Take a Selfie</Text>
+            <View style={{ marginBottom: 18 }}>
               <Text variant="body" color="secondary">
                 We'll match this selfie against your ID photo to confirm it's really you.
               </Text>
@@ -490,36 +480,15 @@ export default function Identity() {
           </>
         )}
 
-        {step === 3 && (
+        {step === 3 && ocrLoading && (
+          <View style={{ paddingVertical: 100, alignItems: 'center', gap: 14 }}>
+            <ActivityIndicator color={semantic.brand} />
+            <Text variant="body" color="secondary">Scanning your ID for details…</Text>
+          </View>
+        )}
+
+        {step === 3 && !ocrLoading && (
           <>
-            <View style={{ gap: 5, marginBottom: 18 }}>
-              <Text variant="h1" style={{ fontSize: 21 }}>Enter your Information</Text>
-              <Text variant="body" color="secondary">
-                Confirm your personal details for identity verification.
-              </Text>
-            </View>
-
-            {ocrStatus === 'scanning' && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-                <ActivityIndicator size="small" color={semantic.brand} />
-                <Text variant="bodySmall" color="secondary">Scanning your ID for details…</Text>
-              </View>
-            )}
-            {ocrStatus === 'done' && ocrFilledCount > 0 && (
-              <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 16 }}>
-                <Sparkles size={16} color={semantic.brandDark} />
-                <Text variant="bodySmall" color="secondary" style={{ flex: 1 }}>
-                  Auto-filled {ocrFilledCount} field{ocrFilledCount === 1 ? '' : 's'} from your ID — please review before continuing.
-                  {ocrNotes ? ` ${ocrNotes}` : ''}
-                </Text>
-              </View>
-            )}
-            {ocrStatus === 'error' && (
-              <Text variant="bodySmall" color="secondary" style={{ marginBottom: 16 }}>
-                Couldn't auto-read your ID — no problem, just fill in your details below.
-              </Text>
-            )}
-
             <SectionLabel>Personal Information</SectionLabel>
             <View style={{ marginBottom: 18 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -531,13 +500,34 @@ export default function Identity() {
                 </View>
               </View>
               <Field label="Middle Name (Optional)" placeholder="Santos" value={middleName} onChangeText={setMiddleName} />
-              <Field
-                label="Birthday (Optional)"
-                placeholder="MM/DD/YYYY"
-                keyboardType="numbers-and-punctuation"
-                value={birthday}
-                onChangeText={setBirthday}
-              />
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Field
+                    label="Birthday"
+                    placeholder="MM/DD/YYYY"
+                    keyboardType="numbers-and-punctuation"
+                    value={birthday}
+                    onChangeText={setBirthday}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Sex</Text>
+                  <Pressable
+                    onPress={() => setSexPickerOpen(true)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 6,
+                      backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+                      paddingVertical: 14, paddingHorizontal: 14, marginBottom: 15,
+                    }}
+                  >
+                    <Text variant="body" style={{ flex: 1, color: sex ? semantic.textPrimary : semantic.textMuted }}>
+                      {sex ? sexLabel(sex) : 'Select'}
+                    </Text>
+                    <ChevronDown size={18} color={semantic.textMuted} />
+                  </Pressable>
+                </View>
+              </View>
+              <Field label="ID Number" placeholder="1234-5678-9012-3456" value={idNumber} onChangeText={setIdNumber} />
               <Field label="Nationality" placeholder="Filipino" value={nationality} onChangeText={setNationality} />
             </View>
 
@@ -562,7 +552,6 @@ export default function Identity() {
 
             <SectionLabel>Residential Address</SectionLabel>
             <View style={{ marginBottom: 18 }}>
-              <Field label="Region (Optional)" placeholder="Region IV-A (CALABARZON)" value={region} onChangeText={setRegion} />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Province</Text>
@@ -616,7 +605,7 @@ export default function Identity() {
               </Pressable>
 
               <Field label="Street Address" placeholder="House No., Street, Subdivision" value={streetAddress} onChangeText={setStreetAddress} />
-              <Field label="Zip Code (Optional)" placeholder="4027" keyboardType="numbers-and-punctuation" value={zipCode} onChangeText={setZipCode} />
+              <Field label="Zip Code" placeholder="4027" keyboardType="numbers-and-punctuation" value={zipCode} onChangeText={setZipCode} />
             </View>
 
             <SectionLabel>Financial Information</SectionLabel>
@@ -667,8 +656,7 @@ export default function Identity() {
 
         {step === 4 && (
           <>
-            <View style={{ gap: 5, marginBottom: 18 }}>
-              <Text variant="h1" style={{ fontSize: 21 }}>Review & Submit</Text>
+            <View style={{ marginBottom: 18 }}>
               <Text variant="body" color="secondary">
                 Confirm your details below before submitting for review.
               </Text>
@@ -681,23 +669,13 @@ export default function Identity() {
               </View>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, gap: 6 }}>
-                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Front</Text>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Photo</Text>
                   {idImageUri ? <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
                 </View>
-                <View style={{ flex: 1, gap: 6 }}>
-                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Back</Text>
-                  {idBackImageUri ? <Image source={{ uri: idBackImageUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
-                  <Text variant="caption" color="secondary">
-                    {idBackQrData ? 'QR code captured' : 'No QR code detected'}
-                  </Text>
-                </View>
-              </View>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, gap: 6 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Selfie</Text>
                   {selfieUri ? <Image source={{ uri: selfieUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
                 </View>
-                <View style={{ flex: 1 }} />
               </View>
             </View>
 
@@ -712,13 +690,23 @@ export default function Identity() {
                   <Text variant="body">{birthday || '—'}</Text>
                 </View>
                 <View style={{ flex: 1 }}>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 4 }}>Sex</Text>
+                  <Text variant="body">{sexLabel(sex)}</Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 4 }}>ID Number</Text>
+                  <Text variant="body">{idNumber || '—'}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 4 }}>Nationality</Text>
                   <Text variant="body">{nationality || '—'}</Text>
                 </View>
               </View>
               <View>
                 <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 4 }}>Address</Text>
-                <Text variant="body">{[streetAddress, barangay, city, province, region].filter(Boolean).join(', ')}</Text>
+                <Text variant="body">{[streetAddress, barangay, city, province].filter(Boolean).join(', ')}</Text>
               </View>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
@@ -766,6 +754,15 @@ export default function Identity() {
         insets={insets}
       />
       <PickerSheet
+        visible={sexPickerOpen}
+        title="Select sex"
+        options={SEX_OPTIONS}
+        selected={sex}
+        onSelect={(v) => { setSex(v); setSexPickerOpen(false); }}
+        onClose={() => setSexPickerOpen(false)}
+        insets={insets}
+      />
+      <PickerSheet
         visible={sourcePickerOpen}
         title="Select source of funds"
         options={SOURCE_OF_FUNDS}
@@ -786,7 +783,6 @@ export default function Identity() {
       <AddressPickerSheet
         visible={provincePickerOpen}
         title="Select province"
-        placeholder="Search province"
         getOptions={searchProvinces}
         selected={province}
         onSelect={(v) => { setProvince(v); setCity(''); setBarangay(''); setProvincePickerOpen(false); }}
@@ -796,7 +792,6 @@ export default function Identity() {
       <AddressPickerSheet
         visible={cityPickerOpen}
         title="Select city / municipality"
-        placeholder="Search city or municipality"
         getOptions={(q) => searchCities(province, q)}
         selected={city}
         onSelect={(v) => { setCity(v); setBarangay(''); setCityPickerOpen(false); }}
@@ -806,7 +801,6 @@ export default function Identity() {
       <AddressPickerSheet
         visible={barangayPickerOpen}
         title="Select barangay"
-        placeholder="Search barangay"
         getOptions={(q) => searchBarangays(city, q)}
         selected={barangay}
         onSelect={(v) => { setBarangay(v); setBarangayPickerOpen(false); }}

@@ -17,6 +17,9 @@ type Applicant = {
   verification_status: AccountStatus;
   id_type?: string;
   created_at?: string;
+  birthday?: string;
+  sex?: string;
+  id_number?: string;
   city?: string;
   province?: string;
   verification_rejection_reason?: string;
@@ -203,49 +206,54 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-[480px] max-w-full h-full bg-surface shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-3xl max-h-[88vh] bg-surface shadow-2xl rounded-2xl flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-6 py-5 border-b border-line">
           <h2 className="text-base font-semibold text-ink">Account details</h2>
           <button onClick={onClose} className="text-muted"><X size={22} /></button>
         </div>
 
         {!detail ? (
-          <div className="flex-1 flex items-center justify-center text-muted text-sm">{err ?? 'Loading…'}</div>
+          <div className="flex-1 flex items-center justify-center text-muted text-sm py-16">{err ?? 'Loading…'}</div>
         ) : (
           <>
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="flex flex-col items-center gap-2 mb-6">
-                <div className="w-[76px] h-[76px] rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-xl font-semibold">{initials(a?.full_name)}</div>
-                <div className="text-lg font-semibold text-ink mt-1">{a?.full_name ?? 'Applicant'}</div>
-                <AccountBadge status={mode} />
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-[64px] h-[64px] shrink-0 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-lg font-semibold">{initials(a?.full_name)}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-lg font-semibold text-ink truncate">{a?.full_name ?? 'Applicant'}</div>
+                  <AccountBadge status={mode} />
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 bg-surface-alt rounded-2xl mb-5" style={{ padding: 18 }}>
+              <div className="grid grid-cols-3 gap-4 bg-surface-alt rounded-2xl mb-5" style={{ padding: 18 }}>
                 {kv('Email', a?.email)}
                 {kv('Phone', a?.phone)}
                 {kv('Registered', a?.created_at ? new Date(a.created_at).toLocaleDateString('en-PH') : undefined)}
                 {kv('ID type', a?.id_type)}
+                {kv('Birthday', a?.birthday)}
+                {kv('Sex', a?.sex ? a.sex.charAt(0).toUpperCase() + a.sex.slice(1) : undefined)}
+                {kv('ID number', a?.id_number)}
                 <div className="col-span-2">{kv('Location', [a?.city, a?.province].filter(Boolean).join(', ') || undefined)}</div>
-                {mode === 'rejected' && <div className="col-span-2">{kv('Reason', a?.verification_rejection_reason)}</div>}
+                {mode === 'rejected' && <div className="col-span-3">{kv('Reason', a?.verification_rejection_reason)}</div>}
               </div>
 
-              <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted document</div>
-              <div className="grid grid-cols-2 gap-3.5 mb-5">
+              <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted photos</div>
+              <div className="grid grid-cols-3 gap-3.5 mb-5">
                 <div>
-                  <div className="text-[11px] text-muted mb-1.5">Front</div>
-                  <div className="bg-surface-alt rounded-2xl p-3.5">
+                  <div className="text-[11px] text-muted mb-1.5">ID Front</div>
+                  <div className="bg-surface-alt rounded-2xl p-2.5">
                     {a?.id_document_signed_url ? (
                       <img
                         src={a.id_document_signed_url}
                         alt="Submitted ID document (front)"
-                        className="w-full h-48 object-contain rounded-lg bg-surface"
+                        className="w-full h-40 object-contain rounded-lg bg-surface"
                       />
                     ) : (
                       <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
                            style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                        <span className="text-sm font-medium">
+                        <span className="text-xs font-medium text-center px-2">
                           {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
                         </span>
                       </div>
@@ -253,19 +261,38 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                   </div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-muted mb-1.5">Back</div>
-                  <div className="bg-surface-alt rounded-2xl p-3.5">
+                  <div className="text-[11px] text-muted mb-1.5">ID Back</div>
+                  <div className="bg-surface-alt rounded-2xl p-2.5">
                     {a?.id_document_back_signed_url ? (
                       <img
                         src={a.id_document_back_signed_url}
                         alt="Submitted ID document (back)"
-                        className="w-full h-48 object-contain rounded-lg bg-surface"
+                        className="w-full h-40 object-contain rounded-lg bg-surface"
                       />
                     ) : (
                       <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
                            style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                        <span className="text-sm font-medium">
+                        <span className="text-xs font-medium text-center px-2">
                           {a?.id_document_back_url ? 'Preview unavailable' : 'No back photo on file'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted mb-1.5">Selfie</div>
+                  <div className="bg-surface-alt rounded-2xl p-2.5">
+                    {a?.selfie_signed_url ? (
+                      <img
+                        src={a.selfie_signed_url}
+                        alt="Submitted selfie"
+                        className="w-full h-40 object-contain rounded-lg bg-surface"
+                      />
+                    ) : (
+                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+                        <span className="text-xs font-medium text-center px-2">
+                          {a?.selfie_url ? 'Preview unavailable' : 'No selfie on file'}
                         </span>
                       </div>
                     )}
@@ -287,24 +314,6 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                   <div className="text-[13px] text-muted">
                     No QR code was detected on the submitted back photo. A genuine PhilSys National ID has one —
                     treat this as a prompt for closer manual review, not proof the ID is fake.
-                  </div>
-                )}
-              </div>
-
-              <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted selfie</div>
-              <div className="bg-surface-alt rounded-2xl p-3.5">
-                {a?.selfie_signed_url ? (
-                  <img
-                    src={a.selfie_signed_url}
-                    alt="Submitted selfie"
-                    className="w-full h-64 object-contain rounded-lg bg-surface"
-                  />
-                ) : (
-                  <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                       style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                    <span className="text-sm font-medium">
-                      {a?.selfie_url ? 'Preview unavailable' : 'No selfie on file'}
-                    </span>
                   </div>
                 )}
               </div>

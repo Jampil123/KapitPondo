@@ -56,6 +56,8 @@ type ApiOptions = Omit<RequestInit, 'body'> & {
   body?: unknown;
   /** Query params appended to the URL. */
   query?: Record<string, string | number | boolean | undefined | null>;
+  /** Abort after this many ms. Default 10s — bump for slow endpoints (e.g. AI/OCR calls on a full-size photo). */
+  timeoutMs?: number;
 };
 
 function buildUrl(path: string, query?: ApiOptions['query']): string {
@@ -78,7 +80,7 @@ function safeParse(text: string): any {
 
 /** Core request. Returns parsed JSON typed as T. */
 export async function apiFetch<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { body, query, headers, ...rest } = options;
+  const { body, query, headers, timeoutMs = 10_000, ...rest } = options;
 
   const {
     data: { session },
@@ -95,7 +97,7 @@ export async function apiFetch<T = unknown>(path: string, options: ApiOptions = 
 
   let res: Response;
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 10_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     res = await fetch(buildUrl(path, query), {
       ...rest,
@@ -125,7 +127,8 @@ export async function apiFetch<T = unknown>(path: string, options: ApiOptions = 
 /** Convenience verbs. */
 export const api = {
   get: <T>(path: string, query?: ApiOptions['query']) => apiFetch<T>(path, { method: 'GET', query }),
-  post: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: 'POST', body }),
+  post: <T>(path: string, body?: unknown, opts?: { timeoutMs?: number }) =>
+    apiFetch<T>(path, { method: 'POST', body, ...opts }),
   patch: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: 'PATCH', body }),
   put: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: 'PUT', body }),
   del: <T>(path: string, body?: unknown) => apiFetch<T>(path, { method: 'DELETE', body }),

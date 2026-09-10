@@ -21,7 +21,7 @@ async function writeAudit(actorId, action, targetId, metadata) {
 // Member submits (or resubmits) their identity document → status becomes 'pending'
 async function submitDocument({
   memberId, idDocumentUrl, idDocumentBackUrl, idDocumentQrData, fullName, phone, idType, selfieUrl, email,
-  firstName, middleName, lastName, birthday,
+  firstName, middleName, lastName, birthday, sex, idNumber,
   nationality, region, province, city, barangay, streetAddress, zipCode,
   sourceOfFunds, employmentStatus, occupation,
 }) {
@@ -43,6 +43,8 @@ async function submitDocument({
   if (middleName) update.middle_name = middleName;
   if (lastName) update.last_name = lastName;
   if (birthday) update.birthday = birthday;
+  if (sex) update.sex = sex;
+  if (idNumber) update.id_number = idNumber;
   if (firstName || lastName) {
     update.full_name = [firstName, middleName, lastName].filter(Boolean).join(' ') || fullName;
   }
@@ -129,27 +131,33 @@ async function listForReview(status = 'pending') {
 // record (the admin detail view) — the member's own getMyProfile() call
 // doesn't log anything. system_audit_log.actor_id references auth.users(id),
 // not members(id), so this must be the auth user id, not the member row id.
+// Each createSignedUrl call is its own round-trip to Supabase's Storage API
+// — awaiting them one after another (as this used to) meant the response
+// couldn't go out until all three had happened in series. Running them
+// concurrently (plus the audit write, which doesn't depend on any of them
+// either) caps the wait at the slowest single call instead of the sum of all
+// four.
+async function signUrl(path) {
+  if (!path) return null;
+  const { data: signed } = await supabase.storage
+    .from(ID_DOCUMENT_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_TTL);
+  return signed?.signedUrl ?? null;
+}
+
 async function getMember(id, actorAuthId) {
   const { data, error } = await supabase
     .from('members').select('*').eq('id', id).single();
   if (error) throw error;
-  if (actorAuthId) await writeAudit(actorAuthId, 'account.id_viewed', id, null);
 
-  let id_document_signed_url = null;
-  if (data?.id_document_url) {
-    const { data: signed } = await supabase.storage
-      .from(ID_DOCUMENT_BUCKET)
-      .createSignedUrl(data.id_document_url, SIGNED_URL_TTL);
-    id_document_signed_url = signed?.signedUrl ?? null;
-  }
-  let id_document_back_signed_url = null;
-  if (data?.id_document_back_url) {
-    const { data: signed } = await supabase.storage
-      .from(ID_DOCUMENT_BUCKET)
-      .createSignedUrl(data.id_document_back_url, SIGNED_URL_TTL);
-    id_document_back_signed_url = signed?.signedUrl ?? null;
-  }
-  return { ...data, id_document_signed_url, id_document_back_signed_url };
+  const [, id_document_signed_url, id_document_back_signed_url, selfie_signed_url] = await Promise.all([
+    actorAuthId ? writeAudit(actorAuthId, 'account.id_viewed', id, null) : Promise.resolve(),
+    signUrl(data?.id_document_url),
+    signUrl(data?.id_document_back_url),
+    signUrl(data?.selfie_url),
+  ]);
+
+  return { ...data, id_document_signed_url, id_document_back_signed_url, selfie_signed_url };
 }
 
 // Sysadmin approves a member. `reviewerId` (members.id) fills the members
