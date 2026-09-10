@@ -1,11 +1,3 @@
-/**
- * app/(auth)/forgot.tsx — "Reset Password" (prototype screen 6).
- * Sends an OTP to the registered number, then routes to the OTP screen.
- *
- * NOTE: this sends a sign-in OTP (passwordless) so the user can regain access;
- * after verifying, prompt them to set a new password in Settings. A dedicated
- * reset-password screen is a sensible follow-up.
- */
 import { useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

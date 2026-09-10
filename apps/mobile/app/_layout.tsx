@@ -24,7 +24,7 @@ SplashScreen.preventAutoHideAsync();
  * navigates anywhere, so the user stays stuck on the old screen.
  */
 function RootNavigator() {
-  const { status, signingOut, clearSigningOut } = useAuth();
+  const { status, signingOut, clearSigningOut, takePendingRedirect } = useAuth();
   const segments = useSegments();
   const router = useRouter();
 
@@ -39,14 +39,20 @@ function RootNavigator() {
     if (status === "signedOut" && !inAuthGroup) {
       router.replace("/(auth)/landing");
     } else if (status === "signedIn" && inAuthGroup) {
-      router.replace("/(app)/groups" as any);
+      // This is the ONLY place that navigates on a signedOut→signedIn
+      // transition — a screen (e.g. otp.tsx after confirmOtp) that also
+      // called router.replace right after its own await used to race this
+      // effect, and which one "won" depended on render/microtask timing.
+      // Screens instead call setPendingRedirect() beforehand and let this
+      // effect do the actual navigating, so there's only ever one mover.
+      router.replace((takePendingRedirect() ?? "/(app)/groups") as any);
     }
 
     // Only clear once we've actually landed on (auth) — keeps the
     // full-screen sign-out loader up for the whole redirect instead of
     // dropping it the instant signOut() resolves, before navigation lands.
     if (signingOut && inAuthGroup) clearSigningOut();
-  }, [status, segments, router, signingOut, clearSigningOut]);
+  }, [status, segments, router, signingOut, clearSigningOut, takePendingRedirect]);
 
   return (
     <View style={{ flex: 1 }}>

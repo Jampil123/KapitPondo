@@ -1,7 +1,3 @@
-/**
- * app/(auth)/signin.tsx  — "Welcome back" (prototype screen 2).
- * Phone + password. On success, the root layout redirects to (app).
- */
 import { useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

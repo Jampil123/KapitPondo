@@ -1,10 +1,3 @@
-/**
- * app/(app)/pending.tsx — "Verification in Progress" (prototype screen 7).
- * Shown after submitting an ID. "Got It" continues into the app on a Basic
- * account; verification completes asynchronously (Sysadmin reviews on web).
- * Lives under (app) — shown to an already signed-in user; must not be under
- * (auth) or the root auth-guard bounces it back to /(app)/groups.
- */
 import { useEffect, useRef } from 'react';
 import { Platform, View, ScrollView, Animated, Easing } from 'react-native';
 
@@ -68,9 +61,6 @@ export default function Pending() {
 
         <View style={{ flex: 1, minHeight: 10 }} />
         <Button label="Got It" onPress={() => router.replace('/(app)/groups')} />
-        <View style={{ alignItems: 'center', marginTop: 13 }}>
-          <Text variant="label" color="brand" onPress={() => router.replace('/(app)/groups')}>Back to Home</Text>
-        </View>
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18, marginTop: 20 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>

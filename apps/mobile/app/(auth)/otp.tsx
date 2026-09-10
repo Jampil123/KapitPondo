@@ -1,11 +1,7 @@
-/**
- * app/(auth)/otp.tsx  — "Verify your number" (prototype screen 3).
- * Confirms the phone with the SMS code. Reads ?phone= from the route.
- */
 import { useEffect, useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { Mail } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -16,9 +12,8 @@ import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Otp() {
-  const router = useRouter();
   const { phone } = useLocalSearchParams<{ phone?: string }>();
-  const { confirmOtp, resendOtp } = useAuth();
+  const { confirmOtp, resendOtp, setPendingRedirect } = useAuth();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [resendIn, setResendIn] = useState(30);
@@ -35,8 +30,13 @@ export default function Otp() {
     if (code.length < 6 || !phone) return;
     setLoading(true);
     try {
+      // RootNavigator does the actual navigation once `status` flips to
+      // signedIn — otp.tsx used to also call router.replace itself right
+      // after confirmOtp resolved, and the two competed over which one
+      // "won", landing on /(app)/groups more often than not. Handing the
+      // target off instead of racing it fixes that for good.
+      setPendingRedirect('/(app)/verify-landing');
       await confirmOtp(phone, code);
-      router.replace('/(app)/verify-landing' as any); // verify-now / do-it-later fork
     } catch (e) {
       Alert.alert('Verification failed', (e as Error).message);
     } finally {

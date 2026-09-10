@@ -1,37 +1,24 @@
 /**
- * app/(app)/verify-landing.tsx — "You're in!" verify-now / do-it-later fork
- * (prototype screen 4). Verify Now → identity; Do it later → app dashboard.
- * Lives under (app), not (auth) — this screen is shown to an already
- * signed-in user (right after OTP confirms), so it must not be under (auth)
- * or the root auth-guard bounces it straight back to /(app)/groups.
- *
- * NOTE: the prototype's benefit copy (savings account, credit card, ₱250k loans,
- * wallet limits) is generic fintech text and does NOT match KapitPondo's actual
- * verified-tier unlocks (§1.3: create a group, request a loan, become an
- * officer). Reproduced faithfully here — revise the copy when you're ready.
+ * app/(app)/verify-landing.tsx — "Verify your identity" fork, shown right
+ * after OTP confirms the phone. Matches the prototype's screen 1 (intro):
+ * badge, headline, 3-item checklist, privacy note, Start verification /
+ * Do it later. Lives under (app), not (auth) — this screen is shown to an
+ * already signed-in user, so it must not be under (auth) or the root
+ * auth-guard bounces it straight back to /(app)/groups.
  */
 import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import {
-  BadgeCheck, Gift, ChevronRight, ShieldCheck, Sparkles,
-  IdCard, Camera, Pencil, Landmark, CreditCard, Banknote, Wallet,
-} from 'lucide-react-native';
+import { IdCard, Camera, ClipboardCheck, ShieldCheck, Clock, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/shared/ScreenHeader';
-import { semantic, shadowToken } from '@/theme/colors';
+import { semantic } from '@/theme/colors';
 
 const STEPS = [
-  { icon: IdCard, title: 'Submit an ID', sub: 'A valid government-issued ID' },
-  { icon: Camera, title: 'Take a Selfie', sub: 'A quick selfie photo for verification' },
-  { icon: Pencil, title: 'Enter your Information', sub: 'Confirm your personal details' },
-];
-const BENEFITS = [
-  { icon: Landmark, label: 'Open a Savings Account' },
-  { icon: CreditCard, label: 'Apply for a Credit Card' },
-  { icon: Banknote, label: 'Loans up to ₱250,000' },
-  { icon: Wallet, label: 'Increased Wallet Limits' },
+  { icon: IdCard, title: 'Take a photo of your ID', sub: "Choose from PhilID, driver's license, passport, UMID, or postal ID." },
+  { icon: Camera, title: 'Take a selfie', sub: 'A clear photo of your face so we can match it against your ID.' },
+  { icon: ClipboardCheck, title: 'Confirm your details', sub: "We'll read the info from your ID automatically. You just check that it's right." },
 ];
 
 export default function VerifyLanding() {
@@ -40,61 +27,68 @@ export default function VerifyLanding() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
       <ScreenHeader back />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32 }}>
-        <View style={{ alignItems: 'center', gap: 6, marginTop: 8, marginBottom: 18 }}>
-          <View style={{ width: 64, height: 64, borderRadius: 20, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-            <BadgeCheck size={34} color="#3E8E66" />
+        <View style={{ marginTop: 4, marginBottom: 22 }}>
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 6,
+              alignSelf: 'flex-start',
+              backgroundColor: semantic.surfaceAlt,
+              borderRadius: 100,
+              paddingVertical: 6,
+              paddingHorizontal: 11,
+              marginBottom: 14,
+            }}
+          >
+            <Clock size={13} color={semantic.brandDark} />
+            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>Takes about 3 minutes</Text>
           </View>
-          <Text variant="h1" style={{ fontSize: 21, textAlign: 'center' }}>You're in! Welcome to KapitPondo.</Text>
-          <Text variant="body" color="secondary">You now own a Basic account.</Text>
+          <Text variant="h1" style={{ fontSize: 24, lineHeight: 30, marginBottom: 10 }}>
+            A valid ID unlocks loans and full access.
+          </Text>
+          <Text variant="body" color="secondary" style={{ lineHeight: 21 }}>
+            You can already{' '}
+            <Text variant="body" style={{ fontWeight: '700', color: semantic.textPrimary }}>join a group</Text>
+            {' '}and{' '}
+            <Text variant="body" style={{ fontWeight: '700', color: semantic.textPrimary }}>make deposits</Text>
+            {' '}without verifying. To request a loan, create a group, or hold an officer role, verify your identity first.
+          </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: semantic.borderStrong, borderRadius: 14, padding: 13, marginBottom: 22 }}>
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
-            <Gift size={22} color={semantic.brandDark} />
-          </View>
-          <View style={{ flex: 1, gap: 1 }}>
-            <Text variant="label">Got an invite code?</Text>
-            <Text variant="caption" color="brand" style={{ fontWeight: '600' }}>Enter Code</Text>
-          </View>
-          <ChevronRight size={18} color={semantic.textSecondary} />
-        </View>
-
-        <View style={{ gap: 3, marginBottom: 14 }}>
-          <Text variant="h3" style={{ fontSize: 16.5 }}>Upgrade now for FREE</Text>
-          <Text variant="body" color="secondary">Complete one quick verification step to unlock all KapitPondo features.</Text>
-        </View>
-
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 6, marginBottom: 22 }, shadowToken.card]}>
-          {STEPS.map((s, i) => (
-            <View key={s.title} style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12, paddingHorizontal: 10, borderBottomWidth: i < STEPS.length - 1 ? 1 : 0, borderBottomColor: semantic.border }}>
-              <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                <s.icon size={21} color={semantic.brandDark} />
+        <View style={{ gap: 12, marginBottom: 18 }}>
+          {STEPS.map((s) => (
+            <View
+              key={s.title}
+              style={{
+                flexDirection: 'row',
+                gap: 14,
+                padding: 14,
+                borderWidth: 1,
+                borderColor: semantic.border,
+                borderRadius: 16,
+                backgroundColor: semantic.surface,
+              }}
+            >
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+                <s.icon size={18} color={semantic.brandDark} />
               </View>
               <View style={{ flex: 1, gap: 2 }}>
-                <Text variant="label" style={{ fontSize: 14 }}>{s.title}</Text>
-                <Text variant="caption" color="secondary">{s.sub}</Text>
+                <Text variant="label" style={{ fontSize: 13 }}>{s.title}</Text>
+                <Text variant="caption" color="secondary" style={{ lineHeight: 16 }}>{s.sub}</Text>
               </View>
             </View>
           ))}
         </View>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-          <Sparkles size={18} color={semantic.brand} />
-          <Text variant="h3" style={{ fontSize: 16.5 }}>Unlock everything on KapitPondo</Text>
+        <View style={{ flexDirection: 'row', gap: 10, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 26 }}>
+          <Lock size={14} color={semantic.textMuted} style={{ marginTop: 1 }} />
+          <Text variant="caption" color="secondary" style={{ flex: 1, lineHeight: 16 }}>
+            Your photos and info are used only for verification. They're encrypted at rest and only the KapitPondo Sysadmin can view them during review.
+          </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginBottom: 24 }}>
-          {BENEFITS.map((b) => (
-            <View key={b.label} style={[{ width: '47%', flexGrow: 1, gap: 9, backgroundColor: semantic.surface, borderRadius: 14, padding: 14 }, shadowToken.card]}>
-              <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                <b.icon size={20} color={semantic.brandDark} />
-              </View>
-              <Text variant="label" style={{ fontSize: 12.5 }}>{b.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        <Button label="Verify Now" onPress={() => router.push('/(app)/identity' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
+        <Button label="Start verification" onPress={() => router.push('/(app)/identity' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
         <View style={{ alignItems: 'center', marginTop: 16 }}>
           <Button
             label="Do it later"

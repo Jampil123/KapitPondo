@@ -1,6 +1,6 @@
 /**
- * app/(app)/selfie-capture.tsx — dedicated selfie capture flow, reached from
- * identity.tsx step 2's selfie tile.
+ * app/(app)/selfie-capture.tsx — screen 2 of the verification flow, reached
+ * from identity-capture.tsx once the ID photo is accepted.
  *
  * Uses a live front-camera preview (expo-camera) rather than the system
  * camera app, with an oval face-guide overlay, mirroring the card-guide
@@ -11,13 +11,16 @@
  *
  * The shot is scanned on-device for blur (lib/blurDetection.ts) before being
  * accepted, same as the ID capture flow — advisory, not a hard gate.
+ * Accepting it immediately advances to identity.tsx's personal-info step —
+ * no separate confirm tap, matching the prototype's shutter → next screen.
  *
  * The accepted shot is written straight into identity.tsx's own AsyncStorage
  * draft (DRAFT_KEY) as soon as it's taken, rather than carried back as a
  * route param — the camera hand-off can get the process killed and
  * relaunched on some devices, which would lose an in-flight param but not an
- * already-persisted draft. identity.tsx picks it up via useFocusEffect when
- * this screen is popped.
+ * already-persisted draft. `step` is only bumped up to 3 (personal info),
+ * never down — so re-capturing a selfie from Review's "Retake" link (where
+ * step is already 4) lands back on Review, not personal info.
  */
 import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
@@ -50,6 +53,22 @@ async function mergeIntoDraft(patch: Record<string, unknown>) {
   }
 }
 
+// Raises the draft's step to at least `min`, never lowers it — so this only
+// pushes a fresh selfie capture forward to personal info (step 3); a retake
+// triggered from Review (already step 4) is left exactly where it was.
+async function bumpStepAtLeast(min: number) {
+  try {
+    const raw = await AsyncStorage.getItem(DRAFT_KEY);
+    const draft = raw ? JSON.parse(raw) : {};
+    const current = typeof draft.step === 'number' ? draft.step : 1;
+    if (current < min) {
+      await AsyncStorage.setItem(DRAFT_KEY, JSON.stringify({ ...draft, step: min }));
+    }
+  } catch {
+    // Best-effort — identity.tsx's own draft-persist effect will catch up once it's back in focus.
+  }
+}
+
 export default function SelfieCapture() {
   const router = useRouter();
   const cameraRef = useRef<CameraView>(null);
@@ -75,9 +94,19 @@ export default function SelfieCapture() {
 
   const showCamera = !selfieUri;
 
-  function acceptShot(pickedUri: string) {
+  async function goNext() {
+    await bumpStepAtLeast(3);
+    router.replace('/(app)/identity' as any);
+  }
+
+  async function acceptShot(pickedUri: string) {
     setSelfieUri(pickedUri);
-    mergeIntoDraft({ selfieUri: pickedUri });
+    // Awaited before goNext's own read-modify-write (bumpStepAtLeast) starts
+    // — otherwise the two race on the same AsyncStorage key: bumpStepAtLeast
+    // could read the draft before this write lands and then overwrite it
+    // with a copy that's missing the selfieUri we just merged in.
+    await mergeIntoDraft({ selfieUri: pickedUri });
+    goNext();
   }
 
   async function checkBlurThenAccept(pickedUri: string) {
@@ -109,10 +138,6 @@ export default function SelfieCapture() {
   function retake() {
     setSelfieUri(null);
     setCameraReady(false);
-  }
-
-  function done() {
-    router.back();
   }
 
   return (
@@ -203,7 +228,7 @@ export default function SelfieCapture() {
           </View>
         </View>
 
-        <Button label="Use This Photo" onPress={done} disabled={!selfieUri || scanning} />
+        <Button label="Continue" onPress={goNext} disabled={!selfieUri || scanning} />
       </ScrollView>
     </SafeAreaView>
   );

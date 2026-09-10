@@ -26,7 +26,7 @@
  * is identical. The UI shows passwords, so password is the default here.
  * ============================================================================
  */
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { toE164PH } from '../lib/phone';
@@ -73,6 +73,16 @@ export interface AuthContextValue {
   signOut: () => Promise<void>;
   /** Called by RootNavigator once the (auth) screen is actually on screen. */
   clearSigningOut: () => void;
+
+  /** Where RootNavigator should send the user the next time it sees a
+   *  signedOut→signedIn transition while still on an (auth) screen (e.g.
+   *  '/(app)/verify-landing' after OTP, instead of the default '/(app)/groups').
+   *  Call right before confirmOtp/signIn — RootNavigator consumes and clears
+   *  it itself, so it's the only thing that navigates on that transition;
+   *  see RootNavigator for why having two navigators race was the bug. */
+  setPendingRedirect: (path: string) => void;
+  /** RootNavigator-only: reads and clears the pending redirect in one step. */
+  takePendingRedirect: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -82,6 +92,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [member, setMember] = useState<Member | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  // Set by the effect below to the same session-sync routine onAuthStateChange
+  // uses, so confirmOtp/signInWithPassword can await it directly instead of
+  // returning before `status` actually flips — see confirmOtp for why that
+  // race matters (it used to send OTP-verified sign-ups to the wrong screen).
+  const applySessionRef = useRef<(s: Session | null) => Promise<void>>(async () => {});
+  const pendingRedirectRef = useRef<string | null>(null);
+  const setPendingRedirect = useCallback((path: string) => {
+    pendingRedirectRef.current = path;
+  }, []);
+  const takePendingRedirect = useCallback(() => {
+    const path = pendingRedirectRef.current;
+    pendingRedirectRef.current = null;
+    return path;
+  }, []);
 
   const loadMember = useCallback(async (active: Session | null) => {
     if (!active) {
@@ -112,10 +136,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return;
-      setSession(data.session);
-      await loadMember(data.session);
+
+    async function applySession(s: Session | null) {
+      setSession(s);
+      await loadMember(s);
       if (!mounted) return;
       // loadMember may have forced a sign-out (invalid/expired token), which
       // fires its own onAuthStateChange — re-check the CURRENT session rather
@@ -123,17 +147,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data: fresh } = await supabase.auth.getSession();
       if (!mounted) return;
       setStatus(fresh.session ? 'signedIn' : 'signedOut');
+    }
+    applySessionRef.current = applySession;
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      applySession(data.session);
     });
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_e, s) => {
+    } = supabase.auth.onAuthStateChange((_e, s) => {
       if (!mounted) return;
-      setSession(s);
-      await loadMember(s);
-      if (!mounted) return;
-      const { data: fresh } = await supabase.auth.getSession();
-      if (!mounted) return;
-      setStatus(fresh.session ? 'signedIn' : 'signedOut');
+      applySession(s);
     });
     return () => {
       mounted = false;
@@ -187,8 +212,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password,
       options: {
         data: {
-          full_name: fullName, first_name: firstName, middle_name: middleName ?? null, last_name: lastName,
-          birthday: birthday ?? null, email: email ?? null,
+          full_name: fullName, first_name: firstName, middle_name: middleName, last_name: lastName,
+          birthday, email,
           consent_version: CONSENT_VERSION,
         },
       },
@@ -199,9 +224,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const confirmOtp = useCallback(async (phone: string, token: string) => {
     const e164 = toE164PH(phone);
     if (!e164) throw new Error('Enter a valid Philippine mobile number.');
-    const { error } = await supabase.auth.verifyOtp({ phone: e164, token, type: 'sms' });
+    const { data, error } = await supabase.auth.verifyOtp({ phone: e164, token, type: 'sms' });
     if (error) throw error;
-    // onAuthStateChange fires → session + member set.
+    // onAuthStateChange also fires from this and redundantly re-applies the
+    // same session — harmless. What matters is that `status` is genuinely
+    // 'signedIn' by the time this resolves, so the screen's own navigation
+    // (to verify-landing) and the root auth guard agree instead of racing:
+    // the guard used to see a still-'signedOut' status mid-flight (loadMember
+    // hadn't finished) right after we'd already navigated into (app), bounce
+    // to (auth)/landing, then bounce again to (app)/groups once status caught up.
+    await applySessionRef.current(data.session);
   }, []);
 
   const resendOtp = useCallback(async (phone: string) => {
@@ -249,6 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     refreshMember,
     signOut,
     clearSigningOut,
+    setPendingRedirect,
+    takePendingRedirect,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

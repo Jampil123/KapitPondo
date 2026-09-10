@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { View, ScrollView, Alert } from 'react-native';
+import { View, ScrollView, Alert, TextInput, Modal, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
 import { User, Phone, Lock, ShieldCheck, Mail, Calendar, Info, ChevronLeft } from 'lucide-react-native';
+import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,100 @@ import { semantic } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 
 const PREFIX = '+63 ';
+
+function parseIsoDate(value: string): Date | null {
+  if (!value.trim()) return null;
+  const d = new Date(`${value.trim()}T00:00:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function formatDisplayDate(value: string): string {
+  const d = parseIsoDate(value);
+  return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
+}
+
+const MAX_BIRTHDAY = new Date();
+
+/**
+ * Tap-to-open date field backed by @expo/ui's native DateTimePicker. Web has
+ * no native picker to back it, so it falls back to a typed YYYY-MM-DD input.
+ */
+function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (iso: string) => void }) {
+  const [show, setShow] = useState(false);
+  const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ gap: 7, marginBottom: 15 }}>
+        <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={semantic.textMuted}
+          style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, color: semantic.textPrimary }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 7, marginBottom: 15 }}>
+      <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
+      <Pressable
+        onPress={() => setShow(true)}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          backgroundColor: semantic.surfaceAlt,
+          borderRadius: 12,
+          paddingVertical: 13,
+          paddingHorizontal: 14,
+        }}
+      >
+        <Text variant="body" style={{ color: value ? semantic.textPrimary : semantic.textMuted }}>
+          {value ? formatDisplayDate(value) : 'Select date'}
+        </Text>
+        <Calendar size={18} color={semantic.textMuted} />
+      </Pressable>
+
+      {show && Platform.OS === 'android' ? (
+        <DateTimePicker
+          mode="date"
+          value={current}
+          maximumDate={MAX_BIRTHDAY}
+          onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
+          onDismiss={() => setShow(false)}
+        />
+      ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setShow(false)}>
+            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
+              <Text variant="h3" style={{ fontSize: 17 }}>{label}</Text>
+              <DateTimePicker
+                mode="date"
+                display="inline"
+                value={current}
+                maximumDate={MAX_BIRTHDAY}
+                onValueChange={(_e, date) => onChange(toIsoDate(date))}
+              />
+              <Button label="Done" onPress={() => setShow(false)} />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+    </View>
+  );
+}
 
 function formatPhone(raw: string): string {
   if (!raw.startsWith('+63')) return PREFIX;
@@ -27,7 +122,6 @@ export default function SignUp() {
   const router = useRouter();
   const { signUp } = useAuth();
   const [firstName, setFirstName] = useState('');
-  const [middleName, setMiddleName] = useState('');
   const [lastName, setLastName] = useState('');
   const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');
@@ -36,7 +130,7 @@ export default function SignUp() {
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = firstName.trim() && lastName.trim() && phone.trim() && password.length >= 8 && agreed;
+  const canSubmit = firstName.trim() && lastName.trim() && birthday.trim() && phone.trim() && password.length >= 8 && agreed;
 
   async function onCreate() {
     if (!canSubmit) return;
@@ -46,9 +140,8 @@ export default function SignUp() {
         phone,
         password,
         firstName: firstName.trim(),
-        middleName: middleName.trim() || undefined,
         lastName: lastName.trim(),
-        birthday: birthday.trim() || undefined,
+        birthday: birthday.trim(),
         email: email.trim() || undefined,
         consentAccepted: agreed,
       });
@@ -83,27 +176,13 @@ export default function SignUp() {
           leading={<User size={18} color={semantic.textMuted} />}
         />
         <Field
-          label="Middle Name"
-          placeholder="Santos (optional)"
-          value={middleName}
-          onChangeText={setMiddleName}
-          leading={<User size={18} color={semantic.textMuted} />}
-        />
-        <Field
           label="Last Name"
           placeholder="Dela Cruz"
           value={lastName}
           onChangeText={setLastName}
           leading={<User size={18} color={semantic.textMuted} />}
         />
-        <Field
-          label="Birthday"
-          placeholder="MM/DD/YYYY (optional)"
-          value={birthday}
-          onChangeText={setBirthday}
-          keyboardType="numbers-and-punctuation"
-          leading={<Calendar size={18} color={semantic.textMuted} />}
-        />
+        <BirthdayField label="Birthday" value={birthday} onChange={setBirthday} />
         <Field
           label="Email"
           placeholder="juan@email.com (optional)"
@@ -114,22 +193,10 @@ export default function SignUp() {
           leading={<Mail size={18} color={semantic.textMuted} />}
         />
 
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 9,
-            alignItems: 'flex-start',
-            backgroundColor: semantic.surfaceAlt,
-            borderRadius: 12,
-            paddingVertical: 11,
-            paddingHorizontal: 14,
-            marginTop: 2,
-            marginBottom: 14,
-          }}
-        >
+        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginTop: 2, marginBottom: 14 }}>
           <Info size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
           <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-            Middle name, birthday, and email are optional — you can add or update them later during identity verification.
+            Email is optional — you can add or update it later during identity verification.
           </Text>
         </View>
 
@@ -149,19 +216,7 @@ export default function SignUp() {
           leading={<Lock size={18} color={semantic.textMuted} />}
         />
 
-        <View
-          style={{
-            flexDirection: 'row',
-            gap: 9,
-            alignItems: 'center',
-            backgroundColor: semantic.surfaceAlt,
-            borderRadius: 12,
-            paddingVertical: 11,
-            paddingHorizontal: 14,
-            marginTop: 2,
-            marginBottom: 18,
-          }}
-        >
+        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center', marginTop: 2, marginBottom: 18 }}>
           <ShieldCheck size={18} color={semantic.brandDark} />
           <Text variant="caption" color="secondary" style={{ flex: 1 }}>
             Your details are encrypted and never shared.

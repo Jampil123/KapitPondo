@@ -1,6 +1,13 @@
 /**
- * app/(app)/identity-capture.tsx — dedicated front-of-ID capture flow,
- * reached from identity.tsx step 1's "ID Photo" tile.
+ * app/(app)/identity-capture.tsx — screen 1 of the verification flow: pick
+ * an ID type and capture its front, on one screen (matches the prototype's
+ * combined "ID capture" screen — a separate "which ID, then a placeholder
+ * tile that pushes into a second camera screen" used to require an extra
+ * page and an extra confirm tap; this is now the entry point of the flow
+ * itself, reached directly from verify-landing.tsx / groups/create.tsx /
+ * ProfileBody.tsx's "Verify now" actions, and from identity.tsx's own
+ * mount-time redirect gate for anyone who lands there without a captured
+ * ID yet).
  *
  * Uses a live camera preview (expo-camera) rather than the system camera app
  * (expo-image-picker's launchCameraAsync) so a card-shaped guide overlay can
@@ -10,30 +17,38 @@
  *
  * The shot (camera or gallery) is scanned on-device for blur
  * (lib/blurDetection.ts) before being accepted — advisory, not a hard gate.
+ * Accepting it immediately advances to selfie-capture.tsx — no separate
+ * "Continue"/"Done" tap, matching the prototype's shutter → next screen.
+ * The "Continue" button below only matters when arriving here with a photo
+ * already in the draft (e.g. Review's "Retake ID" link) and deciding it's
+ * fine as-is — it isn't shown mid-fresh-capture since that path navigates
+ * away on its own.
  *
  * The accepted shot is written straight into identity.tsx's own AsyncStorage
  * draft (DRAFT_KEY) as soon as it's taken, rather than carried back as a
  * route param — the camera hand-off can get the process killed and
  * relaunched on some devices, which would lose an in-flight param but not an
- * already-persisted draft. identity.tsx picks it up via useFocusEffect when
- * this screen is popped.
+ * already-persisted draft.
  */
 import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Camera, Info, Check } from 'lucide-react-native';
+import { Camera, Info, Check, ChevronDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { VerificationStepHeader } from '@/components/shared/VerificationStepHeader';
+import { PickerSheet } from '@/components/shared/PickerSheet';
 import { semantic } from '@/theme/colors';
 import { scanForBlur } from '@/lib/blurDetection';
+import { ID_TYPES, idTypeLabel } from '@/constants/idTypes';
 
 const DRAFT_KEY = 'identity_draft_v1';
 const CARD_ASPECT_RATIO = 1.586; // standard ID card ratio (CR80), width:height
+const DEFAULT_ID_TYPE = 'philsys'; // PhilSys National ID — recommended default, matches the prototype
 
 const GUIDES = [
   'ID must be fully visible inside the frame',
@@ -65,14 +80,17 @@ function CornerBracket({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
 
 export default function IdentityCapture() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
   const [uri, setUri] = useState<string | null>(null);
+  const [idType, setIdType] = useState<string>(DEFAULT_ID_TYPE);
+  const [idPickerOpen, setIdPickerOpen] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [scanning, setScanning] = useState(false);
 
-  // Prefill from a photo already captured in a prior visit to this screen.
+  // Prefill from a photo/ID type already picked in a prior visit to this screen.
   useEffect(() => {
     (async () => {
       try {
@@ -80,6 +98,7 @@ export default function IdentityCapture() {
         if (!raw) return;
         const d = JSON.parse(raw);
         if (d.idImageUri) setUri(d.idImageUri);
+        if (d.idType) setIdType(d.idType);
       } catch {
         // Start fresh.
       }
@@ -88,9 +107,20 @@ export default function IdentityCapture() {
 
   const showCamera = !uri;
 
+  function pickIdType(value: string) {
+    setIdType(value);
+    setIdPickerOpen(false);
+    mergeIntoDraft({ idType: value });
+  }
+
+  function goNext() {
+    router.replace('/(app)/selfie-capture' as any);
+  }
+
   function acceptShot(pickedUri: string) {
     setUri(pickedUri);
-    mergeIntoDraft({ idImageUri: pickedUri });
+    mergeIntoDraft({ idImageUri: pickedUri, idType });
+    goNext();
   }
 
   async function checkBlurThenAccept(pickedUri: string) {
@@ -135,19 +165,30 @@ export default function IdentityCapture() {
     setCameraReady(false);
   }
 
-  function done() {
-    router.back();
-  }
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
       <VerificationStepHeader title="Capture your ID" step={1} totalSteps={4} onBack={() => router.back()} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 32 }}>
         <View style={{ marginBottom: 18 }}>
           <Text variant="body" color="secondary">
-            Align the front of your ID inside the frame, in good lighting.
+            Choose an ID to submit, then align its front inside the frame in good lighting.
           </Text>
         </View>
+
+        <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Selected ID</Text>
+        <Pressable
+          onPress={() => setIdPickerOpen(true)}
+          style={{
+            flexDirection: 'row', alignItems: 'center', gap: 10,
+            backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+            paddingVertical: 14, paddingHorizontal: 14, marginBottom: 18,
+          }}
+        >
+          <Text variant="body" style={{ flex: 1, color: semantic.textPrimary }}>
+            {idTypeLabel(idType)}
+          </Text>
+          <ChevronDown size={18} color={semantic.textMuted} />
+        </Pressable>
 
         {!permission ? (
           <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
@@ -249,8 +290,18 @@ export default function IdentityCapture() {
           </View>
         </View>
 
-        <Button label="Done" onPress={done} disabled={!uri || scanning} />
+        <Button label="Continue" onPress={goNext} disabled={!uri || scanning} />
       </ScrollView>
+
+      <PickerSheet
+        visible={idPickerOpen}
+        title="Select ID type"
+        options={ID_TYPES}
+        selected={idType}
+        onSelect={pickIdType}
+        onClose={() => setIdPickerOpen(false)}
+        insets={insets}
+      />
     </SafeAreaView>
   );
 }
