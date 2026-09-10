@@ -24,7 +24,7 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
         return (
           <View key={label} style={{ flex: 1, alignItems: 'center' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' }}>
-              <View style={{ flex: i === 0 ? 0 : 1, height: 2, backgroundColor: i === 0 ? 'transparent' : (completed ? semantic.brand : semantic.borderStrong) }} />
+              <View style={{ flex: 1, height: 2, backgroundColor: i === 0 ? 'transparent' : (completed ? semantic.brand : semantic.borderStrong) }} />
               <View
                 style={{
                   width: 26, height: 26, borderRadius: 13,
@@ -41,9 +41,9 @@ export function Stepper({ steps, current }: { steps: string[]; current: number }
                   </Text>
                 )}
               </View>
-              <View style={{ flex: i === steps.length - 1 ? 0 : 1, height: 2, backgroundColor: stepNum < current ? semantic.brand : semantic.borderStrong }} />
+              <View style={{ flex: 1, height: 2, backgroundColor: i === steps.length - 1 ? 'transparent' : (stepNum < current ? semantic.brand : semantic.borderStrong) }} />
             </View>
-            <Text variant="caption" style={{ marginTop: 6, textAlign: 'center', color: textColor, fontWeight: active ? '600' : '400' }} numberOfLines={2}>
+            <Text variant="caption" style={{ marginTop: 6, textAlign: 'center', color: textColor, fontWeight: active ? '600' : '400' }} numberOfLines={1}>
               {label}
             </Text>
           </View>

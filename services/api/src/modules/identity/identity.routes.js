@@ -50,7 +50,7 @@ router.patch('/me/profile', requireAuth, async (req, res, next) => {
 router.post('/me/identity', requireAuth, async (req, res, next) => {
   try {
     const {
-      id_document_url, full_name, phone, id_type, selfie_url, email,
+      id_document_url, id_document_back_url, full_name, phone, id_type, selfie_url, email,
       first_name, middle_name, last_name, birthday,
       nationality, region, province, city, barangay, street_address, zip_code,
       source_of_funds, employment_status, occupation,
@@ -61,6 +61,7 @@ router.post('/me/identity', requireAuth, async (req, res, next) => {
     const member = await service.submitDocument({
       memberId: req.member.id,
       idDocumentUrl: id_document_url,
+      idDocumentBackUrl: id_document_back_url,
       fullName: full_name,
       phone,
       idType: id_type,

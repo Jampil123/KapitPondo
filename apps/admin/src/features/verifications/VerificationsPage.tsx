@@ -22,6 +22,8 @@ type Applicant = {
   verification_rejection_reason?: string;
   id_document_url?: string;
   id_document_signed_url?: string;
+  id_document_back_url?: string;
+  id_document_back_signed_url?: string;
   selfie_url?: string;
   selfie_signed_url?: string;
 };
@@ -229,21 +231,45 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted document</div>
-              <div className="bg-surface-alt rounded-2xl p-3.5 mb-5">
-                {a?.id_document_signed_url ? (
-                  <img
-                    src={a.id_document_signed_url}
-                    alt="Submitted ID document"
-                    className="w-full h-64 object-contain rounded-lg bg-surface"
-                  />
-                ) : (
-                  <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                       style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                    <span className="text-sm font-medium">
-                      {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
-                    </span>
+              <div className="grid grid-cols-2 gap-3.5 mb-5">
+                <div>
+                  <div className="text-[11px] text-muted mb-1.5">Front</div>
+                  <div className="bg-surface-alt rounded-2xl p-3.5">
+                    {a?.id_document_signed_url ? (
+                      <img
+                        src={a.id_document_signed_url}
+                        alt="Submitted ID document (front)"
+                        className="w-full h-48 object-contain rounded-lg bg-surface"
+                      />
+                    ) : (
+                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+                        <span className="text-sm font-medium">
+                          {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
+                        </span>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted mb-1.5">Back</div>
+                  <div className="bg-surface-alt rounded-2xl p-3.5">
+                    {a?.id_document_back_signed_url ? (
+                      <img
+                        src={a.id_document_back_signed_url}
+                        alt="Submitted ID document (back)"
+                        className="w-full h-48 object-contain rounded-lg bg-surface"
+                      />
+                    ) : (
+                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+                        <span className="text-sm font-medium">
+                          {a?.id_document_back_url ? 'Preview unavailable' : 'No back photo on file'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted selfie</div>

@@ -20,7 +20,7 @@ async function writeAudit(actorId, action, targetId, metadata) {
 
 // Member submits (or resubmits) their identity document → status becomes 'pending'
 async function submitDocument({
-  memberId, idDocumentUrl, fullName, phone, idType, selfieUrl, email,
+  memberId, idDocumentUrl, idDocumentBackUrl, fullName, phone, idType, selfieUrl, email,
   firstName, middleName, lastName, birthday,
   nationality, region, province, city, barangay, streetAddress, zipCode,
   sourceOfFunds, employmentStatus, occupation,
@@ -32,6 +32,7 @@ async function submitDocument({
     updated_at: new Date().toISOString(),
     submitted_at: new Date().toISOString(), // distinct from updated_at, which later approve/reject calls overwrite
   };
+  if (idDocumentBackUrl) update.id_document_back_url = idDocumentBackUrl;
   if (fullName) update.full_name = fullName;
   if (phone) update.phone = phone;
   if (idType) update.id_type = idType;
@@ -140,7 +141,14 @@ async function getMember(id, actorAuthId) {
       .createSignedUrl(data.id_document_url, SIGNED_URL_TTL);
     id_document_signed_url = signed?.signedUrl ?? null;
   }
-  return { ...data, id_document_signed_url };
+  let id_document_back_signed_url = null;
+  if (data?.id_document_back_url) {
+    const { data: signed } = await supabase.storage
+      .from(ID_DOCUMENT_BUCKET)
+      .createSignedUrl(data.id_document_back_url, SIGNED_URL_TTL);
+    id_document_back_signed_url = signed?.signedUrl ?? null;
+  }
+  return { ...data, id_document_signed_url, id_document_back_signed_url };
 }
 
 // Sysadmin approves a member. `reviewerId` (members.id) fills the members

@@ -1,25 +1,7 @@
-/**
- * app/(app)/identity.tsx — identity verification, a real 4-step wizard:
- *   1. Submit an ID         — ID type + ID photo (library upload)
- *   2. Take a Selfie        — front-camera photo (no video-liveness lib
- *                             installed; expo-image-picker's camera mode is
- *                             used instead)
- *   3. Personal Information — name/birthday, nationality, mobile (read-only,
- *                             already OTP-verified), email, residential
- *                             address (free-text per component — no PH
- *                             address/PSGC dataset installed), source of
- *                             funds, employment/occupation
- *   4. Review & Submit      — summary of everything, privacy-policy checkbox
- *
- * Lives under (app) — shown to an already signed-in, unverified user; must
- * not be under (auth) or the root auth-guard bounces it back to /(app)/groups.
- *
- * Deps: expo-image-picker (npx expo install expo-image-picker)
- */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Info, Check, Mail, ChevronDown, X, ShieldCheck, Phone } from 'lucide-react-native';
@@ -38,23 +20,14 @@ import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employme
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 
-const STEP_LABELS = ['Submit an ID', 'Take a Selfie', 'Personal Information', 'Review & Submit'];
-
-// Camera hand-off (launchCameraAsync backgrounds the app for the system camera)
-// can get the process killed and relaunched — on Android this happens under
-// memory pressure, and the Expo dev client can also force a full JS reload
-// when its Metro connection drops while backgrounded. Either way, a reload
-// wipes React state, so the wizard's progress is mirrored to AsyncStorage and
-// restored on mount rather than lost. Picked images aren't re-validated here —
-// expo-image-picker copies them into the app's own cache dir, which usually
-// survives a process restart; if a stale URI fails to load, the user just
-// re-picks that one photo, cheaper than losing the whole form.
+const STEP_LABELS = ['ID', 'Selfie', 'Info', 'Review'];
 const DRAFT_KEY = 'identity_draft_v1';
 
 type IdentityDraft = {
   step: number;
   idType: string | null;
   idImageUri: string | null;
+  idBackImageUri: string | null;
   selfieUri: string | null;
   firstName: string; middleName: string; lastName: string; birthday: string;
   nationality: string; email: string;
@@ -97,14 +70,21 @@ function PickerSheet({
             <Text variant="h3" style={{ flex: 1, fontSize: 17 }}>{title}</Text>
             <Pressable onPress={onClose} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
           </View>
-          <View style={{ gap: 8 }}>
-            {options.map((t) => (
+          <View>
+            {options.map((t, i) => (
               <Pressable
                 key={t.value}
                 onPress={() => onSelect(t.value)}
-                style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: semantic.background, borderRadius: 14, padding: 14 }, shadowToken.card]}
+                style={{
+                  flexDirection: 'row', alignItems: 'center',
+                  paddingVertical: 14,
+                  borderBottomWidth: i < options.length - 1 ? 1 : 0,
+                  borderBottomColor: semantic.border,
+                }}
               >
-                <Text variant="label" style={{ flex: 1 }}>{t.label}</Text>
+                <Text variant="label" style={{ flex: 1, color: selected === t.value ? semantic.brandDark : semantic.textPrimary }}>
+                  {t.label}
+                </Text>
                 {selected === t.value ? <Check size={18} color={semantic.brandDark} /> : null}
               </Pressable>
             ))}
@@ -131,6 +111,7 @@ export default function Identity() {
   const [idType, setIdType] = useState<string | null>(null);
   const [idPickerOpen, setIdPickerOpen] = useState(false);
   const [idImageUri, setIdImageUri] = useState<string | null>(null);
+  const [idBackImageUri, setIdBackImageUri] = useState<string | null>(null);
 
   // Step 2
   const [selfieUri, setSelfieUri] = useState<string | null>(null);
@@ -170,6 +151,7 @@ export default function Identity() {
           if (d.step) setStep(d.step);
           if (d.idType !== undefined) setIdType(d.idType);
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
+          if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
           if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
           if (d.firstName !== undefined) setFirstName(d.firstName);
           if (d.middleName !== undefined) setMiddleName(d.middleName);
@@ -196,13 +178,35 @@ export default function Identity() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // identity-capture.tsx (the dedicated front/back capture flow) writes its
+  // shots straight into this same draft rather than returning them as route
+  // params — the camera hand-off can kill/relaunch the app mid-capture (see
+  // the DRAFT_KEY comment above), which would lose in-flight params but not
+  // an already-persisted draft. Re-reading here on focus is what actually
+  // picks those shots up when the user returns from that screen.
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        try {
+          const raw = await AsyncStorage.getItem(DRAFT_KEY);
+          if (!raw) return;
+          const d: Partial<IdentityDraft> = JSON.parse(raw);
+          if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
+          if (d.idBackImageUri !== undefined) setIdBackImageUri(d.idBackImageUri);
+        } catch {
+          // Best-effort — the mount-time hydration above already covers the normal case.
+        }
+      })();
+    }, []),
+  );
+
   // Mirror progress to disk so a forced reload (see the comment on DRAFT_KEY
   // above) resumes instead of starting over. Lightly debounced since this
   // fires on every keystroke across the whole form.
   useEffect(() => {
     if (!hydrated) return;
     const draft: IdentityDraft = {
-      step, idType, idImageUri, selfieUri,
+      step, idType, idImageUri, idBackImageUri, selfieUri,
       firstName, middleName, lastName, birthday, nationality, email,
       region, province, city, barangay, streetAddress, zipCode,
       sourceOfFunds, employmentStatus, occupation,
@@ -212,21 +216,11 @@ export default function Identity() {
     }, 400);
     return () => clearTimeout(t);
   }, [
-    hydrated, step, idType, idImageUri, selfieUri,
+    hydrated, step, idType, idImageUri, idBackImageUri, selfieUri,
     firstName, middleName, lastName, birthday, nationality, email,
     region, province, city, barangay, streetAddress, zipCode,
     sourceOfFunds, employmentStatus, occupation,
   ]);
-
-  async function pickIdImage() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Allow photo access to upload your ID.');
-      return;
-    }
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!res.canceled) setIdImageUri(res.assets[0].uri);
-  }
 
   async function takeSelfie() {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -242,7 +236,7 @@ export default function Identity() {
     if (!res.canceled) setSelfieUri(res.assets[0].uri);
   }
 
-  const canNext1 = !!idType && !!idImageUri;
+  const canNext1 = !!idType && !!idImageUri && !!idBackImageUri;
   const canNext2 = !!selfieUri;
   const canNext3 =
     !!firstName.trim() && !!lastName.trim() && !!nationality.trim() &&
@@ -251,13 +245,15 @@ export default function Identity() {
   const canSubmit = agreed;
 
   async function onSubmit() {
-    if (!idImageUri || !selfieUri || !idType || !canNext3 || !canSubmit) return;
+    if (!idImageUri || !idBackImageUri || !selfieUri || !idType || !canNext3 || !canSubmit) return;
     setLoading(true);
     try {
-      const idPath = await uploadImage('id-documents', idImageUri, 'kyc');
+      const idFrontPath = await uploadImage('id-documents', idImageUri, 'kyc-front');
+      const idBackPath = await uploadImage('id-documents', idBackImageUri, 'kyc-back');
       const selfiePath = await uploadImage('id-documents', selfieUri, 'selfie');
       await submitIdentity({
-        id_document_url: idPath,
+        id_document_url: idFrontPath,
+        id_document_back_url: idBackPath,
         selfie_url: selfiePath,
         id_type: idType,
         email: email.trim() || undefined,
@@ -325,31 +321,48 @@ export default function Identity() {
               <ChevronDown size={18} color={semantic.textMuted} />
             </Pressable>
 
-            <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Upload ID Photo</Text>
+            <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>ID Photos (Front &amp; Back)</Text>
             <Pressable
-              onPress={pickIdImage}
+              onPress={() => router.push('/(app)/identity-capture' as any)}
               style={{
                 alignItems: 'center', gap: 10,
                 borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16,
-                paddingVertical: 26, paddingHorizontal: 18, backgroundColor: semantic.surfaceAlt, marginBottom: 18,
+                paddingVertical: idImageUri && idBackImageUri ? 14 : 26, paddingHorizontal: 18,
+                backgroundColor: semantic.surfaceAlt, marginBottom: 8,
               }}
             >
-              {idImageUri ? (
-                <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 170, borderRadius: 12 }} resizeMode="cover" />
+              {idImageUri && idBackImageUri ? (
+                <View style={{ flexDirection: 'row', gap: 10, width: '100%' }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text variant="caption" color="secondary">Front</Text>
+                    <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 100, borderRadius: 10 }} resizeMode="cover" />
+                  </View>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text variant="caption" color="secondary">Back</Text>
+                    <Image source={{ uri: idBackImageUri }} style={{ width: '100%', height: 100, borderRadius: 10 }} resizeMode="cover" />
+                  </View>
+                </View>
               ) : (
                 <>
                   <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' }}>
                     <Camera size={26} color={semantic.brandDark} />
                   </View>
-                  <Text variant="label">Tap to upload or take a photo</Text>
+                  <Text variant="label">Tap to capture the front and back</Text>
                   <Text variant="caption" color="secondary" style={{ textAlign: 'center' }}>
                     Supports JPG and PNG. Maximum file size: 5 MB.
                   </Text>
                 </>
               )}
             </Pressable>
+            {idImageUri && idBackImageUri ? (
+              <Pressable onPress={() => router.push('/(app)/identity-capture' as any)} style={{ alignSelf: 'center', marginBottom: 18 }}>
+                <Text variant="label" color="brand">Retake</Text>
+              </Pressable>
+            ) : (
+              <View style={{ marginBottom: 18 }} />
+            )}
 
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18 }, shadowToken.card]}>
+            <View style={{ marginBottom: 18 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                 <Info size={17} color={semantic.brandDark} />
                 <Text variant="label">Photo guidelines</Text>
@@ -563,13 +576,20 @@ export default function Identity() {
               </View>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, gap: 6 }}>
-                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Photo</Text>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Front</Text>
                   {idImageUri ? <Image source={{ uri: idImageUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
                 </View>
+                <View style={{ flex: 1, gap: 6 }}>
+                  <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Back</Text>
+                  {idBackImageUri ? <Image source={{ uri: idBackImageUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1, gap: 6 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Selfie</Text>
                   {selfieUri ? <Image source={{ uri: selfieUri }} style={{ width: '100%', height: 90, borderRadius: 10 }} resizeMode="cover" /> : null}
                 </View>
+                <View style={{ flex: 1 }} />
               </View>
             </View>
 

@@ -1,9 +1,3 @@
-/**
- * constants/sourceOfFunds.ts
- * ----------------------------------------------------------------------------
- * Source-of-funds options offered on the identity-verification wizard's
- * Personal Information step.
- */
 export type SourceOfFundsOption = { label: string; value: string };
 
 export const SOURCE_OF_FUNDS: SourceOfFundsOption[] = [

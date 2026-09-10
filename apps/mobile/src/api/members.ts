@@ -23,6 +23,7 @@ export interface Member {
   verification_status: VerificationStatus;
   verification_rejection_reason: string | null;
   id_document_url: string | null;
+  id_document_back_url: string | null;
   id_type: string | null;
   selfie_url: string | null;
   first_name: string | null;
@@ -76,6 +77,7 @@ export async function updateProfile(input: UpdateProfileInput) {
 
 export interface SubmitIdentityInput {
   id_document_url: string;
+  id_document_back_url?: string;
   full_name?: string;
   phone?: string;
   id_type?: string;

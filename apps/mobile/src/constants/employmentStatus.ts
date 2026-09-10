@@ -1,9 +1,3 @@
-/**
- * constants/employmentStatus.ts
- * ----------------------------------------------------------------------------
- * Employment-status options offered on the identity-verification wizard's
- * Personal Information step.
- */
 export type EmploymentStatusOption = { label: string; value: string };
 
 export const EMPLOYMENT_STATUSES: EmploymentStatusOption[] = [

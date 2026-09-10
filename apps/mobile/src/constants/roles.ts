@@ -1,18 +1,3 @@
-/**
- * constants/roles.ts
- * ============================================================================
- * The single source of truth for "which roles can do what" on the CLIENT.
- *
- * IMPORTANT: these lists mirror the API's `requireGroupRole([...])` guards as
- * they are actually enforced today — NOT the spec's §1.1 matrix. The two differ
- * in a few places (flagged with SPEC-DIVERGENCE below). UI must follow the real
- * guards so a button never appears that the API would then reject with 403.
- *
- * If/when you tighten the backend to match the spec matrix, update the lists
- * here in the same change so UI and API stay in lockstep.
- * ============================================================================
- */
-
 export type GroupRole = 'owner' | 'treasurer' | 'auditor' | 'member';
 
 export const ALL_ROLES: GroupRole[] = ['owner', 'treasurer', 'auditor', 'member'];
