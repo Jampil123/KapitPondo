@@ -6,7 +6,7 @@
  */
 import {
   ArrowUpCircle, Coins, Repeat, SlidersHorizontal, UserCheck, Receipt, Users, CalendarClock,
-  LifeBuoy,
+  LifeBuoy, Smartphone,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
@@ -29,6 +29,7 @@ export function OrganizerNav() {
         { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
         { label: 'Record expense', icon: Receipt, soon: true },
         { label: 'Manage officers', icon: Users, route: 'members/officers' },
+        { label: 'Group settings', icon: Smartphone, route: 'group/settings' },
         { label: 'Year-end distribution', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Repeat, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },

@@ -54,6 +54,20 @@ async function listContributions({ groupId, membershipId, role, status, cycleId,
   return withSignedProof(data);
 }
 
+// Advisory duplicate check the client runs before submitting (same GCash
+// reference number reused, whether by mistake or resubmission) — flags, never
+// blocks; the officer reviewing still makes the actual call.
+async function hasDuplicateReference(groupId, externalReference) {
+  const { data, error } = await supabase
+    .from('contributions')
+    .select('id')
+    .eq('group_id', groupId)
+    .eq('external_reference', externalReference)
+    .limit(1);
+  if (error) throw error;
+  return (data?.length ?? 0) > 0;
+}
+
 async function getContribution(id) {
   const { data, error } = await supabase
     .from('contributions').select('*').eq('id', id).single();
@@ -126,5 +140,5 @@ async function autoConfirmContribution({ membershipId, cycleId, groupId, amount,
 
 module.exports = {
   createContribution, listContributions, getContribution, getActiveMembership,
-  approveContribution, rejectContribution, autoConfirmContribution,
+  approveContribution, rejectContribution, autoConfirmContribution, hasDuplicateReference,
 };

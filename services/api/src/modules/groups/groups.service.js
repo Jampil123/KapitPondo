@@ -49,6 +49,147 @@ async function getGroup(groupId) {
   return data;
 }
 
+// =====================================================================
+// GCash channel — Treasurer proposes, Owner approves (segregation of
+// duties: the Treasurer receives the money, so they can't be the one who
+// unilaterally decides what number members see — see migration 0056).
+// treasurer_gcash_number/name stay the LIVE, member-visible values; the
+// treasurer_gcash_pending_*/status columns track the one proposal "in
+// flight" at a time. Full history is read from audit_log, not stored here.
+// =====================================================================
+
+async function submitGcashProposal(groupId, { number, name, note, qrUrl, submittedBy }) {
+  const { data: current, error: cErr } = await supabase
+    .from('groups').select('treasurer_gcash_status').eq('id', groupId).single();
+  if (cErr) throw cErr;
+  if (current.treasurer_gcash_status === 'pending') {
+    throw Object.assign(new Error("A submission is already pending the Owner's review"), { status: 409 });
+  }
+
+  const { data, error } = await supabase
+    .from('groups')
+    .update({
+      treasurer_gcash_status: 'pending',
+      treasurer_gcash_pending_number: number,
+      treasurer_gcash_pending_name: name,
+      treasurer_gcash_pending_qr_url: qrUrl ?? null,
+      treasurer_gcash_note: note ?? null,
+      treasurer_gcash_rejection_reason: null,
+      treasurer_gcash_submitted_by: submittedBy,
+      treasurer_gcash_submitted_at: new Date().toISOString(),
+      treasurer_gcash_reviewed_by: null,
+      treasurer_gcash_reviewed_at: null,
+    })
+    .eq('id', groupId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// The Treasurer withdraws their own pending submission — reverts to
+// 'approved' if a live number already existed before this proposal, else
+// 'unset' (there was never one).
+async function cancelGcashProposal(groupId, actorId) {
+  const { data: current, error: cErr } = await supabase
+    .from('groups')
+    .select('treasurer_gcash_status, treasurer_gcash_submitted_by, treasurer_gcash_number')
+    .eq('id', groupId).single();
+  if (cErr) throw cErr;
+  if (current.treasurer_gcash_status !== 'pending') {
+    throw Object.assign(new Error('No pending submission to cancel'), { status: 409 });
+  }
+  if (current.treasurer_gcash_submitted_by !== actorId) {
+    throw Object.assign(new Error('Only the Treasurer who submitted this can cancel it'), { status: 403 });
+  }
+
+  const { data, error } = await supabase
+    .from('groups')
+    .update({
+      treasurer_gcash_status: current.treasurer_gcash_number ? 'approved' : 'unset',
+      treasurer_gcash_pending_number: null,
+      treasurer_gcash_pending_name: null,
+      treasurer_gcash_pending_qr_url: null,
+      treasurer_gcash_note: null,
+    })
+    .eq('id', groupId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// Owner approves — the pending number/name/QR become the LIVE ones members see.
+async function approveGcashProposal(groupId, approverId) {
+  const { data: group, error: gErr } = await supabase.from('groups').select('*').eq('id', groupId).single();
+  if (gErr) throw gErr;
+  if (group.treasurer_gcash_status !== 'pending') {
+    throw Object.assign(new Error('No pending submission to approve'), { status: 409 });
+  }
+
+  const { data, error } = await supabase
+    .from('groups')
+    .update({
+      treasurer_gcash_number: group.treasurer_gcash_pending_number,
+      treasurer_gcash_name: group.treasurer_gcash_pending_name,
+      treasurer_gcash_qr_url: group.treasurer_gcash_pending_qr_url,
+      treasurer_gcash_status: 'approved',
+      treasurer_gcash_pending_number: null,
+      treasurer_gcash_pending_name: null,
+      treasurer_gcash_pending_qr_url: null,
+      treasurer_gcash_note: null,
+      treasurer_gcash_reviewed_by: approverId,
+      treasurer_gcash_reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', groupId)
+    .select()
+    .single();
+  if (error) throw error;
+  return { group: data, submittedBy: group.treasurer_gcash_submitted_by };
+}
+
+// Owner rejects — pending fields stay put so the Treasurer can see exactly
+// what was rejected (matches the "what to fix" view), only the status +
+// reason change.
+async function rejectGcashProposal(groupId, approverId, reason) {
+  const { data: current, error: cErr } = await supabase
+    .from('groups').select('treasurer_gcash_status, treasurer_gcash_submitted_by').eq('id', groupId).single();
+  if (cErr) throw cErr;
+  if (current.treasurer_gcash_status !== 'pending') {
+    throw Object.assign(new Error('No pending submission to reject'), { status: 409 });
+  }
+
+  const { data, error } = await supabase
+    .from('groups')
+    .update({
+      treasurer_gcash_status: 'rejected',
+      treasurer_gcash_rejection_reason: reason,
+      treasurer_gcash_reviewed_by: approverId,
+      treasurer_gcash_reviewed_at: new Date().toISOString(),
+    })
+    .eq('id', groupId)
+    .select()
+    .single();
+  if (error) throw error;
+  return { group: data, submittedBy: current.treasurer_gcash_submitted_by };
+}
+
+// Change history for the GCash channel — Treasurer (their own proposals)
+// and Owner. Reads audit_log directly rather than going through
+// auditlog.service's listAuditLog (that endpoint is Auditor/Owner-only by
+// design, and this needs to be readable by the Treasurer too).
+async function listGcashHistory(groupId) {
+  const { data, error } = await supabase
+    .from('audit_log')
+    .select('*, actor:members!actor_id(full_name)')
+    .eq('group_id', groupId)
+    .eq('entity_type', 'group_gcash')
+    .order('created_at', { ascending: false })
+    .limit(20);
+  if (error) throw error;
+  return data;
+}
+
 // Resolve group by fund_code then insert a pending membership
 async function joinByCode({ memberId, fundCode }) {
   // Find the group
@@ -332,4 +473,8 @@ async function leaveGroup(groupId, memberId) {
   return data;
 }
 
-module.exports = { createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember, listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup, nudgeMember };
+module.exports = {
+  createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember,
+  listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup, nudgeMember,
+  submitGcashProposal, cancelGcashProposal, approveGcashProposal, rejectGcashProposal, listGcashHistory,
+};

@@ -91,6 +91,24 @@ function sortRows(rows: Contribution[]): Contribution[] {
   });
 }
 
+/**
+ * Drops a 'rejected' row once a strictly later row exists for this member.
+ *
+ * The mapping below assigns rows to periods purely by position (sorted[i] ->
+ * periods[i]), which assumes exactly one row per period. A resubmission
+ * breaks that: it always INSERTS a new row rather than editing the rejected
+ * one it's fixing (contributions.service.js: rejectContribution only flips
+ * status on that same row; submitContribution always inserts) — so a
+ * rejected-then-resubmitted period briefly has TWO rows, which shifts every
+ * period after it out of alignment (the resubmission lands on the WRONG
+ * period, and the period it actually belongs to keeps showing the stale
+ * rejected row). Collapsing the superseded rejection back to one row per
+ * period before the positional mapping fixes both.
+ */
+function collapseSupersededRejections(sorted: Contribution[]): Contribution[] {
+  return sorted.filter((row, i) => !(row.status === 'rejected' && i < sorted.length - 1));
+}
+
 /** The full period-by-period timeline for one member's own rows in a cycle, oldest first. */
 export function buildTimeline(
   cycle: Pick<Cycle, 'start_date' | 'end_date' | 'frequency' | 'contribution_due_day' | 'contribution_amount'>,
@@ -114,13 +132,15 @@ export function buildTimeline(
     }));
   }
 
+  const collapsed = collapseSupersededRejections(sorted);
+
   return periods.map((periodStart, index) => {
-    const row = sorted[index] ?? null;
+    const row = collapsed[index] ?? null;
     const dueDate = periodDueDate(periodStart, cycle);
     if (row) return { index, periodStart, dueDate, row, kind: rowKind(row), amount: Number(row.amount) };
     // Only the period right after the member's last row can already be due/late —
     // everything further out hasn't opened yet.
-    const isNextUnpaid = index === sorted.length;
+    const isNextUnpaid = index === collapsed.length;
     const kind: PeriodKind = isNextUnpaid ? (now > dueDate ? 'late' : 'due') : 'upcoming';
     return { index, periodStart, dueDate, row: null, kind, amount: expected };
   });

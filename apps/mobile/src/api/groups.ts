@@ -11,6 +11,8 @@ import type { GroupRole } from '../constants/roles';
 export type GroupStatus = 'active' | 'archived';
 export type MembershipStatus = 'pending' | 'active' | 'suspended' | 'exited';
 
+export type GcashStatus = 'unset' | 'pending' | 'approved' | 'rejected';
+
 export interface Group {
   id: string;
   name: string;
@@ -18,6 +20,22 @@ export interface Group {
   description: string | null;
   status: GroupStatus;
   owner: { full_name: string | null } | null;
+  /** The LIVE, member-visible GCash number the "pay online" sheet shows — only ever set by an Owner approval (see submitGcashProposal/approveGcashProposal). Null until the first approval. */
+  treasurer_gcash_number: string | null;
+  treasurer_gcash_name: string | null;
+  /** Storage path (private `proofs` bucket) to the Treasurer's own real GCash "Receive Money" QR screenshot — shown as-is via useSignedProofUrl, never generated (a generated EMVCo/QR-Ph payload isn't reliably scannable without GCash's own registered merchant fields). Optional — the copyable number/amount/reference always work regardless. */
+  treasurer_gcash_qr_url: string | null;
+  treasurer_gcash_pending_qr_url: string | null;
+  /** The one GCash proposal "in flight" at a time — see GroupSettings (group/settings.tsx) for the Treasurer/Owner workflow this drives. */
+  treasurer_gcash_status: GcashStatus;
+  treasurer_gcash_pending_number: string | null;
+  treasurer_gcash_pending_name: string | null;
+  treasurer_gcash_note: string | null;
+  treasurer_gcash_rejection_reason: string | null;
+  treasurer_gcash_submitted_by: string | null;
+  treasurer_gcash_submitted_at: string | null;
+  treasurer_gcash_reviewed_by: string | null;
+  treasurer_gcash_reviewed_at: string | null;
 }
 
 /** A membership row from GET /groups: my role + status + the nested group. */
@@ -45,6 +63,53 @@ export function createGroup(input: { name: string; fund_code: string; descriptio
 /** POST /api/groups/join-by-code — request to join; creates a PENDING membership. */
 export function joinByCode(fund_code: string) {
   return api.post<{ membership?: unknown; group?: Group }>('/api/groups/join-by-code', { fund_code });
+}
+
+// ── GCash channel: Treasurer proposes, Owner approves ───────────────────────
+// After any of these calls succeed, also call useGroups().refresh() so
+// useActiveGroup().group picks up the change (none of these update the
+// cached groups list themselves).
+
+export interface GcashProposalInput {
+  number: string;
+  name: string;
+  note?: string;
+  /** Storage path to the Treasurer's uploaded real GCash QR screenshot, if they attached one (see lib/upload.ts's uploadImage('proofs', ...)). */
+  qr_url?: string;
+}
+
+/** POST /api/groups/:groupId/gcash/propose — Treasurer only. 409 if a submission is already pending. */
+export function submitGcashProposal(groupId: string, input: GcashProposalInput) {
+  return api.post<{ group: Group }>(`/api/groups/${groupId}/gcash/propose`, input);
+}
+
+/** POST /api/groups/:groupId/gcash/cancel — Treasurer only, withdraws their own pending submission. */
+export function cancelGcashProposal(groupId: string) {
+  return api.post<{ group: Group }>(`/api/groups/${groupId}/gcash/cancel`);
+}
+
+/** POST /api/groups/:groupId/gcash/approve — Owner only. */
+export function approveGcashProposal(groupId: string) {
+  return api.post<{ group: Group }>(`/api/groups/${groupId}/gcash/approve`);
+}
+
+/** POST /api/groups/:groupId/gcash/reject — Owner only, reason required. */
+export function rejectGcashProposal(groupId: string, reason: string) {
+  return api.post<{ group: Group }>(`/api/groups/${groupId}/gcash/reject`, { reason });
+}
+
+export interface GcashHistoryEntry {
+  id: string;
+  action: 'proposed' | 'cancelled' | 'approved' | 'rejected';
+  created_at: string;
+  actor: { full_name: string | null } | null;
+  after_data: { number?: string; name?: string; note?: string | null; reason?: string } | null;
+}
+
+/** GET /api/groups/:groupId/gcash/history — Treasurer + Owner only. */
+export async function listGcashHistory(groupId: string) {
+  const res = await api.get<{ entries: GcashHistoryEntry[] }>(`/api/groups/${groupId}/gcash/history`);
+  return res.entries ?? [];
 }
 
 /** A group's officer, name + role (+ a verified badge) — no email/phone — any active member can see this. */

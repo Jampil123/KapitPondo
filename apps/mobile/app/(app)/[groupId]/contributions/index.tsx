@@ -12,6 +12,7 @@ import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
+import { PayGcashSheet } from '@/features/contributions/PayGcashSheet';
 import { useMyBalance } from '@/features/reporting/reporting.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
 import { buildTimeline, cyclePeriods, periodLabel, type PeriodEntry, type PeriodKind } from '@/features/contributions/periods';
@@ -199,6 +200,7 @@ export default function ContributionsOverview() {
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const bal = useMyBalance(groupId!);
   const [filter, setFilter] = useState<Filter>('all');
+  const [paySheetTarget, setPaySheetTarget] = useState<PeriodEntry | null>(null);
 
   const heads = membership?.heads ?? 1;
   const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
@@ -220,6 +222,17 @@ export default function ContributionsOverview() {
     } else {
       router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, due: entry.dueDate.toISOString() } });
     }
+  }
+
+  // The sticky "Pay <period> — <amount>" shortcut jumps straight to the GCash
+  // sheet instead of the full contribute screen — 'rejected' still needs the
+  // full page (rejection reason, previous proof, etc.), and a group with no
+  // treasurer GCash number configured has nothing to build that sheet's QR
+  // against, so both fall back to the full page (which itself falls back to
+  // the manual-only form in that second case).
+  function onPressNextPayable(entry: PeriodEntry) {
+    if (entry.kind === 'rejected' || !group?.treasurer_gcash_number) openEntry(entry);
+    else setPaySheetTarget(entry);
   }
 
   const nextPayable = needsAction.find((p) => p.kind === 'rejected') ?? needsAction.find((p) => p.kind === 'late') ?? upcoming.find((p) => p.kind === 'due');
@@ -355,7 +368,7 @@ export default function ContributionsOverview() {
           style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 28 }}
         >
           <Pressable
-            onPress={() => openEntry(nextPayable)}
+            onPress={() => onPressNextPayable(nextPayable)}
             style={[{ paddingVertical: 15, borderRadius: 14, alignItems: 'center', backgroundColor: semantic.brandDark }, CARD_SHADOW]}
           >
             <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>
@@ -363,6 +376,17 @@ export default function ContributionsOverview() {
             </Text>
           </Pressable>
         </LinearGradient>
+      ) : null}
+
+      {cycle ? (
+        <PayGcashSheet
+          visible={!!paySheetTarget}
+          onClose={() => setPaySheetTarget(null)}
+          cycleId={cycle.id}
+          amount={paySheetTarget?.amount ?? 0}
+          dueDate={paySheetTarget?.dueDate ?? null}
+          onSubmitted={() => { setPaySheetTarget(null); contribs.refetch(); }}
+        />
       ) : null}
     </SafeAreaView>
   );

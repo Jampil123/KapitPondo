@@ -3,11 +3,8 @@ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import * as WebBrowser from 'expo-web-browser';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   Hash, Camera, Check, Clock3, AlertTriangle, RotateCcw,
-  Zap, Smartphone, ChevronRight, Info,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
@@ -20,9 +17,8 @@ import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
-import { useMyBalance } from '@/features/reporting/reporting.hooks';
-import { useAction } from '@/hooks/useApi';
-import { createContributionCheckout } from '@/api/payments';
+import { PayGcashSheet } from '@/features/contributions/PayGcashSheet';
+import { useProofScan, confirmSubmitDespiteDuplicate } from '@/features/contributions/useProofScan';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
 import { pickCurrent } from '@/features/dashboard/MemberDashboard';
 import type { PaymentMethod, Contribution } from '@/api/contributions';
@@ -32,10 +28,6 @@ const CARD_SHADOW = {
   boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
 } as const;
 
-const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
-const PROCESSING_TIMEOUT_MS = 45000;
-const POLL_INTERVAL_MS = 2000;
-
 const METHODS: { key: PaymentMethod; label: string }[] = [
   { key: 'gcash', label: 'GCash' },
   { key: 'cash', label: 'Cash' },
@@ -44,20 +36,13 @@ const METHODS: { key: PaymentMethod; label: string }[] = [
 ];
 
 type PageState = 'submit' | 'overdue' | 'review' | 'rejected';
-/** Only meaningful while PageState is 'submit'/'overdue' — how the member is paying this period. */
-type PayRoute = 'choose' | 'online' | 'processing' | 'done' | 'manual';
+/** Only meaningful while PageState is 'submit'/'overdue' — how the member is paying this period. The QR flow lives in a pull-up sheet on top of 'choose', not a route of its own. */
+type PayRoute = 'choose' | 'manual';
 
 function shortDate(iso: string | Date | null | undefined) {
   if (!iso) return '';
   const d = iso instanceof Date ? iso : parseApiDate(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function shortDateTime(iso: string | null | undefined) {
-  if (!iso) return '';
-  const d = parseApiDate(iso);
-  if (isNaN(d.getTime())) return '';
-  return `${shortDate(d)}, ${d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function daysBetween(a: Date, b: Date) {
@@ -113,14 +98,26 @@ function ProofThumb({ path, title, sub }: { path: string | null; title: string; 
   );
 }
 
+/** A validation warning surfaced from the AI receipt read — flags, never blocks. */
+function FlagRow({ label, tone }: { label: string; tone: 'warn' | 'danger' }) {
+  const t = tone === 'danger' ? intent.danger : intent.warning;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, backgroundColor: t.soft, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, marginBottom: 7 }}>
+      <AlertTriangle size={14} color={t.text} style={{ marginTop: 1 }} />
+      <Text style={{ flex: 1, fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: t.text, lineHeight: 15.5 }}>{label}</Text>
+    </View>
+  );
+}
+
 function PaymentForm({
-  amount, setAmount, method, setMethod, reference, setReference, proofUri, pickProof, amountHint,
+  amount, setAmount, method, setMethod, reference, setReference, proofUri, pickProof, amountHint, scanning,
 }: {
   amount: string; setAmount: (v: string) => void;
   method: PaymentMethod; setMethod: (v: PaymentMethod) => void;
   reference: string; setReference: (v: string) => void;
   proofUri: string | null; pickProof: () => void;
   amountHint: string;
+  scanning?: boolean;
 }) {
   return (
     <>
@@ -147,83 +144,28 @@ function PaymentForm({
       </View>
 
       <SectionHead title="Proof of payment" aside="Optional" />
-      <Pressable onPress={pickProof} style={{ alignItems: 'center', gap: 8, borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16, paddingVertical: 20, backgroundColor: semantic.surfaceAlt }}>
+      <Pressable
+        onPress={pickProof}
+        disabled={scanning}
+        style={{ borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}
+      >
         {proofUri ? (
-          <Image source={{ uri: proofUri }} style={{ width: '92%', height: 150, borderRadius: 10 }} resizeMode="cover" />
+          <View>
+            <Image source={{ uri: proofUri }} style={{ width: '100%', height: 160 }} resizeMode="cover" />
+            {scanning ? (
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(14,20,22,0.55)', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <ActivityIndicator color="#fff" />
+                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>Reading your receipt…</Text>
+              </View>
+            ) : null}
+          </View>
         ) : (
-          <>
+          <View style={{ alignItems: 'center', gap: 8, paddingVertical: 20 }}>
             <Camera size={24} color={semantic.brandDark} />
             <Text variant="bodySmall" color="secondary">Tap to attach a screenshot / photo</Text>
-          </>
+          </View>
         )}
       </Pressable>
-    </>
-  );
-}
-
-/** "How would you like to pay" — the fork between an instant PayMongo
- *  checkout and the existing manual upload-a-receipt flow. */
-function PayRouteChooser({ onOnline, onManual }: { onOnline: () => void; onManual: () => void }) {
-  return (
-    <>
-      <SectionHead title="How would you like to pay" />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-        <Pressable onPress={onOnline} style={{ flexDirection: 'row', gap: 13, padding: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
-          <LinearGradient
-            colors={GRADIENT} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }}
-            style={{ width: 44, height: 44, borderRadius: 15, alignItems: 'center', justifyContent: 'center', shadowColor: '#2FA8FF', shadowOpacity: 0.35, shadowRadius: 10, shadowOffset: { width: 0, height: 2 }, elevation: 4 }}
-          >
-            <Zap size={21} color="#fff" strokeWidth={2.2} />
-          </LinearGradient>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-              <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary, letterSpacing: -0.2 }}>Pay online</Text>
-              <View style={{ backgroundColor: intent.success.base, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_800ExtraBold', color: '#fff', letterSpacing: 0.4 }}>INSTANT</Text>
-              </View>
-            </View>
-            <Text variant="caption" color="secondary" style={{ marginTop: 5, lineHeight: 16 }}>
-              Pay with GCash or Maya through the app. Confirmed straight away — no receipt to upload and no waiting for an officer.
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 9 }}>
-              {['Posted immediately', 'No proof needed', 'Nothing to fill in'].map((t) => (
-                <View key={t} style={{ backgroundColor: intent.success.soft, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 }}>
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>{t}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-          <ChevronRight size={18} color={semantic.textMuted} style={{ alignSelf: 'center' }} />
-        </Pressable>
-
-        <Pressable onPress={onManual} style={{ flexDirection: 'row', gap: 13, padding: 16 }}>
-          <View style={{ width: 44, height: 44, borderRadius: 15, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Smartphone size={20} color={semantic.brandDark} strokeWidth={1.9} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-              <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary, letterSpacing: -0.2 }}>Send it yourself</Text>
-              <View style={{ backgroundColor: semantic.surfaceAlt, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_800ExtraBold', color: semantic.brandDark, letterSpacing: 0.4 }}>MANUAL</Text>
-              </View>
-            </View>
-            <Text variant="caption" color="secondary" style={{ marginTop: 5, lineHeight: 16 }}>
-              Send to the group's GCash number from your own app, then upload the receipt here.
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 9 }}>
-              {['Upload a receipt', 'Checked by an officer', 'No extra cost'].map((t, i) => (
-                <View key={t} style={{ backgroundColor: i === 2 ? intent.success.soft : semantic.surfaceAlt, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 7 }}>
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: i === 2 ? intent.success.text : semantic.textSecondary }}>{t}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-          <ChevronRight size={18} color={semantic.textMuted} style={{ alignSelf: 'center' }} />
-        </Pressable>
-      </View>
-      <Text variant="caption" color="muted" style={{ marginTop: 14, lineHeight: 16 }}>
-        Both ways put the same amount into the fund. Paying online confirms itself, so there is nothing to upload and nothing to wait for.
-      </Text>
     </>
   );
 }
@@ -234,20 +176,12 @@ export default function Contribute() {
   // overdue with no backing row yet — the server only creates a 'late' row lazily,
   // and only when an officer (not the member) views the list, so a member can be
   // genuinely overdue with nothing in the database to point `id` at.
-  // `checkout` arrives when PayMongo's redirect lands back on this exact
-  // screen (see payments.routes.js's successUrl/cancelUrl) — on Android this
-  // is a real deep link Expo Router navigates to, remounting the screen
-  // fresh, so the "processing" step has to be resumable from a cold start,
-  // not just from the in-JS openAuthSessionAsync promise (which is what
-  // actually resolves on iOS instead).
-  const { groupId, id: rowId, due: dueParam, checkout: checkoutParam } = useLocalSearchParams<{ groupId: string; id?: string; due?: string; checkout?: string }>();
+  const { groupId, id: rowId, due: dueParam } = useLocalSearchParams<{ groupId: string; id?: string; due?: string }>();
   const router = useRouter();
   const { membership, group } = useActiveGroup();
   const { cycle, loading: cycleLoading } = useActiveCycle(groupId!);
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const submit = useSubmitContribution(groupId!);
-  const balance = useMyBalance(groupId!);
-  const checkout = useAction((amount: number) => createContributionCheckout(groupId!, cycle!.id, amount));
 
   const rows = (contribs.data ?? []).filter((c: Contribution) => c.membership_id === membership?.id);
   const current = rowId ? (rows.find((r) => r.id === rowId) ?? null) : pickCurrent(rows);
@@ -266,14 +200,29 @@ export default function Contribute() {
     !current && due && due < now ? 'overdue' :
     'submit';
 
-  const [route, setRoute] = useState<PayRoute>(checkoutParam === 'success' ? 'processing' : 'choose');
+  // "Pay online" (the QR sheet) only exists once the group's Owner has set a
+  // treasurer GCash number (see group/settings.tsx) — otherwise there's
+  // nothing to build a QR against, so the flow goes straight to the manual
+  // record-it-yourself form, same as before this feature existed.
+  const hasTreasurerGcash = !!group?.treasurer_gcash_number;
+  const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
+  const [paySheetOpen, setPaySheetOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState<PaymentMethod>('gcash');
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [confirmed, setConfirmed] = useState<Contribution | null>(null);
-  const [timedOut, setTimedOut] = useState(false);
+
+  const { scanning, flags, scanMeta, scanProof, reset: resetScan } = useProofScan({
+    groupId,
+    expectedAmount: payAmount,
+    treasurerGcashNumber: group?.treasurer_gcash_number,
+    onFields: (fields) => {
+      if (fields.amount) setAmount(fields.amount);
+      if (fields.reference) setReference(fields.reference);
+      if (fields.method) setMethod(fields.method);
+    },
+  });
 
   useEffect(() => {
     if (loading) return;
@@ -287,48 +236,27 @@ export default function Contribute() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, state, cycle?.id, current?.id]);
 
-  // While waiting on PayMongo's webhook: poll the (realtime-watched) list —
-  // belt-and-suspenders in case the realtime subscription itself doesn't fire
-  // — until a row this member didn't have before shows up already approved.
-  useEffect(() => {
-    if (route !== 'processing') return;
-    setTimedOut(false);
-    const deadline = Date.now() + PROCESSING_TIMEOUT_MS;
-    const interval = setInterval(() => {
-      contribs.refetch();
-      if (Date.now() > deadline) setTimedOut(true);
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route]);
-
-  // `current` is scoped to this cycle and already known unpaid the moment
-  // "processing" starts (that's the only way to reach it) — once the
-  // webhook posts, pickCurrent() naturally resolves to that same period's
-  // new approved+auto_confirmed row, so no "before" snapshot is needed.
-  // This also covers arriving fresh via the Android deep-link remount
-  // (checkoutParam === 'success'), where the webhook may have already beaten
-  // the redirect back to the app.
-  useEffect(() => {
-    if (route !== 'processing') return;
-    if (current?.status === 'approved' && current.auto_confirmed) {
-      setConfirmed(current);
-      setRoute('done');
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, current?.id, current?.status, current?.auto_confirmed]);
-
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) return Alert.alert('Permission needed', 'Allow photo access to attach proof.');
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-    if (!res.canceled) setProofUri(res.assets[0].uri);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
+    if (res.canceled) return;
+    const uri = res.assets[0].uri;
+    setProofUri(uri);
+    resetScan();
+    scanProof(uri);
   }
 
   async function onSubmit() {
     if (!cycle) return Alert.alert('No active cycle', 'There is no active cycle to contribute to yet.');
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid contribution amount.');
+
+    if (groupId) {
+      const proceed = await confirmSubmitDespiteDuplicate(groupId, reference, !!flags);
+      if (!proceed) return;
+    }
+
     setUploading(true);
     try {
       let proof_url: string | undefined;
@@ -347,46 +275,24 @@ export default function Contribute() {
     }
   }
 
-  async function onPayOnline() {
-    if (!cycle) return;
-    const res = await checkout.run(payAmount);
-    if (!res) {
-      Alert.alert('Could not start checkout', checkout.error?.message ?? 'Try again in a moment.');
-      return;
-    }
-    // Must match payments.routes.js's successUrl/cancelUrl exactly — this is
-    // the same screen (contributions/contribute), not the list, so a
-    // redirect that becomes a real navigation (Android) remounts THIS
-    // screen with ?checkout=success instead of dumping the member elsewhere.
-    const returnUrl = `kapitpondo://${groupId}/contributions/contribute`;
-    const result = await WebBrowser.openAuthSessionAsync(res.checkout_url, returnUrl);
-    if (result.type === 'success' && result.url.includes('checkout=success')) {
-      setRoute('processing');
-    } else {
-      // Cancelled, dismissed, or the redirect carried checkout=cancelled —
-      // nothing was charged (PayMongo only redirects success_url once the
-      // payment actually clears), so it's safe to just go back to the choice.
-      setRoute('choose');
-    }
-  }
-
   const TITLES: Record<PageState, { t: string; s: string }> = {
     submit: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
     overdue: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''} · overdue` },
     review: { t: 'Payment status', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
     rejected: { t: 'Resubmit proof', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
   };
-  const ROUTE_TITLES: Partial<Record<PayRoute, { t: string; s: string }>> = {
-    online: { t: 'Pay online', s: `${cycle?.name ?? ''} · through PayMongo` },
-    processing: { t: 'Pay online', s: 'Waiting for confirmation' },
-    done: { t: 'Payment received', s: `${cycle?.name ?? ''} · posted to the ledger` },
-  };
+  const title = TITLES[state].t;
+  const subtitle = TITLES[state].s;
 
-  const isPayFlow = state === 'submit' || state === 'overdue';
-  const title = isPayFlow && ROUTE_TITLES[route] ? ROUTE_TITLES[route]!.t : TITLES[state].t;
-  const subtitle = isPayFlow && ROUTE_TITLES[route] ? ROUTE_TITLES[route]!.s : TITLES[state].s;
-
-  if (loading) {
+  // `&& !cycle`, not just `loading` — useQuery's background refetch (e.g. the
+  // AppState-triggered one that fires the instant the native image picker
+  // hands control back, see useApi.ts) sets loading=true on every foreground
+  // return while deliberately KEEPING the previous cycle/contribs data. Gating
+  // on loading alone would unmount this whole screen — including an open
+  // PayGcashSheet and whatever photo the member just attached — every single
+  // time. Once cycle has loaded once, a later refetch should update this
+  // screen in place, not tear it down and rebuild it.
+  if (loading && !cycle) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
         <AppBar title="Payment" />
@@ -410,75 +316,6 @@ export default function Contribute() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title={title} subtitle={subtitle} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-        {/* ---------------- Pay flow: choose → online → processing → done ---------------- */}
-        {isPayFlow && route === 'processing' ? (
-          <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, alignItems: 'center', padding: 40, marginTop: 10 }, CARD_SHADOW]}>
-              <ActivityIndicator size="large" color={semantic.brand} style={{ marginBottom: 18 }} />
-              <Text style={{ fontSize: 16, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary }}>Waiting for PayMongo</Text>
-              <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 9, lineHeight: 18 }}>
-                {timedOut
-                  ? "This is taking longer than usual. You'll get a notification the moment it posts — you can safely leave this screen."
-                  : 'Finish paying in the browser tab that opened. This page updates on its own once the payment goes through.'}
-              </Text>
-            </View>
-            <Text variant="caption" color="muted" style={{ marginTop: 14, lineHeight: 16 }}>
-              If you closed the tab by mistake, nothing was charged. Go back and start again.
-            </Text>
-            <Button label="Cancel and go back" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 18 }} />
-          </>
-        ) : isPayFlow && route === 'done' && confirmed ? (
-          <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, alignItems: 'center', padding: 24, marginTop: 6 }, CARD_SHADOW]}>
-              <View style={{ width: 62, height: 62, borderRadius: 31, backgroundColor: intent.success.base, alignItems: 'center', justifyContent: 'center', marginBottom: 16, shadowColor: intent.success.base, shadowOpacity: 0.25, shadowRadius: 0, elevation: 0 }}>
-                <Check size={30} color="#fff" strokeWidth={3} />
-              </View>
-              <Text style={{ fontSize: 19, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary }}>Payment received</Text>
-              <Text style={{ fontSize: 30, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 9 }}>{formatPeso(confirmed.amount)}</Text>
-              <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 8, lineHeight: 18 }}>
-                Your {cycle.name} contribution is on the ledger.{balance.data ? <> Your capital is now <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(balance.data.contributions)}</Text>.</> : null}
-              </Text>
-
-              <View style={{ width: '100%', marginTop: 18, paddingTop: 14, borderTopWidth: 1, borderColor: semantic.border, gap: 8 }}>
-                {[
-                  ['Reference', confirmed.gateway_reference ?? '—'],
-                  ['Date', shortDateTime(confirmed.paid_date ?? confirmed.created_at)],
-                  ['Contribution', formatPeso(confirmed.amount)],
-                  ['Recorded as', cycle.name],
-                ].map(([k, v]) => (
-                  <View key={k} style={{ flexDirection: 'row' }}>
-                    <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>{k}</Text>
-                    <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{v}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={{ marginTop: 15, backgroundColor: intent.success.soft, borderRadius: 16, padding: 14, flexDirection: 'row', gap: 11 }}>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: intent.success.base, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                <Check size={12} color="#fff" strokeWidth={3} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Verified by the payment processor</Text>
-                <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                  Because PayMongo confirmed this payment directly, no officer had to check it. It posted to the ledger the moment it cleared.
-                </Text>
-              </View>
-            </View>
-
-            <Text variant="caption" color="muted" style={{ marginTop: 14, lineHeight: 16 }}>
-              A copy of this receipt is saved under My proofs. Nobody had to record or approve it, so it appears in the audit log as a system posting.
-            </Text>
-
-            <Button
-              label="Back to my contributions"
-              onPress={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
-              style={{ marginTop: 18 }}
-            />
-          </>
-        ) : (
-        <>
 
         {/* ---------------- Summary hero (all states) ---------------- */}
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
@@ -562,91 +399,35 @@ export default function Contribute() {
           </View>
         ) : null}
 
-        {/* ---------------- Submit / Overdue: choose how, then online or manual ---------------- */}
+        {/* ---------------- Submit / Overdue: choose how to pay ---------------- */}
         {(state === 'submit' || state === 'overdue') && route === 'choose' && (
-          <PayRouteChooser onOnline={() => setRoute('online')} onManual={() => setRoute('manual')} />
-        )}
-
-        {(state === 'submit' || state === 'overdue') && route === 'online' && (
           <>
-            <SectionHead title="You'll be paying" aside="Step 1" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              <View style={{ flexDirection: 'row', paddingVertical: 6 }}>
-                <Text variant="body" color="secondary" style={{ fontSize: 12.5 }}>Contribution · {cycle.name}</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(payAmount)}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', paddingVertical: 6 }}>
-                <Text variant="body" color="secondary" style={{ fontSize: 12.5 }}>{heads} head{heads === 1 ? '' : 's'} × {formatPeso(cycle.contribution_amount)}</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(payAmount)}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', paddingTop: 11, marginTop: 5, borderTopWidth: 1, borderColor: semantic.border }}>
-                <Text style={{ fontSize: 14, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary }}>Total to pay</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 19, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary, letterSpacing: -0.5 }}>{formatPeso(payAmount)}</Text>
-              </View>
-            </View>
-
-            <SectionHead title="What happens next" aside="Step 2" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 11, padding: 15, borderBottomWidth: 1, borderColor: semantic.border }}>
-                <View style={{ width: 40, height: 40, borderRadius: 13, backgroundColor: semantic.dashCard, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 11, fontFamily: 'Poppins_800ExtraBold', color: '#fff' }}>PM</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_800ExtraBold', color: semantic.textPrimary }}>PayMongo</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>A licensed Philippine payment processor. KapitPondo never sees your GCash or card details.</Text>
-                </View>
-              </View>
-              <View style={{ padding: 15, gap: 4 }}>
-                {[
-                  'PayMongo opens in your browser',
-                  'You choose GCash, Maya or card and confirm',
-                  "The money goes straight to the group's account",
-                  "You come back here and it's already recorded",
-                ].map((s, i) => (
-                  <View key={s} style={{ flexDirection: 'row', gap: 11, paddingVertical: 7 }}>
-                    <View style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>{i + 1}</Text>
-                    </View>
-                    <Text variant="body" color="secondary" style={{ flex: 1, fontSize: 12.5, lineHeight: 18 }}>{s}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-
-            <View style={{ marginTop: 15, backgroundColor: intent.info.soft, borderRadius: 16, padding: 14, flexDirection: 'row', gap: 11 }}>
-              <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: intent.info.base, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                <Info size={13} color="#fff" strokeWidth={2.5} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>Nothing to fill in afterwards</Text>
-                <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                  The reference number, amount and date come from the payment itself, so there's no form to complete and no receipt to upload.
-                </Text>
-              </View>
-            </View>
-
-            <Pressable onPress={onPayOnline} disabled={checkout.loading} style={{ opacity: checkout.loading ? 0.6 : 1, marginTop: 18 }}>
-              <LinearGradient
-                colors={GRADIENT} start={{ x: 0.15, y: 0 }} end={{ x: 0.85, y: 1 }}
-                style={{ borderRadius: 14, paddingVertical: 15, alignItems: 'center', shadowColor: '#2FA8FF', shadowOpacity: 0.4, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 6 }}
-              >
-                {checkout.loading ? <ActivityIndicator color="#fff" /> : (
-                  <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Continue to PayMongo · {formatPeso(payAmount)}</Text>
-                )}
-              </LinearGradient>
-            </Pressable>
-            <Text variant="caption" color="muted" style={{ textAlign: 'center', marginTop: 9 }}>You'll be taken out of the app to pay securely</Text>
-            <Button label="Choose a different way to pay" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 10 }} />
+            <SectionHead title="How would you like to pay" />
+            <Button label={`Pay ${formatPeso(payAmount)} with GCash`} onPress={() => setPaySheetOpen(true)} />
+            <Button label="I already paid — record it" variant="ghost" onPress={() => setRoute('manual')} style={{ marginTop: 10 }} />
+            <Text variant="caption" color="muted" style={{ marginTop: 12, lineHeight: 16 }}>
+              Scan a QR to send the money straight to the treasurer, then upload your receipt — it's read automatically, and a different officer still confirms it before it posts.
+            </Text>
           </>
         )}
 
+        {/* ---------------- Submit / Overdue: record payment ---------------- */}
         {(state === 'submit' || state === 'overdue') && route === 'manual' && (
           <>
+            {!scanning && scanMeta ? (
+              <View style={{ marginTop: 20 }}>
+                {flags?.amountMismatch ? <FlagRow tone="warn" label={`The amount on the receipt doesn't match the ${formatPeso(payAmount)} due — double-check before submitting.`} /> : null}
+                {flags?.recipientMismatch ? <FlagRow tone="danger" label="This doesn't look like it was sent to the treasurer's GCash number — make sure you sent it to the right account." /> : null}
+                {flags?.duplicateRef ? <FlagRow tone="danger" label="This reference number is already attached to another contribution in this group." /> : null}
+                {scanMeta.confidence === 'low' ? <FlagRow tone="warn" label={scanMeta.notes ? `Hard to read clearly: ${scanMeta.notes}` : 'The photo was hard to read clearly — double-check the fields below.'} /> : null}
+              </View>
+            ) : null}
+
             <PaymentForm
               amount={amount} setAmount={setAmount}
               method={method} setMethod={setMethod}
               reference={reference} setReference={setReference}
-              proofUri={proofUri} pickProof={pickProof}
+              proofUri={proofUri} pickProof={pickProof} scanning={scanning}
               amountHint="Paying more than expected? That's fine — extra counts as advance credit for future cycles."
             />
             <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
@@ -660,7 +441,9 @@ export default function Contribute() {
               loading={submit.loading || uploading}
               style={{ marginTop: 18 }}
             />
-            <Button label="Choose a different way to pay" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 10 }} />
+            {hasTreasurerGcash ? (
+              <Button label="Choose a different way to pay" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 10 }} />
+            ) : null}
           </>
         )}
 
@@ -759,7 +542,7 @@ export default function Contribute() {
               amount={amount} setAmount={setAmount}
               method={method} setMethod={setMethod}
               reference={reference} setReference={setReference}
-              proofUri={proofUri} pickProof={pickProof}
+              proofUri={proofUri} pickProof={pickProof} scanning={scanning}
               amountHint="Change this only if you actually sent a different amount."
             />
             <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
@@ -775,10 +558,16 @@ export default function Contribute() {
           </>
         )}
 
-        </>
-        )}
-
       </ScrollView>
+
+      <PayGcashSheet
+        visible={paySheetOpen}
+        onClose={() => setPaySheetOpen(false)}
+        cycleId={cycle.id}
+        amount={payAmount}
+        dueDate={due}
+        onSubmitted={() => router.back()}
+      />
     </SafeAreaView>
   );
 }

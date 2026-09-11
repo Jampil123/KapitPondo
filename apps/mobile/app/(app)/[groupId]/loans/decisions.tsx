@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Modal, TextInput, Pressable, Alert, ActivityIndicator, KeyboardAvoidingView, Platform, Animated, Easing } from 'react-native';
+import { useState } from 'react';
+import { View, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Wallet, Banknote, Eye, CheckCircle2, AlertTriangle } from 'lucide-react-native';
@@ -9,6 +9,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { AppBar } from '@/components/shared/AppBar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
+import { SlideSheet } from '@/components/shared/SlideSheet';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { useLoans, useLiquidity, useApproveLoan, useDisburseLoan, useRejectLoan, useLoanEligibility } from '@/features/lending/lending.hooks';
@@ -21,72 +22,6 @@ function shortDate(iso: string | null): string {
   if (!iso) return '—';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-/**
- * Bottom sheet with a real slide-up/slide-down transition, replacing
- * Modal's built-in `animationType="slide"` — that animates the WHOLE
- * transparent overlay (dim included) as one rigid block and gives no exit
- * animation at all (content just vanishes the instant `value` goes null).
- * Here the backdrop fades independently while the sheet translates, and the
- * last non-null `value` stays rendered through the close animation instead
- * of blanking out mid-slide.
- */
-function SlideSheet<T>({
-  value, onClose, keyboardAvoiding, children,
-}: {
-  value: T | null;
-  onClose: () => void;
-  keyboardAvoiding?: boolean;
-  children: (value: T) => React.ReactNode;
-}) {
-  const visible = value !== null;
-  const [mounted, setMounted] = useState(visible);
-  const [rendered, setRendered] = useState<T | null>(value);
-  const translateY = useRef(new Animated.Value(visible ? 0 : 500)).current;
-  const backdrop = useRef(new Animated.Value(visible ? 1 : 0)).current;
-
-  useEffect(() => {
-    if (value !== null) setRendered(value);
-  }, [value]);
-
-  useEffect(() => {
-    if (visible) {
-      setMounted(true);
-      Animated.parallel([
-        Animated.timing(backdrop, { toValue: 1, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 0, duration: 280, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
-    } else if (mounted) {
-      Animated.parallel([
-        Animated.timing(backdrop, { toValue: 0, duration: 180, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(translateY, { toValue: 500, duration: 220, easing: Easing.in(Easing.cubic), useNativeDriver: true }),
-      ]).start(({ finished }) => { if (finished) setMounted(false); });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
-
-  if (!mounted || rendered === null) return null;
-
-  const sheet = (
-    <Animated.View style={{ transform: [{ translateY }] }}>
-      <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14, maxHeight: '85%' }}>
-        {children(rendered)}
-      </Pressable>
-    </Animated.View>
-  );
-
-  return (
-    <Modal visible transparent animationType="none" onRequestClose={onClose}>
-      <Pressable onPress={onClose} style={{ flex: 1 }}>
-        <Animated.View style={{ flex: 1, backgroundColor: 'rgba(42,62,75,0.35)', justifyContent: 'flex-end', opacity: backdrop }}>
-          {keyboardAvoiding ? (
-            <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>{sheet}</KeyboardAvoidingView>
-          ) : sheet}
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
 }
 
 export default function LoanDecisions() {

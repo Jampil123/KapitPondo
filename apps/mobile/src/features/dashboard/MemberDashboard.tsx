@@ -74,15 +74,23 @@ const STANDING_ICON: Record<IntentName, any> = {
   primary: HelpCircle, accent: HelpCircle, neutral: HelpCircle,
 };
 
-/** The row this member should see front-and-center: the earliest not-yet-approved period, else the latest. */
+/** The row this member should see front-and-center: their most recent
+ *  not-yet-approved submission, else their latest row overall.
+ *
+ *  Deliberately the MOST RECENTLY CREATED unresolved row, not the earliest
+ *  due — a resubmission after a rejection always INSERTS a new row rather
+ *  than editing the rejected one (contributions.service.js: rejectContribution
+ *  only flips status on that same row; submitContribution always inserts).
+ *  Picking by earliest due/created date used to mean the stale rejected row
+ *  kept winning forever (it's always older than its own resubmission), so
+ *  this screen stayed stuck showing "rejected" even after a successful
+ *  resubmit already created a fresh 'submitted' row. */
 export function pickCurrent(rows: Contribution[]): Contribution | null {
   if (!rows.length) return null;
-  const sorted = [...rows].sort((a, b) => {
-    const ad = a.due_date ? parseApiDate(a.due_date).getTime() : new Date(a.created_at).getTime();
-    const bd = b.due_date ? parseApiDate(b.due_date).getTime() : new Date(b.created_at).getTime();
-    return ad - bd;
-  });
-  return sorted.find((r) => r.status !== 'approved') ?? sorted[sorted.length - 1];
+  const byCreatedDesc = (a: Contribution, b: Contribution) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  const unresolved = rows.filter((r) => r.status !== 'approved').sort(byCreatedDesc);
+  if (unresolved.length) return unresolved[0];
+  return [...rows].sort(byCreatedDesc)[0];
 }
 
 /** Standing card: status banner, amount, meta line, and the one action available for that status. */

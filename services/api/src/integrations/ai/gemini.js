@@ -49,12 +49,16 @@ const PROOF_SCHEMA = {
     // ISO 8601 date (YYYY-MM-DD) if legible, else null.
     date: { type: ['string', 'null'] },
     payment_method: { type: ['string', 'null'], enum: ['gcash', 'maya', 'bank_transfer', 'cash', 'other', null] },
+    // The recipient's mobile number/account shown on the receipt (e.g. GCash's
+    // "Sent to" field), if printed — lets the caller flag a payment sent to
+    // the wrong number. Not every receipt shows this, so null is common.
+    recipient_number: { type: ['string', 'null'] },
     confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
     // e.g. "amount partially covered by a finger" — shown to the member so
     // they know what to double-check before submitting.
     notes: { type: ['string', 'null'] },
   },
-  required: ['amount', 'reference_number', 'date', 'payment_method', 'confidence', 'notes'],
+  required: ['amount', 'reference_number', 'date', 'payment_method', 'recipient_number', 'confidence', 'notes'],
 };
 
 const STRUCTURE_PROMPT = `You read Philippine payment receipts and proof-of-payment screenshots (GCash, Maya, bank transfer, cash deposit slips) and extract exactly what's printed on them.
@@ -64,6 +68,7 @@ Rules:
 - You are not verifying, approving, or recording this payment. A human still reviews every field before submitting, and a different officer still confirms it afterward. Your output is only a draft to save typing.
 - "amount" is the peso amount printed on the receipt, as a plain number (no currency symbol, no thousands separators).
 - "date" is the transaction date printed on the receipt in YYYY-MM-DD form, or null if not legible — never today's date, never a guess.
+- "recipient_number" is the recipient's mobile number or account shown on the receipt (e.g. GCash's "Sent to" field), exactly as printed — null if the receipt doesn't show one.
 
 Extract the payment details from the attached image.`;
 

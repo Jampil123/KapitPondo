@@ -22,6 +22,7 @@ const CATEGORY_BY_ENTITY = {
   penalty: 'governance',
   reversal_request: 'reversals',
   cycle: 'settings',
+  group_gcash: 'settings',
 };
 
 async function listAuditLog({ groupId, category, search, before, limit = 30 }) {

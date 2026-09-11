@@ -88,3 +88,9 @@ export function rejectContribution(groupId: string, contributionId: string, reas
     reason ? { reason } : undefined,
   );
 }
+
+/** GET — advisory check: has this GCash reference already been used in this group? Non-blocking — shown as a flag, never stops submission. */
+export async function checkDuplicateReference(groupId: string, ref: string) {
+  const res = await api.get<{ duplicate: boolean }>(`/api/groups/${groupId}/contributions/check-reference`, { ref });
+  return res.duplicate;
+}

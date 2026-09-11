@@ -91,6 +91,25 @@ router.get('/groups/:groupId/contributions',
   }
 );
 
+// Advisory check the client runs before submitting: has this GCash reference
+// already been used in this group? Any active role (members need this
+// pre-submit, not just officers reviewing afterward) — non-blocking, just a
+// flag shown in the submit form.
+router.get('/groups/:groupId/contributions/check-reference',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const ref = req.query.ref;
+      if (!ref || typeof ref !== 'string') {
+        return res.status(400).json({ error: 'ref is required' });
+      }
+      const duplicate = await service.hasDuplicateReference(req.params.groupId, ref);
+      res.json({ duplicate });
+    } catch (err) { next(err); }
+  }
+);
+
 // Approve a contribution (officers only)
 router.post('/groups/:groupId/contributions/:id/approve',
   requireAuth,
