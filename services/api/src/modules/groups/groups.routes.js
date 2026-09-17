@@ -6,11 +6,6 @@ const service = require('./groups.service');
 const { logAudit } = require('../../lib/auditLog');
 const { notify } = require('../../lib/notifications');
 
-// Current member profile (auth middleware already resolved req.member)
-router.get('/me/profile', requireAuth, (req, res) => {
-  res.json({ member: req.member });
-});
-
 // Create a group — the calling member becomes its owner
 router.post('/groups', requireAuth, async (req, res, next) => {
   try {
