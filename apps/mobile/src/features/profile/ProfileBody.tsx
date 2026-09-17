@@ -6,7 +6,7 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, HelpCircle, Lock, ChevronRight, LogOut, UserPen,
-  Check, Clock, AlertTriangle, Users, Plus, Mail, Smartphone, KeyRound,
+  Users, Plus, Mail, Smartphone, KeyRound,
   Download, History, MessageCircle, Info,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -19,6 +19,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useGroups } from '@/context/GroupContext';
 import { updateProfile } from '@/api/members';
 import { uploadAvatar } from '@/lib/upload';
+import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
 
 function soon(label: string) { Alert.alert(label, 'Coming soon.'); }
 
@@ -43,13 +44,6 @@ function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: stri
     </Pressable>
   );
 }
-
-const VERIFY_META: Record<string, { icon: any; tone: IntentName; title: string; subtitle: (reason: string | null) => string; unlocks: boolean; btn: string }> = {
-  verified: { icon: Check, tone: 'success', title: 'Account verified', subtitle: () => 'Full access to loans, group creation and officer roles', unlocks: false, btn: '' },
-  pending: { icon: Clock, tone: 'info', title: 'ID under review', subtitle: () => 'Usually reviewed within 2 working days', unlocks: true, btn: 'View what I submitted' },
-  unverified: { icon: AlertTriangle, tone: 'warning', title: 'Basic account', subtitle: () => 'You can join groups and contribute. Verify to unlock the rest.', unlocks: true, btn: 'Verify my account' },
-  rejected: { icon: AlertTriangle, tone: 'danger', title: 'ID could not be verified', subtitle: (r) => r ?? 'Your ID was not accepted. You can submit a new one.', unlocks: true, btn: 'Submit a new ID' },
-};
 
 export function ProfileBody() {
   const router = useRouter();
@@ -167,7 +161,7 @@ export function ProfileBody() {
           {vmeta.btn ? (
             <Button
               label={vmeta.btn}
-              onPress={() => router.push((status === 'pending' ? '/(app)/my-submission' : '/(app)/identity') as any)}
+              onPress={() => router.push(verifyDestination(status) as any)}
               style={{ marginTop: 13 }}
             />
           ) : null}

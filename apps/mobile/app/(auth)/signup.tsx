@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, ScrollView, Alert, TextInput, Modal, Platform } from 'react-native';
+import { View, ScrollView, Alert, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
@@ -9,7 +9,8 @@ import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
-import { semantic } from '@/theme/colors';
+import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
+import { semantic, intent } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 
 const PREFIX = '+63 ';
@@ -30,15 +31,40 @@ function formatDisplayDate(value: string): string {
   return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
 }
 
+const MIN_SIGNUP_AGE = 18;
+
+function calculateAge(birthDate: Date): number {
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) age--;
+  return age;
+}
+
 const MAX_BIRTHDAY = new Date();
 
-/**
- * Tap-to-open date field backed by @expo/ui's native DateTimePicker. Web has
- * no native picker to back it, so it falls back to a typed YYYY-MM-DD input.
- */
-function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (iso: string) => void }) {
+function BirthdayField({
+  label,
+  value,
+  onChange,
+  error,
+}: {
+  label: string;
+  value: string;
+  onChange: (iso: string) => void;
+  error?: string;
+}) {
   const [show, setShow] = useState(false);
   const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
+
+  const note = (
+    <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start' }}>
+      <Info size={14} color={semantic.brandDark} style={{ marginTop: 1 }} />
+      <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+        You must be at least {MIN_SIGNUP_AGE} years old to create an account.
+      </Text>
+    </View>
+  );
 
   if (Platform.OS === 'web') {
     return (
@@ -49,14 +75,26 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
           onChangeText={onChange}
           placeholder="YYYY-MM-DD"
           placeholderTextColor={semantic.textMuted}
-          style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, color: semantic.textPrimary }}
+          style={{
+            backgroundColor: semantic.surfaceAlt,
+            borderRadius: 12,
+            paddingHorizontal: 14,
+            height: 48,
+            color: semantic.textPrimary,
+            borderWidth: error ? 1.5 : 0,
+            borderColor: error ? intent.danger.base : undefined,
+          }}
         />
+        {error ? (
+          <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
+        ) : null}
+        {note}
       </View>
     );
   }
 
   return (
-    <View style={{ gap: 7, marginBottom: 15 }}>
+    <View style={{ gap: 6, marginBottom: 15 }}>
       <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
       <Pressable
         onPress={() => setShow(true)}
@@ -69,6 +107,8 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
           borderRadius: 12,
           paddingVertical: 13,
           paddingHorizontal: 14,
+          borderWidth: error ? 1.5 : 0,
+          borderColor: error ? intent.danger.base : undefined,
         }}
       >
         <Text variant="body" style={{ color: value ? semantic.textPrimary : semantic.textMuted }}>
@@ -76,6 +116,10 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
         </Text>
         <Calendar size={18} color={semantic.textMuted} />
       </Pressable>
+      {error ? (
+        <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
+      ) : null}
+      {note}
 
       {show && Platform.OS === 'android' ? (
         <DateTimePicker
@@ -84,6 +128,7 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
           maximumDate={MAX_BIRTHDAY}
           onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
           onDismiss={() => setShow(false)}
+          style={{ position: 'absolute', width: 0, height: 0 }}
         />
       ) : null}
 
@@ -129,8 +174,38 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [touched, setTouched] = useState({ firstName: false, lastName: false, birthday: false });
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
 
-  const canSubmit = firstName.trim() && lastName.trim() && birthday.trim() && phone.trim() && password.length >= 8 && agreed;
+  const isBlank = (v: string) => v.trim().length === 0;
+  const phoneDigits = phone.replace(/^\+63\s?/, '').replace(/\D/g, '');
+  const parsedBirthday = parseIsoDate(birthday);
+
+  const firstNameValid = !isBlank(firstName);
+  const lastNameValid = !isBlank(lastName);
+  const birthdayValid = !!parsedBirthday && calculateAge(parsedBirthday) >= MIN_SIGNUP_AGE;
+  const phoneValid = phoneDigits.length === 10;
+  const emailValid = isBlank(email) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const passwordValid = password.length >= 8;
+
+  const firstNameError = touched.firstName && !firstNameValid ? 'First name is required.' : undefined;
+  const lastNameError = touched.lastName && !lastNameValid ? 'Last name is required.' : undefined;
+  const birthdayError = touched.birthday
+    ? !parsedBirthday
+      ? 'Please select a valid birthdate.'
+      : calculateAge(parsedBirthday) < MIN_SIGNUP_AGE
+        ? `You must be at least ${MIN_SIGNUP_AGE} years old to sign up.`
+        : undefined
+    : undefined;
+
+  const canSubmit =
+    firstNameValid &&
+    lastNameValid &&
+    birthdayValid &&
+    phoneValid &&
+    emailValid &&
+    passwordValid &&
+    agreed;
 
   async function onCreate() {
     if (!canSubmit) return;
@@ -162,79 +237,110 @@ export default function SignUp() {
       >
         <ChevronLeft size={26} color={semantic.textPrimary} />
       </Pressable>
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32, flexGrow: 1 }}>
-        <View style={{ gap: 3, marginTop: 10, marginBottom: 22 }}>
-          <Text variant="h1" style={{ fontSize: 23 }}>Create your account</Text>
-          <Text variant="body" color="secondary">Join your community sinking fund in minutes.</Text>
-        </View>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32, flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={{ gap: 3, marginTop: 10, marginBottom: 22 }}>
+            <Text variant="h1" style={{ fontSize: 23 }}>Create your account</Text>
+            <Text variant="body" color="secondary">Join your community sinking fund in minutes.</Text>
+          </View>
 
-        <Field
-          label="First Name"
-          placeholder="Juan"
-          value={firstName}
-          onChangeText={setFirstName}
-          leading={<User size={18} color={semantic.textMuted} />}
-        />
-        <Field
-          label="Last Name"
-          placeholder="Dela Cruz"
-          value={lastName}
-          onChangeText={setLastName}
-          leading={<User size={18} color={semantic.textMuted} />}
-        />
-        <BirthdayField label="Birthday" value={birthday} onChange={setBirthday} />
-        <Field
-          label="Email"
-          placeholder="juan@email.com (optional)"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          leading={<Mail size={18} color={semantic.textMuted} />}
-        />
-
-        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginTop: 2, marginBottom: 14 }}>
-          <Info size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
-          <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-            Email is optional — you can add or update it later during identity verification.
-          </Text>
-        </View>
-
-        <Field
-          label="Phone Number"
-          placeholder="+63 900 000 0000"
-          keyboardType="phone-pad"
-          value={phone}
-          onChangeText={(t) => setPhone(formatPhone(t))}
-          leading={<Phone size={18} color={semantic.textMuted} />}
-        />
-        <PasswordField
-          label="Password"
-          placeholder="At least 8 characters"
-          value={password}
-          onChangeText={setPassword}
-          leading={<Lock size={18} color={semantic.textMuted} />}
-        />
-
-        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center', marginTop: 2, marginBottom: 18 }}>
-          <ShieldCheck size={18} color={semantic.brandDark} />
-          <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-            Your details are encrypted and never shared.
-          </Text>
-        </View>
-
-        <View style={{ marginBottom: 18 }}>
-          <Checkbox
-            checked={agreed}
-            onToggle={() => setAgreed((a) => !a)}
-            label="I agree to KapitPondo's Terms of Service and Privacy Policy."
+          <Field
+            label="First Name"
+            placeholder="Juan"
+            value={firstName}
+            onChangeText={setFirstName}
+            onBlur={() => setTouched((t) => ({ ...t, firstName: true }))}
+            error={firstNameError}
+            leading={<User size={18} color={semantic.textMuted} />}
           />
-        </View>
+          <Field
+            label="Last Name"
+            placeholder="Dela Cruz"
+            value={lastName}
+            onChangeText={setLastName}
+            onBlur={() => setTouched((t) => ({ ...t, lastName: true }))}
+            error={lastNameError}
+            leading={<User size={18} color={semantic.textMuted} />}
+          />
+          <BirthdayField
+            label="Birthday"
+            value={birthday}
+            onChange={(iso) => { setBirthday(iso); setTouched((t) => ({ ...t, birthday: true })); }}
+            error={birthdayError}
+          />
+          <Field
+            label="Email"
+            placeholder="juan@email.com (optional)"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            leading={<Mail size={18} color={semantic.textMuted} />}
+          />
 
-        <Button label="Create Account" onPress={onCreate} loading={loading} disabled={!canSubmit} />
+          <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginTop: -10, marginBottom: 14 }}>
+            <Info size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
+            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+              Email is optional — you can add or update it later during identity verification.
+            </Text>
+          </View>
 
-        
-      </ScrollView>
+          <Field
+            label="Phone Number"
+            placeholder="+63 900 000 0000"
+            keyboardType="phone-pad"
+            value={phone}
+            onChangeText={(t) => setPhone(formatPhone(t))}
+            leading={<Phone size={18} color={semantic.textMuted} />}
+          />
+          <PasswordField
+            label="Password"
+            placeholder="At least 8 characters"
+            value={password}
+            onChangeText={setPassword}
+            leading={<Lock size={18} color={semantic.textMuted} />}
+          />
+
+          <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginBottom: 18 }}>
+            <ShieldCheck size={18} color={semantic.brandDark} style={{ marginTop: 1 }} />
+            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
+              Your details are encrypted and never shared.
+            </Text>
+          </View>
+
+          <View style={{ marginBottom: 18 }}>
+            <Checkbox
+              checked={agreed}
+              onToggle={() => setAgreed((a) => !a)}
+              label={
+                <Text variant="bodySmall" color="secondary">
+                  I agree to KapitPondo's Terms of Service and{' '}
+                  <Text
+                    variant="bodySmall"
+                    color="brand"
+                    onPress={() => setShowPrivacyPolicy(true)}
+                    style={{ textDecorationLine: 'underline' }}
+                  >
+                    Privacy Policy
+                  </Text>
+                  .
+                </Text>
+              }
+            />
+          </View>
+
+          <Button label="Create Account" onPress={onCreate} loading={loading} disabled={!canSubmit} />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <PrivacyPolicyModal visible={showPrivacyPolicy} onClose={() => setShowPrivacyPolicy(false)} />
     </SafeAreaView>
   );
 }

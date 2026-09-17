@@ -5,17 +5,29 @@ const requireSystemAdmin = require('../../middleware/requireSystemAdmin');
 const service = require('./identity.service');
 const { extractText } = require('../../integrations/ocr/googleVision');
 const { parseIdFields } = require('../../integrations/ocr/idFieldParser');
+const { structureIdImage } = require('../../integrations/ai/gemini');
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 // ~8MB source image, base64-encoded (~1.37x larger) — same budget as
 // ai.routes.js's proof-photo endpoint, well under app.js's 10mb json limit.
 const MAX_IMAGE_BASE64_LEN = 8 * 1024 * 1024 * 1.4;
 
-function requireVisionConfigured(req, res, next) {
-  if (!process.env.GOOGLE_VISION_API_KEY) {
-    return res.status(501).json({ error: 'OCR is not configured yet — set GOOGLE_VISION_API_KEY.' });
+// extract-fields needs AT LEAST ONE of the two extraction paths configured —
+// AI is tried first (see the route below), OCR is the fallback, so this only
+// 501s if neither key is set at all.
+function requireExtractionConfigured(req, res, next) {
+  if (!process.env.GEMINI_API_KEY && !process.env.GOOGLE_VISION_API_KEY) {
+    return res.status(501).json({ error: 'ID field extraction is not configured yet — set GEMINI_API_KEY and/or GOOGLE_VISION_API_KEY.' });
   }
   next();
+}
+
+// Heuristic only, for logging — every AI failure falls back to OCR below
+// regardless of what kind of error this was, so this never changes behavior,
+// it just makes the server log say WHY the fallback happened.
+function looksLikeQuotaError(err) {
+  const haystack = `${err?.status ?? ''} ${err?.message ?? ''}`.toLowerCase();
+  return haystack.includes('429') || haystack.includes('resource_exhausted') || haystack.includes('quota') || haystack.includes('rate limit');
 }
 
 // --- Member-facing ---
@@ -27,15 +39,16 @@ function requireVisionConfigured(req, res, next) {
 // identity. Not scoped to a group — this runs before the member necessarily
 // belongs to any group.
 //
-// Uses plain OCR (Google Vision, same integration as /api/ocr/extract-text)
-// plus idFieldParser.js's own label/pattern matching, NOT the Gemini-based
-// structureIdImage in integrations/ai/gemini.js (kept in that file, unused
-// here, in case this gets switched back) — Gemini's API quota was getting
-// exhausted by normal use, and Vision's OCR quota is separate/more generous.
-// The tradeoff: pattern-matching raw OCR text is less capable than an LLM at
-// this (see idFieldParser.js's own header for specifics), so this will leave
-// more fields null on ID layouts/photos it can't confidently parse.
-router.post('/me/identity/extract-fields', requireAuth, requireVisionConfigured, async (req, res, next) => {
+// AI-first (Gemini's structureIdImage, integrations/ai/gemini.js) since it
+// reads the address well enough to fill street_address, which plain OCR
+// pattern-matching (idFieldParser.js) can never do reliably. If the AI call
+// fails for ANY reason — a exhausted quota/rate limit being the one this is
+// specifically guarding against, but also a bad image, timeout, or the key
+// being unset — this falls back to the plain-OCR path (Google Vision +
+// idFieldParser.js) instead of erroring out, so a member's flow never breaks
+// because the AI provider is temporarily unavailable or over budget. Only if
+// BOTH paths fail does the request actually error.
+router.post('/me/identity/extract-fields', requireAuth, requireExtractionConfigured, async (req, res, next) => {
   try {
     const { image_base64, media_type } = req.body;
     if (!image_base64 || typeof image_base64 !== 'string') {
@@ -46,6 +59,22 @@ router.post('/me/identity/extract-fields', requireAuth, requireVisionConfigured,
     }
     if (!ALLOWED_IMAGE_TYPES.includes(media_type)) {
       return res.status(400).json({ error: `media_type must be one of: ${ALLOWED_IMAGE_TYPES.join(', ')}` });
+    }
+
+    if (process.env.GEMINI_API_KEY) {
+      try {
+        const fields = await structureIdImage({ imageBase64: image_base64, mediaType: media_type });
+        return res.json({ fields });
+      } catch (err) {
+        console.warn(
+          `[identity] AI field extraction failed (${looksLikeQuotaError(err) ? 'looks like a quota/rate-limit hit' : 'other error'}), falling back to OCR:`,
+          err.message ?? err,
+        );
+      }
+    }
+
+    if (!process.env.GOOGLE_VISION_API_KEY) {
+      return res.status(502).json({ error: 'AI extraction failed and OCR fallback is not configured.' });
     }
     const { text } = await extractText({ imageBase64: image_base64 });
     const fields = parseIdFields(text);

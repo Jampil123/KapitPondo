@@ -1,37 +1,20 @@
-/**
- * context/AuthContext.tsx
- * ============================================================================
- * THE AUTH CONTRACT — reconciled to the UI prototype, which uses PHONE +
- * PASSWORD, with OTP confirming the phone number after sign-up.
- *
- *   // Sign up (signup screen): creates the account + texts an OTP to confirm
- *   await signUp({ phone, password, fullName });
- *   // → then route to the OTP screen
- *
- *   // Confirm phone (otp screen): verifies the code, creates the session
- *   await confirmOtp(phone, code);
- *
- *   // Sign in (signin screen): phone + password
- *   await signInWithPassword(phone, password);
- *
- *   // Anywhere
- *   const { status, member } = useAuth();
- *   await signOut();
- *
- * `status` drives routing in app/_layout.tsx:
- *   'loading' → splash · 'signedOut' → (auth) · 'signedIn' → (app)
- *
- * NOTE: if you instead want PASSWORDLESS OTP login (no password), swap
- * signInWithPassword for a signInWithPhone that calls signInWithOtp — the rest
- * is identical. The UI shows passwords, so password is the default here.
- * ============================================================================
- */
 import { createContext, useContext, useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { toE164PH } from '../lib/phone';
 import { getMyProfile, type Member } from '../api/members';
 import { API_BASE_URL } from '../api/client';
+
+const IDENTITY_DRAFT_KEY = 'identity_draft_v1';
+
+async function clearIdentityDraft() {
+  try {
+    await AsyncStorage.removeItem(IDENTITY_DRAFT_KEY);
+  } catch (error) {
+    console.warn('[auth] could not clear identity draft', error);
+  }
+}
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 
@@ -109,6 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadMember = useCallback(async (active: Session | null) => {
     if (!active) {
+      await clearIdentityDraft();
       setMember(null);
       return;
     }
@@ -204,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(async ({ phone, password, firstName, middleName, lastName, birthday, email, consentAccepted }: SignUpInput) => {
     if (!consentAccepted) throw new Error('You must agree to the Terms & Privacy Policy to continue.');
+    await clearIdentityDraft();
     const e164 = toE164PH(phone);
     if (!e164) throw new Error('Enter a valid Philippine mobile number.');
     const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
@@ -257,6 +242,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     setSigningOut(true);
     try {
+      await clearIdentityDraft();
       await supabase.auth.signOut();
     } catch (e) {
       setSigningOut(false);

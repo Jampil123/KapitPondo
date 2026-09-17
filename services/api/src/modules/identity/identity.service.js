@@ -139,9 +139,17 @@ async function listForReview(status = 'pending') {
 // four.
 async function signUrl(path) {
   if (!path) return null;
-  const { data: signed } = await supabase.storage
+  const { data: signed, error } = await supabase.storage
     .from(ID_DOCUMENT_BUCKET)
     .createSignedUrl(path, SIGNED_URL_TTL);
+  if (error) {
+    // Degrade gracefully (the profile/member payload still returns, just
+    // missing this one photo) rather than failing the whole request — but
+    // log loudly, since silently returning null here previously made a
+    // signing failure indistinguishable from "no photo was ever uploaded".
+    console.error(`[identity] createSignedUrl failed for "${path}" in bucket "${ID_DOCUMENT_BUCKET}":`, error.message ?? error);
+    return null;
+  }
   return signed?.signedUrl ?? null;
 }
 

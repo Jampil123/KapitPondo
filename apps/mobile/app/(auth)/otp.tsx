@@ -11,12 +11,14 @@ import { semantic } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
 
+const OTP_VALIDITY_SECONDS = 5 * 60;
+
 export default function Otp() {
   const { phone } = useLocalSearchParams<{ phone?: string }>();
   const { confirmOtp, resendOtp, setPendingRedirect } = useAuth();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
-  const [resendIn, setResendIn] = useState(30);
+  const [resendIn, setResendIn] = useState(OTP_VALIDITY_SECONDS);
 
   useEffect(() => {
     if (resendIn <= 0) return;
@@ -25,16 +27,13 @@ export default function Otp() {
   }, [resendIn]);
 
   const pretty = phone ? formatPH(phone) : 'your number';
+  const expired = resendIn <= 0;
+  const resendLabel = `${Math.floor(resendIn / 60)}:${String(resendIn % 60).padStart(2, '0')}`;
 
   async function onVerify() {
-    if (code.length < 6 || !phone) return;
+    if (code.length < 6 || !phone || expired) return;
     setLoading(true);
     try {
-      // RootNavigator does the actual navigation once `status` flips to
-      // signedIn — otp.tsx used to also call router.replace itself right
-      // after confirmOtp resolved, and the two competed over which one
-      // "won", landing on /(app)/groups more often than not. Handing the
-      // target off instead of racing it fixes that for good.
       setPendingRedirect('/(app)/verify-landing');
       await confirmOtp(phone, code);
     } catch (e) {
@@ -48,7 +47,8 @@ export default function Otp() {
     if (!phone) return;
     try {
       await resendOtp(phone);
-      setResendIn(30);
+      setCode('');
+      setResendIn(OTP_VALIDITY_SECONDS);
     } catch (e) {
       Alert.alert('Could not resend', (e as Error).message);
     }
@@ -79,13 +79,13 @@ export default function Otp() {
         <OtpInput value={code} onChange={setCode} />
 
         <View style={{ height: 28 }} />
-        <Button label="Verify" onPress={onVerify} loading={loading} disabled={code.length < 6} />
+        <Button label="Verify" onPress={onVerify} loading={loading} disabled={code.length < 6 || expired} />
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 5, marginTop: 20 }}>
           <Text variant="body" color="secondary">Didn't get the code?</Text>
           {resendIn > 0 ? (
             <Text variant="body" color="muted">
-              Resend in 0:{String(resendIn).padStart(2, '0')}
+              Resend in {resendLabel}
             </Text>
           ) : (
             <Text variant="label" color="brand" onPress={onResend}>Resend Code</Text>

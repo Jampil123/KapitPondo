@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { View, TextInput, Pressable, type TextInputProps } from 'react-native';
 import { Eye, EyeOff } from 'lucide-react-native';
 import { Text } from './Text';
-import { semantic } from '../../theme/colors';
+import { semantic, intent } from '../../theme/colors';
 import { typography } from '../../theme/typography';
 
 type FieldProps = TextInputProps & {
@@ -20,9 +20,10 @@ type FieldProps = TextInputProps & {
   leading?: React.ReactNode;
   trailing?: React.ReactNode;
   prefix?: string;
+  error?: string;
 };
 
-export function Field({ label, leading, trailing, prefix, style, ...rest }: FieldProps) {
+export function Field({ label, leading, trailing, prefix, error, style, ...rest }: FieldProps) {
   return (
     <View style={{ gap: 7, marginBottom: 15 }}>
       <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>
@@ -37,6 +38,8 @@ export function Field({ label, leading, trailing, prefix, style, ...rest }: Fiel
           borderRadius: 12,
           paddingVertical: 13,
           paddingHorizontal: 14,
+          borderWidth: error ? 1.5 : 0,
+          borderColor: error ? intent.danger.base : undefined,
         }}
       >
         {leading}
@@ -56,6 +59,11 @@ export function Field({ label, leading, trailing, prefix, style, ...rest }: Fiel
         />
         {trailing}
       </View>
+      {error ? (
+        <Text variant="caption" style={{ color: intent.danger.text }}>
+          {error}
+        </Text>
+      ) : null}
     </View>
   );
 }

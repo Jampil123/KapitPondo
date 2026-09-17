@@ -63,15 +63,7 @@ export default function Pending() {
         <Button label="Got It" onPress={() => router.replace('/(app)/groups')} />
 
         <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18, marginTop: 20 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <HelpCircle size={15} color={semantic.textSecondary} />
-            <Text variant="caption" color="secondary">Need Help?</Text>
-          </View>
-          <View style={{ width: 1, height: 12, backgroundColor: semantic.border }} />
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Shield size={15} color={semantic.textSecondary} />
-            <Text variant="caption" color="secondary">Privacy Policy</Text>
-          </View>
+          
         </View>
       </ScrollView>
     </SafeAreaView>

@@ -7,7 +7,7 @@
 import { useRef } from 'react';
 import { View, TextInput, Pressable } from 'react-native';
 import { Text } from './Text';
-import { semantic, shadowToken } from '../../theme/colors';
+import { semantic } from '../../theme/colors';
 
 type OtpInputProps = {
   value: string;
@@ -37,25 +37,26 @@ export function OtpInput({ value, onChange, length = 6 }: OtpInputProps) {
           return (
             <View
               key={i}
-              style={[
-                {
-                  width: 46,
-                  height: 56,
-                  borderRadius: 13,
-                  backgroundColor: semantic.surface,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderWidth: 1.8,
-                  borderColor: active
-                    ? semantic.brand
-                    : filled
-                      ? semantic.brandDark
-                      : semantic.border,
-                },
-                shadowToken.card,
-              ]}
+              style={{
+                width: 46,
+                height: 56,
+                borderRadius: 14,
+                backgroundColor: active
+                  ? semantic.brand + '0F'
+                  : filled
+                    ? semantic.surfaceAlt
+                    : semantic.surface,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderWidth: active ? 2 : 1.5,
+                borderColor: active
+                  ? semantic.brand
+                  : filled
+                    ? semantic.brandDark + '80'
+                    : semantic.border,
+              }}
             >
-              <Text variant="h2" style={{ fontSize: 22, fontWeight: '700' }}>
+              <Text variant="numeric" style={{ fontSize: 21 }}>
                 {value[i] ?? ''}
               </Text>
             </View>

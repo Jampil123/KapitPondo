@@ -25,7 +25,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Camera, Info, Check } from 'lucide-react-native';
@@ -71,6 +71,7 @@ async function bumpStepAtLeast(min: number) {
 
 export default function SelfieCapture() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
 
@@ -97,6 +98,21 @@ export default function SelfieCapture() {
   async function goNext() {
     await bumpStepAtLeast(3);
     router.replace('/(app)/identity' as any);
+  }
+
+  // Reached via Review's "Retake selfie" link (?from=review) → back returns
+  // to Review, not through ID capture. Otherwise (ordinary forward flow, or
+  // stepping back from personal info) → back returns to step 1. This has to
+  // come from the route param, not the draft's persisted `step` — `step`
+  // gets set to 4 permanently the first time anyone reaches Review normally,
+  // so it can't tell "came from Review's retake link" apart from "already
+  // finished the flow once and is now just walking back through the steps".
+  function goBack() {
+    if (from === 'review') {
+      router.replace('/(app)/identity' as any);
+    } else {
+      router.replace('/(app)/identity-capture' as any);
+    }
   }
 
   async function acceptShot(pickedUri: string) {
@@ -142,7 +158,7 @@ export default function SelfieCapture() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
-      <VerificationStepHeader title="Take a Selfie" step={2} totalSteps={4} onBack={() => router.back()} />
+      <VerificationStepHeader title="Take a Selfie" step={2} totalSteps={4} onBack={goBack} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 32 }}>
         <View style={{ marginBottom: 18 }}>
           <Text variant="body" color="secondary">

@@ -8,6 +8,7 @@ const cyclesRoutes = require('./modules/cycles/cycles.routes');
 const contributionsRoutes = require('./modules/contributions/contributions.routes');
 const lendingRoutes = require('./modules/lending/lending.routes');
 const identityRoutes = require('./modules/identity/identity.routes');
+const addressRoutes = require('./modules/address/address.routes'); // live PSGC proxy + zip-check for the identity wizard's address step
 const notificationsRoutes = require('./modules/notifications/notifications.routes');
 const expensesRoutes = require('./modules/expenses/expenses.routes');
 const distributionsRoutes = require('./modules/distribution/distributions.routes');
@@ -49,6 +50,7 @@ app.use('/api', lendingRoutes);
 app.use('/api', expensesRoutes);
 app.use('/api', membershipsRoutes);
 app.use('/api', identityRoutes);
+app.use('/api', addressRoutes);
 app.use('/api', notificationsRoutes);
 app.use('/api', distributionsRoutes);
 app.use('/api', monitoringRoutes);

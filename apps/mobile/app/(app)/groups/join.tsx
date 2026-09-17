@@ -1,19 +1,17 @@
-/**
- * app/(app)/groups/join.tsx — join by fund code (migrated to our primitives).
- * A join creates a PENDING membership, so on success we show an "awaiting
- * approval" state rather than pretending the user is already in the group.
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Users, Info, Plus, Camera, Clock } from 'lucide-react-native';
+import { Users, Info, Plus, Camera, Clock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
+import { AppBar } from '@/components/shared/AppBar';
 import { semantic } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { joinByCode } from '@/api/groups';
 import { useGroups } from '@/context/GroupContext';
+
+const BAND_TOP = '#4C7C90';
 
 export default function JoinGroup() {
   const router = useRouter();
@@ -59,16 +57,11 @@ export default function JoinGroup() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: semantic.background }}>
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 60 }}>
-          <Pressable onPress={() => router.back()} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-            <ArrowLeft size={22} color={semantic.textPrimary} />
-          </Pressable>
-          <Text variant="h2" style={{ fontSize: 20 }}>Join a Group</Text>
-        </View>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: BAND_TOP }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
+        <AppBar title="Join a Group" backgroundColor={BAND_TOP} tintColor="#fff" />
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 20, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View style={{ alignItems: 'center', marginTop: 24, marginBottom: 32 }}>
             <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
               <Users size={40} color={semantic.textPrimary} />

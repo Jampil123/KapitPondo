@@ -1,11 +1,3 @@
-/**
- * app/(app)/verify-landing.tsx — "Verify your identity" fork, shown right
- * after OTP confirms the phone. Matches the prototype's screen 1 (intro):
- * badge, headline, 3-item checklist, privacy note, Start verification /
- * Do it later. Lives under (app), not (auth) — this screen is shown to an
- * already signed-in user, so it must not be under (auth) or the root
- * auth-guard bounces it straight back to /(app)/groups.
- */
 import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -21,7 +13,7 @@ const STEPS = [
   { icon: ClipboardCheck, title: 'Confirm your details', sub: "We'll read the info from your ID automatically. You just check that it's right." },
 ];
 
-export default function VerifyLanding() {
+export default function VerifyStart() {
   const router = useRouter();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
@@ -47,13 +39,7 @@ export default function VerifyLanding() {
           <Text variant="h1" style={{ fontSize: 24, lineHeight: 30, marginBottom: 10 }}>
             A valid ID unlocks loans and full access.
           </Text>
-          <Text variant="body" color="secondary" style={{ lineHeight: 21 }}>
-            You can already{' '}
-            <Text variant="body" style={{ fontWeight: '700', color: semantic.textPrimary }}>join a group</Text>
-            {' '}and{' '}
-            <Text variant="body" style={{ fontWeight: '700', color: semantic.textPrimary }}>make deposits</Text>
-            {' '}without verifying. To request a loan, create a group, or hold an officer role, verify your identity first.
-          </Text>
+          
         </View>
 
         <View style={{ gap: 12, marginBottom: 18 }}>
@@ -88,15 +74,7 @@ export default function VerifyLanding() {
           </Text>
         </View>
 
-        <Button label="Start verification" onPress={() => router.push('/(app)/verify-start' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
-        <View style={{ alignItems: 'center', marginTop: 16 }}>
-          <Button
-            label="Do it later"
-            variant="ghost"
-            bordered={false}
-            onPress={() => router.replace('/(app)/groups' as any)}
-          />
-        </View>
+        <Button label="Start verification" onPress={() => router.push('/(app)/identity' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
       </ScrollView>
     </SafeAreaView>
   );

@@ -6,6 +6,7 @@
  *
  *   <Checkbox checked={agreed} onToggle={() => setAgreed(a => !a)} label="I agree to..." />
  */
+import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { Check } from 'lucide-react-native';
 import { Text } from './Text';
@@ -18,7 +19,7 @@ export function Checkbox({
 }: {
   checked: boolean;
   onToggle: () => void;
-  label: string;
+  label: ReactNode;
 }) {
   return (
     <Pressable onPress={onToggle} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>

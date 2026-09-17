@@ -1,15 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Mail, ChevronDown, ShieldCheck, Phone } from 'lucide-react-native';
+import { Mail, ChevronDown, ShieldCheck, Phone, Calendar } from 'lucide-react-native';
+import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { AddressPickerSheet } from '@/components/ui/AddressPickerSheet';
 import { PickerSheet } from '@/components/shared/PickerSheet';
+import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
 import { VerificationStepHeader } from '@/components/shared/VerificationStepHeader';
 import { semantic, shadowToken } from '@/theme/colors';
 import { uploadImage, readImageBase64 } from '@/lib/upload';
@@ -18,6 +20,7 @@ import { idTypeLabel } from '@/constants/idTypes';
 import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
 import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employmentStatus';
 import { searchProvinces, searchCities, searchBarangays } from '@/constants/phAddress';
+import { fetchProvinces, fetchCities, fetchBarangays, checkZip, type AddressOption } from '@/api/address';
 import { SEX_OPTIONS, sexLabel } from '@/constants/sex';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
@@ -44,6 +47,128 @@ type IdentityDraft = {
 
 function SectionLabel({ children }: { children: string }) {
   return <Text variant="label" style={{ fontSize: 13, marginBottom: 10 }}>{children}</Text>;
+}
+
+// OCR/AI extraction commonly returns names/addresses in ALL CAPS (how most
+// PH government IDs actually print them) — convert to Title Case (first
+// letter of each word only) before it lands in the form, so the member sees
+// "Juan Dela Cruz" rather than "JUAN DELA CRUZ".
+function toTitleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/(^|[\s\-'.])([a-zà-ÿ])/g, (_m, sep, letter) => sep + letter.toUpperCase());
+}
+
+function parseIsoDate(value: string): Date | null {
+  if (!value.trim()) return null;
+  const d = new Date(`${value.trim()}T00:00:00`);
+  return isNaN(d.getTime()) ? null : d;
+}
+function toIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function formatDisplayDate(value: string): string {
+  const d = parseIsoDate(value);
+  return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
+}
+
+const MAX_BIRTHDAY = new Date();
+
+/** Tap-to-open date field backed by @expo/ui's native DateTimePicker — same pattern as signup.tsx's. */
+function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (iso: string) => void }) {
+  const [show, setShow] = useState(false);
+  const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
+
+  if (Platform.OS === 'web') {
+    return (
+      <View style={{ gap: 7, marginBottom: 15 }}>
+        <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>{label}</Text>
+        <TextInput
+          value={value}
+          onChangeText={onChange}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor={semantic.textMuted}
+          style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, color: semantic.textPrimary }}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 6, marginBottom: 15 }}>
+      <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>{label}</Text>
+      <Pressable
+        onPress={() => setShow(true)}
+        style={{
+          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6,
+          backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+          paddingVertical: 14, paddingHorizontal: 14,
+        }}
+      >
+        <Text variant="body" style={{ color: value ? semantic.textPrimary : semantic.textMuted }}>
+          {value ? formatDisplayDate(value) : 'Select date'}
+        </Text>
+        <Calendar size={18} color={semantic.textMuted} />
+      </Pressable>
+
+      {show && Platform.OS === 'android' ? (
+        <DateTimePicker
+          mode="date"
+          value={current}
+          maximumDate={MAX_BIRTHDAY}
+          onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
+          onDismiss={() => setShow(false)}
+          style={{ position: 'absolute', width: 0, height: 0 }}
+        />
+      ) : null}
+
+      {Platform.OS === 'ios' ? (
+        <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
+          <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setShow(false)}>
+            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
+              <Text variant="h3" style={{ fontSize: 17 }}>{label}</Text>
+              <DateTimePicker
+                mode="date"
+                display="inline"
+                value={current}
+                maximumDate={MAX_BIRTHDAY}
+                onValueChange={(_e, date) => onChange(toIsoDate(date))}
+              />
+              <Button label="Done" onPress={() => setShow(false)} />
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+    </View>
+  );
+}
+
+// Live PSGC data (via api/address.ts) is the primary source — falls back to
+// the bundled phAddress.ts dataset only if the network call fails (offline,
+// backend down), so the pickers still work without blocking the member.
+async function loadProvinces(): Promise<AddressOption[]> {
+  try {
+    return await fetchProvinces();
+  } catch {
+    return searchProvinces('');
+  }
+}
+async function loadCities(province: string): Promise<AddressOption[]> {
+  try {
+    return await fetchCities(province);
+  } catch {
+    return searchCities(province, '');
+  }
+}
+async function loadBarangays(province: string, city: string): Promise<AddressOption[]> {
+  try {
+    return await fetchBarangays(province, city);
+  } catch {
+    return searchBarangays(city, '');
+  }
 }
 
 export default function Identity() {
@@ -80,6 +205,8 @@ export default function Identity() {
   const [provincePickerOpen, setProvincePickerOpen] = useState(false);
   const [cityPickerOpen, setCityPickerOpen] = useState(false);
   const [barangayPickerOpen, setBarangayPickerOpen] = useState(false);
+  const [zipCheckResult, setZipCheckResult] = useState<{ valid: boolean; knownZips: string[] } | null>(null);
+  const [emailTouched, setEmailTouched] = useState(false);
 
   // Auto-fill from the ID photo — runs once per captured front photo (see
   // the effect below), never overwrites a field the member already has a
@@ -95,6 +222,7 @@ export default function Identity() {
 
   // Step 4
   const [agreed, setAgreed] = useState(false);
+  const [showPrivacyPolicy, setShowPrivacyPolicy] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Consent is deliberately NOT persisted — always re-check the box on a restored draft.
@@ -184,9 +312,10 @@ export default function Identity() {
   // Auto-fill personal info from the ID front photo as soon as step 3 is
   // reached. Only fires once per captured photo (ocrAttemptedFor guards
   // against re-running on every step revisit, but re-runs if the member
-  // retakes the front photo). Only fills fields that are still empty —
-  // never overwrites something the member already typed or already
-  // auto-filled and then edited.
+  // retakes the front photo). Replaces whatever's currently in each field
+  // the scan actually returned a value for — the AI/OCR read is trusted as
+  // authoritative now, not just a fill-the-blanks suggestion. The member
+  // still reviews and can edit every field before submitting either way.
   useEffect(() => {
     if (step !== 3 || !idImageUri || ocrAttemptedFor === idImageUri) return;
     setOcrAttemptedFor(idImageUri);
@@ -195,17 +324,17 @@ export default function Identity() {
       try {
         const { base64, mediaType } = await readImageBase64(idImageUri);
         const fields = await extractIdFields(base64, mediaType);
-        if (!firstName && fields.first_name) setFirstName(fields.first_name);
-        if (!middleName && fields.middle_name) setMiddleName(fields.middle_name);
-        if (!lastName && fields.last_name) setLastName(fields.last_name);
-        if (!birthday && fields.birthday) setBirthday(fields.birthday);
-        if (!sex && fields.sex) setSex(fields.sex);
-        if (!idNumber && fields.id_number) setIdNumber(fields.id_number);
-        if (!nationality && fields.nationality) setNationality(fields.nationality);
-        if (!province && fields.province) setProvince(fields.province);
-        if (!city && fields.city) setCity(fields.city);
-        if (!barangay && fields.barangay) setBarangay(fields.barangay);
-        if (!streetAddress && fields.street_address) setStreetAddress(fields.street_address);
+        if (fields.first_name) setFirstName(toTitleCase(fields.first_name));
+        if (fields.middle_name) setMiddleName(toTitleCase(fields.middle_name));
+        if (fields.last_name) setLastName(toTitleCase(fields.last_name));
+        if (fields.birthday) setBirthday(fields.birthday);
+        if (fields.sex) setSex(fields.sex);
+        if (fields.id_number) setIdNumber(fields.id_number);
+        if (fields.nationality) setNationality(toTitleCase(fields.nationality));
+        if (fields.province) setProvince(toTitleCase(fields.province));
+        if (fields.city) setCity(toTitleCase(fields.city));
+        if (fields.barangay) setBarangay(toTitleCase(fields.barangay));
+        if (fields.street_address) setStreetAddress(toTitleCase(fields.street_address));
         setOcrStatus('done');
       } catch (e) {
         // Swallowed from the member's point of view (this is an unattended,
@@ -237,9 +366,39 @@ export default function Identity() {
     }
   }, [hydrated, idImageUri, selfieUri, step, router]);
 
+  // Best-effort zip <-> address cross-check (see api/address.ts's checkZip /
+  // the backend's own comment on why this can't be an exact guarantee).
+  // Debounced since it fires on every keystroke; only runs once province,
+  // city, and a well-formed 4-digit zip are all present.
+  useEffect(() => {
+    if (!province.trim() || !city.trim() || !/^\d{4}$/.test(zipCode.trim())) {
+      setZipCheckResult(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      checkZip(province, city, zipCode.trim())
+        .then((r) => { if (!cancelled) setZipCheckResult(r); })
+        .catch(() => { if (!cancelled) setZipCheckResult(null); });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [province, city, zipCode]);
+
+  const emailValid = !!email.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const emailError = emailTouched && !emailValid
+    ? (email.trim() ? 'Please enter a valid email address.' : 'Email is required.')
+    : undefined;
+  const zipError = zipCheckResult && !zipCheckResult.valid
+    ? (zipCheckResult.knownZips.length
+        ? `Doesn't look right for ${city} — common zip codes there: ${zipCheckResult.knownZips.slice(0, 3).join(', ')}.`
+        : `Doesn't look right for ${city}.`)
+    : undefined;
+
   const canNext3 =
     !!firstName.trim() && !!lastName.trim() && !!birthday.trim() && !!sex && !!idNumber.trim() && !!nationality.trim() &&
-    !!province.trim() && !!city.trim() && !!barangay.trim() && !!streetAddress.trim() && !!zipCode.trim() &&
+    emailValid &&
+    !!province.trim() && !!city.trim() && !!barangay.trim() && !!streetAddress.trim() &&
+    /^\d{4}$/.test(zipCode.trim()) && (!zipCheckResult || zipCheckResult.valid) &&
     !!sourceOfFunds && !!employmentStatus;
   const canSubmit = agreed;
 
@@ -304,7 +463,12 @@ export default function Identity() {
         onBack={() => (step === 4 ? setStep(3) : router.replace('/(app)/selfie-capture' as any))}
       />
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+      >
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
         {step === 3 && ocrLoading && (
           <View style={{ paddingVertical: 100, alignItems: 'center', gap: 14 }}>
             <ActivityIndicator color={semantic.brand} />
@@ -327,13 +491,7 @@ export default function Identity() {
               <Field label="Middle Name (Optional)" placeholder="Santos" value={middleName} onChangeText={setMiddleName} />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <Field
-                    label="Birthday"
-                    placeholder="MM/DD/YYYY"
-                    keyboardType="numbers-and-punctuation"
-                    value={birthday}
-                    onChangeText={setBirthday}
-                  />
+                  <BirthdayField label="Birthday" value={birthday} onChange={setBirthday} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Sex</Text>
@@ -365,12 +523,14 @@ export default function Identity() {
                 <Text variant="caption" color="secondary">(verified)</Text>
               </View>
               <Field
-                label="Email Address (Optional)"
+                label="Email Address"
                 placeholder="name@example.com"
                 keyboardType="email-address"
                 autoCapitalize="none"
                 value={email}
                 onChangeText={setEmail}
+                onBlur={() => setEmailTouched(true)}
+                error={emailError}
                 leading={<Mail size={18} color={semantic.textMuted} />}
               />
             </View>
@@ -430,7 +590,14 @@ export default function Identity() {
               </Pressable>
 
               <Field label="Street Address" placeholder="House No., Street, Subdivision" value={streetAddress} onChangeText={setStreetAddress} />
-              <Field label="Zip Code" placeholder="4027" keyboardType="numbers-and-punctuation" value={zipCode} onChangeText={setZipCode} />
+              <Field
+                label="Zip Code"
+                placeholder="4027"
+                keyboardType="numbers-and-punctuation"
+                value={zipCode}
+                onChangeText={setZipCode}
+                error={zipError}
+              />
             </View>
 
             <SectionLabel>Financial Information</SectionLabel>
@@ -496,7 +663,7 @@ export default function Identity() {
                 <View style={{ flex: 1, gap: 6 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>ID Photo</Text>
-                    <Pressable onPress={() => router.replace('/(app)/identity-capture' as any)}>
+                    <Pressable onPress={() => router.replace({ pathname: '/(app)/identity-capture', params: { from: 'review' } } as any)}>
                       <Text variant="caption" color="brand" style={{ fontWeight: '600' }}>Retake</Text>
                     </Pressable>
                   </View>
@@ -505,7 +672,7 @@ export default function Identity() {
                 <View style={{ flex: 1, gap: 6 }}>
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Selfie</Text>
-                    <Pressable onPress={() => router.replace('/(app)/selfie-capture' as any)}>
+                    <Pressable onPress={() => router.replace({ pathname: '/(app)/selfie-capture', params: { from: 'review' } } as any)}>
                       <Text variant="caption" color="brand" style={{ fontWeight: '600' }}>Retake</Text>
                     </Pressable>
                   </View>
@@ -563,7 +730,20 @@ export default function Identity() {
               <Checkbox
                 checked={agreed}
                 onToggle={() => setAgreed((a) => !a)}
-                label="I agree to KapitPondo's Privacy Policy on identity verification and consent to my ID, selfie, and personal information being used to verify my identity."
+                label={
+                  <Text variant="bodySmall" color="secondary">
+                    I agree to KapitPondo's{' '}
+                    <Text
+                      variant="bodySmall"
+                      color="brand"
+                      onPress={() => setShowPrivacyPolicy(true)}
+                      style={{ textDecorationLine: 'underline' }}
+                    >
+                      Privacy Policy
+                    </Text>
+                    {' '}on identity verification and consent to my ID, selfie, and personal information being used to verify my identity.
+                  </Text>
+                }
               />
             </View>
 
@@ -578,6 +758,7 @@ export default function Identity() {
           </>
         )}
       </ScrollView>
+      </KeyboardAvoidingView>
 
       <PickerSheet
         visible={sexPickerOpen}
@@ -609,7 +790,7 @@ export default function Identity() {
       <AddressPickerSheet
         visible={provincePickerOpen}
         title="Select province"
-        getOptions={searchProvinces}
+        getOptions={loadProvinces}
         selected={province}
         onSelect={(v) => { setProvince(v); setCity(''); setBarangay(''); setProvincePickerOpen(false); }}
         onClose={() => setProvincePickerOpen(false)}
@@ -618,7 +799,7 @@ export default function Identity() {
       <AddressPickerSheet
         visible={cityPickerOpen}
         title="Select city / municipality"
-        getOptions={(q) => searchCities(province, q)}
+        getOptions={() => loadCities(province)}
         selected={city}
         onSelect={(v) => { setCity(v); setBarangay(''); setCityPickerOpen(false); }}
         onClose={() => setCityPickerOpen(false)}
@@ -627,12 +808,13 @@ export default function Identity() {
       <AddressPickerSheet
         visible={barangayPickerOpen}
         title="Select barangay"
-        getOptions={(q) => searchBarangays(city, q)}
+        getOptions={() => loadBarangays(province, city)}
         selected={barangay}
         onSelect={(v) => { setBarangay(v); setBarangayPickerOpen(false); }}
         onClose={() => setBarangayPickerOpen(false)}
         insets={insets}
       />
+      <PrivacyPolicyModal visible={showPrivacyPolicy} onClose={() => setShowPrivacyPolicy(false)} />
     </SafeAreaView>
   );
 }

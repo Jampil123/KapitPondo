@@ -124,18 +124,11 @@ export default function LandingScreen() {
 
         {/* Actions */}
         <View style={{ gap: 12 }}>
-          {/* Primary button — wrap in glow layer */}
-          <View style={{
-            borderRadius: 13,
-            shadowColor: GLOW,
-            shadowOpacity: 0.55,
-            shadowRadius: 22,
-            shadowOffset: { width: 0, height: 6 },
-            elevation: 10,
-            ...(Platform.OS === 'web' && { boxShadow: `0 6px 28px ${GLOW}88` }),
-          }}>
-            <Button label="Start an account" onPress={() => router.push('/(auth)/signup')} />
-          </View>
+          <Button
+            label="Create an account"
+            onPress={() => router.push('/(auth)/signup')}
+            style={{ shadowOpacity: 0, shadowRadius: 0, elevation: 0, boxShadow: 'none' }}
+          />
 
           <Button
             label="Log In"

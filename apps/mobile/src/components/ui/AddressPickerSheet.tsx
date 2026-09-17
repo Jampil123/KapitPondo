@@ -1,13 +1,16 @@
 /**
  * components/ui/AddressPickerSheet.tsx
  * ----------------------------------------------------------------------------
- * A bottom-sheet picker like the wizard's plain PickerSheet, but backed by a
- * `getOptions` function instead of a fixed list — for province/city/barangay
- * pickers (constants/phAddress.ts), where the option list depends on a
- * parent selection (city depends on province, barangay depends on city).
- * No search box — just a scrollable list of whatever getOptions('') returns.
+ * A bottom-sheet picker like the wizard's plain PickerSheet, but backed by an
+ * async `getOptions` function instead of a fixed list — for province/city/
+ * barangay pickers (api/address.ts, live PSGC data), where the option list
+ * depends on a parent selection (city depends on province, barangay depends
+ * on both province and city) and now comes over the network rather than a
+ * bundled dataset, hence the loading state.
+ * No search box — just a scrollable list of whatever getOptions() returns.
  */
-import { View, Modal, Pressable, FlatList } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Modal, Pressable, FlatList, ActivityIndicator } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { Text } from './Text';
 import { semantic } from '../../theme/colors';
@@ -19,13 +22,28 @@ export function AddressPickerSheet({
 }: {
   visible: boolean;
   title: string;
-  getOptions: (query: string) => AddressOption[];
+  getOptions: () => Promise<AddressOption[]>;
   selected: string | null;
   onSelect: (value: string) => void;
   onClose: () => void;
   insets: { bottom: number };
 }) {
-  const options = visible ? getOptions('') : [];
+  const [loading, setLoading] = useState(false);
+  const [options, setOptions] = useState<AddressOption[]>([]);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    setLoading(true);
+    setLoadError(false);
+    getOptions()
+      .then((result) => { if (!cancelled) setOptions(result); })
+      .catch(() => { if (!cancelled) setLoadError(true); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -36,32 +54,38 @@ export function AddressPickerSheet({
             <Pressable onPress={onClose} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
           </View>
 
-          <FlatList
-            data={options}
-            keyExtractor={(t) => t.value}
-            style={{ maxHeight: 400 }}
-            ListEmptyComponent={
-              <Text variant="bodySmall" color="secondary" style={{ paddingVertical: 18, textAlign: 'center' }}>
-                No options
-              </Text>
-            }
-            renderItem={({ item: t, index }) => (
-              <Pressable
-                onPress={() => onSelect(t.value)}
-                style={{
-                  flexDirection: 'row', alignItems: 'center',
-                  paddingVertical: 14,
-                  borderBottomWidth: index < options.length - 1 ? 1 : 0,
-                  borderBottomColor: semantic.border,
-                }}
-              >
-                <Text variant="label" style={{ flex: 1, color: selected === t.value ? semantic.brandDark : semantic.textPrimary }}>
-                  {t.label}
+          {loading ? (
+            <View style={{ paddingVertical: 32, alignItems: 'center' }}>
+              <ActivityIndicator color={semantic.brand} />
+            </View>
+          ) : (
+            <FlatList
+              data={options}
+              keyExtractor={(t) => t.value}
+              style={{ maxHeight: 400 }}
+              ListEmptyComponent={
+                <Text variant="bodySmall" color="secondary" style={{ paddingVertical: 18, textAlign: 'center' }}>
+                  {loadError ? "Couldn't load options — check your connection and try again." : 'No options'}
                 </Text>
-                {selected === t.value ? <Check size={18} color={semantic.brandDark} /> : null}
-              </Pressable>
-            )}
-          />
+              }
+              renderItem={({ item: t, index }) => (
+                <Pressable
+                  onPress={() => onSelect(t.value)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center',
+                    paddingVertical: 14,
+                    borderBottomWidth: index < options.length - 1 ? 1 : 0,
+                    borderBottomColor: semantic.border,
+                  }}
+                >
+                  <Text variant="label" style={{ flex: 1, color: selected === t.value ? semantic.brandDark : semantic.textPrimary }}>
+                    {t.label}
+                  </Text>
+                  {selected === t.value ? <Check size={18} color={semantic.brandDark} /> : null}
+                </Pressable>
+              )}
+            />
+          )}
         </Pressable>
       </Pressable>
     </Modal>

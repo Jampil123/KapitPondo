@@ -2,10 +2,18 @@
  * components/ui/Button.tsx
  */
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, ActivityIndicator, View, type ViewStyle } from 'react-native';
 import { Text } from './Text';
 import { semantic, intent, shadowToken } from '../../theme/colors';
+
+// A double tap (two presses before the first one's navigation/async work has
+// visibly finished) is how "the page doubles" bugs happen app-wide — a
+// second router.push/replace fires while the first is still mid-transition.
+// Ignoring any press within this window of the last accepted one is a single
+// fix point for nearly every button in the app, rather than guarding each
+// screen's onPress individually.
+const DOUBLE_TAP_GUARD_MS = 700;
 
 type ButtonProps = {
   label: string;
@@ -29,6 +37,7 @@ export function Button({
   bordered = true,
 }: ButtonProps) {
   const [pressed, setPressed] = useState(false);
+  const lastPressAt = useRef(0);
   const isGhost = variant === 'ghost';
   const off = disabled || loading;
 
@@ -37,9 +46,16 @@ export function Button({
   const bg = isGhost ? 'transparent' : intent.primary.base;
   const fg = isGhost ? semantic.brandDark : '#FFFFFF';
 
+  function handlePress() {
+    const now = Date.now();
+    if (now - lastPressAt.current < DOUBLE_TAP_GUARD_MS) return;
+    lastPressAt.current = now;
+    onPress?.();
+  }
+
   return (
     <Pressable
-      onPress={off ? undefined : onPress}
+      onPress={off ? undefined : handlePress}
       onPressIn={() => setPressed(true)}
       onPressOut={() => setPressed(false)}
       style={[

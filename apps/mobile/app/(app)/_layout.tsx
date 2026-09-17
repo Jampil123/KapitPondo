@@ -1,6 +1,3 @@
-/**
- * app/(app)/_layout.tsx — stack for the authenticated flow.
- */
 import { Stack } from 'expo-router';
 import { GroupProvider } from '@/context/GroupContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';

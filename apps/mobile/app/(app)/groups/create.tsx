@@ -1,21 +1,19 @@
-/**
- * app/(app)/groups/create.tsx — create a group (migrated to our primitives).
- * Keeps the co-dev design: optional fund code with an auto-generate button.
- * Success shows the shareable code; "Go to Dashboard" opens the single
- * [groupId] route (role-switched).
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, RefreshCw, CheckCircle2, ShieldCheck } from 'lucide-react-native';
+import { RefreshCw, CheckCircle2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { semantic, shadowToken } from '@/theme/colors';
+import { AppBar } from '@/components/shared/AppBar';
+import { semantic, shadowToken, intent } from '@/theme/colors';
 import { typography } from '@/theme/typography';
 import { createGroup, type Group } from '@/api/groups';
 import { useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
+import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
+
+const BAND_TOP = '#4C7C90';
 
 function generateCode() {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -42,7 +40,10 @@ export default function CreateGroup() {
   const router = useRouter();
   const { refresh } = useGroups();
   const { member } = useAuth();
-  const verified = member?.verification_status === 'verified';
+  const status = member?.verification_status ?? 'unverified';
+  const verified = status === 'verified';
+  const vmeta = VERIFY_META[status] ?? VERIFY_META.unverified;
+  const vtone = intent[vmeta.tone];
   const [name, setName] = useState('');
   const [fundCode, setFundCode] = useState('');
   const [description, setDescription] = useState('');
@@ -93,28 +94,31 @@ export default function CreateGroup() {
   }
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: semantic.background }}>
-      <SafeAreaView style={{ flex: 1 }} edges={['top']}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, height: 60 }}>
-          <Pressable onPress={() => router.back()} style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
-            <ArrowLeft size={22} color={semantic.textPrimary} />
-          </Pressable>
-          <Text variant="h2" style={{ fontSize: 20 }}>Create a Group</Text>
-        </View>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: BAND_TOP }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
+        <AppBar title="Create a Group" backgroundColor={BAND_TOP} tintColor="#fff" />
 
-        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+        <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           <View style={{ marginTop: 8, marginBottom: 24 }}>
-            <Text variant="h1" style={{ fontSize: 24, marginBottom: 4 }}>Start a new collective</Text>
             <Text variant="body" color="secondary">Fill in the details to create your communal savings group.</Text>
           </View>
 
           {!verified && (
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 8, marginBottom: 20 }, shadowToken.card]}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                <ShieldCheck size={18} color="#A87C2C" />
-                <Text variant="label" style={{ fontSize: 13, color: '#A87C2C' }}>Verify your identity to create a group</Text>
+            <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 10, marginBottom: 20, borderWidth: 1, borderColor: vtone.soft }, shadowToken.card]}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: vtone.soft, alignItems: 'center', justifyContent: 'center' }}>
+                  <vmeta.icon size={16} color={vtone.text} strokeWidth={2.4} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text variant="label" style={{ fontSize: 13.5, color: vtone.text }}>{vmeta.title}</Text>
+                  <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>
+                    {vmeta.subtitle(member?.verification_rejection_reason ?? null)}
+                  </Text>
+                </View>
               </View>
-              <Button label="Verify now" variant="ghost" onPress={() => router.push('/(app)/identity' as any)} />
+              {vmeta.btn ? (
+                <Button label={vmeta.btn} variant="ghost" onPress={() => router.push(verifyDestination(status) as any)} />
+              ) : null}
             </View>
           )}
 
@@ -122,9 +126,10 @@ export default function CreateGroup() {
           <TextInput
             value={name}
             onChangeText={setName}
+            editable={verified}
             placeholder="e.g. Barangay Unity Fund"
             placeholderTextColor={semantic.textMuted}
-            style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }]}
+            style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }, !verified && { opacity: 0.5 }]}
           />
 
           <Label>Fund Code (optional)</Label>
@@ -132,12 +137,17 @@ export default function CreateGroup() {
             <TextInput
               value={fundCode}
               onChangeText={(t) => setFundCode(t.toUpperCase())}
+              editable={verified}
               placeholder="ABC-123-XYZ"
               placeholderTextColor={semantic.textMuted}
               autoCapitalize="characters"
-              style={[inputStyle, typography.body, { flex: 1, height: 56 }]}
+              style={[inputStyle, typography.body, { flex: 1, height: 56 }, !verified && { opacity: 0.5 }]}
             />
-            <Pressable onPress={() => setFundCode(generateCode())} style={{ height: 56, paddingHorizontal: 20, backgroundColor: semantic.surfaceAlt, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable
+              onPress={() => setFundCode(generateCode())}
+              disabled={!verified}
+              style={{ height: 56, paddingHorizontal: 20, backgroundColor: semantic.surfaceAlt, borderRadius: 12, alignItems: 'center', justifyContent: 'center', opacity: verified ? 1 : 0.5 }}
+            >
               <RefreshCw size={22} color={semantic.textPrimary} />
             </Pressable>
           </View>
@@ -149,11 +159,12 @@ export default function CreateGroup() {
           <TextInput
             value={description}
             onChangeText={setDescription}
+            editable={verified}
             placeholder="Group goals, contribution schedule, rules..."
             placeholderTextColor={semantic.textMuted}
             multiline
             textAlignVertical="top"
-            style={[inputStyle, typography.body, { height: 112, paddingVertical: 14, marginBottom: 20 }]}
+            style={[inputStyle, typography.body, { height: 112, paddingVertical: 14, marginBottom: 20 }, !verified && { opacity: 0.5 }]}
           />
 
           {error ? <Text variant="bodySmall" style={{ color: '#C25C5E', marginBottom: 12 }}>{error}</Text> : null}
