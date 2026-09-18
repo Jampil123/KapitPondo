@@ -1,8 +1,3 @@
-/**
- * app/(app)/groups/index.tsx — the main dashboard (groups list).
- * Migrated to our primitives + GroupContext. Every group opens the SAME
- * [groupId] route; the dashboard there switches on role via useActiveGroup().
- */
 import { useState } from 'react';
 import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';

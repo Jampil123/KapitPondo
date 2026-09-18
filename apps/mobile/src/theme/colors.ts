@@ -50,7 +50,7 @@ export type IntentName = keyof typeof intent;
 
 // --- Surface / text roles ----------------------------------------------------
 export const semantic = {
-  background: '#F7FBFD',
+  background: '#F7FBFD',  // profile page and subpage background
   surface: '#FFFFFF',
   surfaceAlt: '#EAF2F6',
   border: '#E4EDF2',

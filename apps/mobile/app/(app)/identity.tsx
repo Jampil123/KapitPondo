@@ -25,10 +25,6 @@ import { SEX_OPTIONS, sexLabel } from '@/constants/sex';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 
-// Steps 1 (capture ID) and 2 (selfie) live on their own screens —
-// identity-capture.tsx and selfie-capture.tsx — not here; see the
-// mount-time redirect gate below for why this screen only ever renders
-// steps 3-4 itself.
 const STEP_TITLES = ['Capture your ID', 'Take a Selfie', 'Confirm your Info', 'Review & Submit'];
 const DRAFT_KEY = 'identity_draft_v1';
 
@@ -49,10 +45,6 @@ function SectionLabel({ children }: { children: string }) {
   return <Text variant="label" style={{ fontSize: 13, marginBottom: 10 }}>{children}</Text>;
 }
 
-// OCR/AI extraction commonly returns names/addresses in ALL CAPS (how most
-// PH government IDs actually print them) — convert to Title Case (first
-// letter of each word only) before it lands in the form, so the member sees
-// "Juan Dela Cruz" rather than "JUAN DELA CRUZ".
 function toTitleCase(value: string): string {
   return value
     .toLowerCase()
@@ -146,9 +138,6 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
   );
 }
 
-// Live PSGC data (via api/address.ts) is the primary source — falls back to
-// the bundled phAddress.ts dataset only if the network call fails (offline,
-// backend down), so the pickers still work without blocking the member.
 async function loadProvinces(): Promise<AddressOption[]> {
   try {
     return await fetchProvinces();
@@ -207,11 +196,6 @@ export default function Identity() {
   const [barangayPickerOpen, setBarangayPickerOpen] = useState(false);
   const [zipCheckResult, setZipCheckResult] = useState<{ valid: boolean; knownZips: string[] } | null>(null);
   const [emailTouched, setEmailTouched] = useState(false);
-
-  // Auto-fill from the ID photo — runs once per captured front photo (see
-  // the effect below), never overwrites a field the member already has a
-  // value in. Purely advisory (see gemini.js's ID_STRUCTURE_PROMPT): the
-  // member reviews/edits every field before submitting either way.
   const [ocrStatus, setOcrStatus] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
   const [ocrAttemptedFor, setOcrAttemptedFor] = useState<string | null>(null);
   const [sourceOfFunds, setSourceOfFunds] = useState<string | null>(null);
@@ -256,21 +240,14 @@ export default function Identity() {
           if (d.occupation !== undefined) setOccupation(d.occupation);
         }
       } catch {
-        // Corrupt/unreadable draft — just start fresh.
       } finally {
         setHydrated(true);
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
-  // identity-capture.tsx and selfie-capture.tsx (the dedicated capture
-  // flows) write their shots straight into this same draft rather than
-  // returning them as route params — the camera hand-off can kill/relaunch
-  // the app mid-capture (see the DRAFT_KEY comment above), which would lose
-  // in-flight params but not an already-persisted draft. Re-reading here on
-  // focus is what actually picks those shots up when the user returns from
-  // one of those screens.
+
   useFocusEffect(
     useCallback(() => {
       (async () => {
@@ -281,15 +258,11 @@ export default function Identity() {
           if (d.idImageUri !== undefined) setIdImageUri(d.idImageUri);
           if (d.selfieUri !== undefined) setSelfieUri(d.selfieUri);
         } catch {
-          // Best-effort — the mount-time hydration above already covers the normal case.
         }
       })();
     }, []),
   );
 
-  // Mirror progress to disk so a forced reload (see the comment on DRAFT_KEY
-  // above) resumes instead of starting over. Lightly debounced since this
-  // fires on every keystroke across the whole form.
   useEffect(() => {
     if (!hydrated) return;
     const draft: IdentityDraft = {
@@ -309,13 +282,6 @@ export default function Identity() {
     sourceOfFunds, employmentStatus, occupation,
   ]);
 
-  // Auto-fill personal info from the ID front photo as soon as step 3 is
-  // reached. Only fires once per captured photo (ocrAttemptedFor guards
-  // against re-running on every step revisit, but re-runs if the member
-  // retakes the front photo). Replaces whatever's currently in each field
-  // the scan actually returned a value for — the AI/OCR read is trusted as
-  // authoritative now, not just a fill-the-blanks suggestion. The member
-  // still reviews and can edit every field before submitting either way.
   useEffect(() => {
     if (step !== 3 || !idImageUri || ocrAttemptedFor === idImageUri) return;
     setOcrAttemptedFor(idImageUri);
@@ -337,24 +303,12 @@ export default function Identity() {
         if (fields.street_address) setStreetAddress(toTitleCase(fields.street_address));
         setOcrStatus('done');
       } catch (e) {
-        // Swallowed from the member's point of view (this is an unattended,
-        // best-effort scan) — logged so a real failure (bad endpoint, model
-        // error, timeout) is diagnosable instead of just "didn't work".
         console.warn('[identity] ID auto-fill failed:', (e as Error).message ?? e);
         setOcrStatus('error');
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, idImageUri, ocrAttemptedFor]);
 
-  // This screen only ever renders steps 3-4 (personal info, review) — ID and
-  // selfie capture happen on their own screens before this one is ever
-  // reached in the normal flow. If someone still lands here without a photo
-  // (a deep link, an old "Verify now" caller we missed, backing out mid-
-  // capture and returning), send them to whichever capture step is missing
-  // instead of showing a blank screen. Never forces `step` down — see
-  // bumpStepAtLeast in selfie-capture.tsx for why a Review-triggered retake
-  // must come back to Review, not restart at personal info.
   useEffect(() => {
     if (!hydrated) return;
     if (!idImageUri) {
@@ -366,10 +320,6 @@ export default function Identity() {
     }
   }, [hydrated, idImageUri, selfieUri, step, router]);
 
-  // Best-effort zip <-> address cross-check (see api/address.ts's checkZip /
-  // the backend's own comment on why this can't be an exact guarantee).
-  // Debounced since it fires on every keystroke; only runs once province,
-  // city, and a well-formed 4-digit zip are all present.
   useEffect(() => {
     if (!province.trim() || !city.trim() || !/^\d{4}$/.test(zipCode.trim())) {
       setZipCheckResult(null);

@@ -1,11 +1,3 @@
-/**
- * app/(app)/[groupId]/reminders/compose.tsx — Owner/Treasurer payment
- * reminder. Unlike announcements.tsx's composer this never creates a
- * group-readable record: POST /api/groups/:groupId/members/remind fans out
- * one private `notifications` row per member who hasn't paid this period
- * (see announcements.service.js's resolveUnpaidMembers) — nobody else, not
- * even other officers, sees who received it.
- */
 import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

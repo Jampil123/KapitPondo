@@ -1,12 +1,3 @@
-/**
- * app/(app)/[groupId]/announcements/index.tsx — read-only broadcast feed.
- * Any active member reads every announcement (see 0048_announcements.sql's
- * RLS — audience only controls who got pushed, not who can look it up
- * later). Only the Owner gets the "+" compose action in the AppBar; everyone
- * else sees a locked note instead of a composer, matching the officers/
- * general chat screens' no-reply convention here taken further (no reply at
- * all, not even from officers).
- */
 import { useState } from 'react';
 import { View, ScrollView, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

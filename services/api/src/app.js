@@ -10,6 +10,11 @@ const lendingRoutes = require('./modules/lending/lending.routes');
 const identityRoutes = require('./modules/identity/identity.routes');
 const addressRoutes = require('./modules/address/address.routes'); // live PSGC proxy + zip-check for the identity wizard's address step
 const notificationsRoutes = require('./modules/notifications/notifications.routes');
+const notificationPreferencesRoutes = require('./modules/notificationPreferences/notificationPreferences.routes');
+const loginActivityRoutes = require('./modules/loginActivity/loginActivity.routes');
+const feedbackRoutes = require('./modules/feedback/feedback.routes');
+const recordsRoutes = require('./modules/records/records.routes');
+const profileUpdateRequestsRoutes = require('./modules/profileUpdateRequests/profileUpdateRequests.routes');
 const expensesRoutes = require('./modules/expenses/expenses.routes');
 const distributionsRoutes = require('./modules/distribution/distributions.routes');
 const monitoringRoutes = require('./modules/monitoring/monitoring.routes');
@@ -25,6 +30,7 @@ const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: p
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
 const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
+const adminRouter = require('./routes/admin'); // the whole sysadmin/admin-web API tree (verifications, metrics, audit) — was never mounted, see app.use('/admin', ...) below
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
@@ -43,6 +49,7 @@ app.use(express.json({
 app.get('/', (req, res) => res.send('KapitPondo API is running'));
 app.use('/health', healthRoute);
 app.use('/me', meRoute);
+app.use('/admin', adminRouter);
 app.use('/api', contributionsRoutes);
 app.use('/api', groupsRoutes);
 app.use('/api', cyclesRoutes);
@@ -52,6 +59,11 @@ app.use('/api', membershipsRoutes);
 app.use('/api', identityRoutes);
 app.use('/api', addressRoutes);
 app.use('/api', notificationsRoutes);
+app.use('/api', notificationPreferencesRoutes);
+app.use('/api', loginActivityRoutes);
+app.use('/api', feedbackRoutes);
+app.use('/api', recordsRoutes);
+app.use('/api', profileUpdateRequestsRoutes);
 app.use('/api', distributionsRoutes);
 app.use('/api', monitoringRoutes);
 app.use('/api', reportsRoutes);

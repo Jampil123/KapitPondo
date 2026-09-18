@@ -1,11 +1,3 @@
-/**
- * app/(app)/verify-landing.tsx — "Verify your identity" fork, shown right
- * after OTP confirms the phone. Matches the prototype's screen 1 (intro):
- * badge, headline, 3-item checklist, privacy note, Start verification /
- * Do it later. Lives under (app), not (auth) — this screen is shown to an
- * already signed-in user, so it must not be under (auth) or the root
- * auth-guard bounces it straight back to /(app)/groups.
- */
 import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';

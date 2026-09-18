@@ -1,24 +1,3 @@
-/**
- * app/(app)/[groupId]/audit/proofs.tsx — the Auditor's proof review screen.
- * Redesigned per the "auditor-proofs" reference. Checked before building:
- *
- *   - Flag and "Ask for proof" had NO backend at all — added for real
- *     (services/api/src/modules/auditlog: flagPosting/askForProof). Flag
- *     writes to audit_log + notifies the Owner; it does NOT touch the
- *     ledger — a real correction still goes through the reversal workflow
- *     (ledger.routes.js) with all three officers, same as before.
- *   - Loan DISBURSEMENTS have no proof_url column at all (checked the loans
- *     table) and no separate "verifier" distinct from the Treasurer/Owner
- *     who disbursed it — proof structurally doesn't apply to them, so
- *     they're not part of this screen. Contributions, expenses, and loan
- *     REPAYMENTS are the three real proof-bearing postings.
- *   - "posted without proof" is a real, reachable state — proof_url is
- *     optional at insert time for all three (checked each insert/RPC).
- *
- * No unified "all proofs" endpoint exists server-side, so this merges three
- * already-fetched lists client-side, same as the screen it replaces did for
- * two of them.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

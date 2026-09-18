@@ -12,6 +12,14 @@ import { api } from './client';
 
 export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
 
+export interface NotificationPreferences {
+  payments: boolean;
+  loans: boolean;
+  group_announcements: boolean;
+  direct_messages: boolean;
+  account_security: boolean;
+}
+
 export interface Member {
   id: string;
   auth_id: string;
@@ -48,6 +56,10 @@ export interface Member {
   source_of_funds: string | null;
   employment_status: string | null;
   occupation: string | null;
+  notification_preferences: NotificationPreferences;
+  consent_version: string | null;
+  consent_accepted_at: string | null;
+  submitted_at: string | null;
   created_at: string;
 }
 

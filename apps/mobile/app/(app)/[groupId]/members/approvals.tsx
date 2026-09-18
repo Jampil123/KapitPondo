@@ -1,15 +1,3 @@
-/**
- * app/(app)/[groupId]/membership-approvals.tsx
- * ----------------------------------------------------------------------------
- * Owner approves/rejects join requests. Designer's layout (search + applicant
- * cards + Approve/Reject), wired to our real API:
- *   list   → listPendingMembers(groupId)
- *   approve→ approveMember(groupId, memberId)
- *   reject → rejectMember(groupId, memberId)
- *
- * The pending-member response shape isn't nailed down, so we normalize
- * defensively — adjust `normalize()` once you see the real payload.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,29 +1,3 @@
-/**
- * app/(app)/[groupId]/contributions/record.tsx — Treasurer records a single
- * member's walk-in payment (cash/GCash/bank received outside the app).
- * Redesigned per the "treasurer-record-payment" reference, adapted to what's
- * actually real:
- *
- *   - a walk-in submission goes through the SAME submitted → a-different-
- *     officer-approves pipeline as a member's own self-submission (see
- *     contributions.routes.js/service.js) — it's tagged is_walk_in so the
- *     app shows it under "Awaiting Auditor" instead of mixing it with
- *     members' own proofs, but it does NOT post immediately. Segregation of
- *     duties applies here too: the recorder can't be the approver.
- *   - paid_date is set to today at APPROVAL time (current_date, hardcoded in
- *     approve_contribution) — so there's no "date received" field; backdating
- *     it would be a lie.
- *   - a short/over amount just posts as typed; there's no partial-payment or
- *     advance-credit concept anywhere in the ledger, so no fake choice
- *     buttons — just an honest mismatch note.
- *   - periods aren't tagged explicitly; a member's rows fill periods in
- *     chronological order (see periods.ts). "Recording against" shows
- *     whichever period that next fill will land on — informational, not a
- *     selectable dropdown, since picking one out of order wouldn't do
- *     anything different server-side.
- *   - proof upload reuses the same path contribute.tsx already uses for
- *     member self-submissions.
- */
 import { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

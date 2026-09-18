@@ -1,7 +1,3 @@
-/**
- * app/(app)/[groupId]/services.tsx — placeholder. Reached from DashboardNav's
- * "Services" tab. Not built yet.
- */
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Grid3x3 } from 'lucide-react-native';

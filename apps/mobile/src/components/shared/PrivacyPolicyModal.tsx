@@ -1,15 +1,8 @@
-/**
- * components/shared/PrivacyPolicyModal.tsx
- * ----------------------------------------------------------------------------
- * Bottom-sheet modal that renders content/privacyPolicy.ts — shared by every
- * screen that links to "Privacy Policy" from a consent checkbox (signup.tsx,
- * identity.tsx's Review & Submit step).
- */
 import { View, ScrollView, Modal, Pressable } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic } from '../../theme/colors';
-import { PRIVACY_POLICY_TITLE, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_SECTIONS } from '../../content/privacyPolicy';
+import { PRIVACY_POLICY_TITLE, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_INTRO, PRIVACY_POLICY_SECTIONS } from '../../content/privacyPolicy';
 
 export function PrivacyPolicyModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   return (
@@ -52,6 +45,7 @@ export function PrivacyPolicyModal({ visible, onClose }: { visible: boolean; onC
             </Pressable>
           </View>
           <ScrollView style={{ flex: 1, marginTop: 14 }} showsVerticalScrollIndicator={false}>
+            <Text variant="bodySmall" color="secondary" style={{ marginBottom: 16 }}>{PRIVACY_POLICY_INTRO}</Text>
             {PRIVACY_POLICY_SECTIONS.map((section) => (
               <View key={section.heading} style={{ marginBottom: 16 }}>
                 <Text variant="label" style={{ marginBottom: 4 }}>{section.heading}</Text>

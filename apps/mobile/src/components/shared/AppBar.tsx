@@ -15,6 +15,7 @@ export function AppBar({
   title,
   subtitle,
   back = true,
+  onBack,
   right,
   backgroundColor,
   tintColor,
@@ -22,6 +23,8 @@ export function AppBar({
   title: string;
   subtitle?: string;
   back?: boolean;
+  /** Override the default router.back() — e.g. to step back to a previous in-screen stage instead of leaving the route entirely. */
+  onBack?: () => void;
   right?: ReactNode;
   /** Override the default white bar — e.g. to blend into a colored band underneath (see [groupId]/profile.tsx). */
   backgroundColor?: string;
@@ -44,7 +47,7 @@ export function AppBar({
       }}
     >
       {back ? (
-        <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={onBack ?? (() => router.back())} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeft size={24} color={tintColor ?? semantic.textPrimary} />
         </Pressable>
       ) : (

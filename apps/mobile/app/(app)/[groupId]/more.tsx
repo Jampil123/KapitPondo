@@ -1,30 +1,3 @@
-/**
- * app/(app)/[groupId]/more.tsx — the shared Member dashboard's "More" tile.
- * Per spec §0/§3, the member dashboard (and everything on it, including this
- * screen) is IDENTICAL for plain members and for officers viewing their own
- * "Member" tab — a governance action must never appear here, even for an
- * Owner/Treasurer/Auditor. Every one of those governance items already has a
- * real entry point on the officer's own governance dashboard (see
- * OwnerDashboard's quick actions / stat tiles), so this screen renders
- * MEMBER_ITEMS unconditionally regardless of the caller's role.
- *
- * Three sections: My records (my own dashboard-grid tiles + Proofs), Group
- * (the group as a whole — who runs it, its fund), Support. "My Ledger &
- * Reports" (reports/ledger.tsx) and "Approvals Trail" (activity.tsx) were
- * dropped from here — the rebuilt Reports screen (key 'reports') now covers
- * that ground properly (a real month-by-month chart and year-end estimate,
- * where reports/ledger.tsx only had a placeholder for both), and Activity is
- * still one tap away from there ("See all entries" on the statement) rather
- * than needing its own top-level tile too.
- *
- * "Fund Ledger" routes to reports/group-ledger.tsx, rebuilt into a real
- * GROUP-WIDE ledger any member can read (every posting, not just their
- * own) — a confirmed transparency policy backed by a new member-safe route
- * (GET /reports/fund-ledger). Previously pointed at fund/index.tsx (fund
- * composition only, no transaction list) — that screen's content is also
- * already shown inline on the dashboard itself, so it's not linked here
- * anymore rather than duplicating a tile for it.
- */
 import { View, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';

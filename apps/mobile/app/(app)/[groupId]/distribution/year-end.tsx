@@ -1,25 +1,3 @@
-/**
- * app/(app)/[groupId]/distribution/year-end.tsx
- * ----------------------------------------------------------------------------
- * Year-end distribution (M9). Flow: Owner/Treasurer preview -> Auditor
- * verifies -> Owner finalizes (immutable — posts payouts, drives the fund to
- * 0, locks the distribution). Redesigned per the "owner-year-end" reference,
- * but every figure on screen is real:
- *
- *   summary + status      -> the current distribution row (useDistributions)
- *   approval chain         -> distribution.created_at / verified_at / finalized_at
- *   per-member payouts      -> useDistribution's joined allocations (name, heads, amount)
- *   fund-changed warning    -> live available_cash vs the previewed total_amount
- *                              (the same check finalize_distribution enforces server-side —
- *                              surfaced here BEFORE you tap Finalize, not just as a 409 after)
- *   unreviewed penalties    -> usePenalties(groupId, 'pending')
- *
- * Deliberately NOT shown: a capital/profit/loan/penalty breakdown per member.
- * preview_distribution (migration 0002/0028) computes a single flat share —
- * `available_cash * heads / total_heads` — with no separate capital, profit,
- * or per-member loan/penalty netting anywhere server-side. Showing that
- * breakdown would display numbers the system never actually calculates.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

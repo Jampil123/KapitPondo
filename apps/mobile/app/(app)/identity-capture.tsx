@@ -1,36 +1,3 @@
-/**
- * app/(app)/identity-capture.tsx — screen 1 of the verification flow: pick
- * an ID type and capture its front, on one screen (matches the prototype's
- * combined "ID capture" screen — a separate "which ID, then a placeholder
- * tile that pushes into a second camera screen" used to require an extra
- * page and an extra confirm tap; this is now the entry point of the flow
- * itself, reached directly from verify-landing.tsx / groups/create.tsx /
- * ProfileBody.tsx's "Verify now" actions, and from identity.tsx's own
- * mount-time redirect gate for anyone who lands there without a captured
- * ID yet).
- *
- * Uses a live camera preview (expo-camera) rather than the system camera app
- * (expo-image-picker's launchCameraAsync) so a card-shaped guide overlay can
- * be drawn on top of it. Front only — back-of-ID capture and QR scanning
- * were tried in an earlier revision and dropped in favor of a simpler,
- * single-photo flow.
- *
- * The shot is auto-cropped to the on-screen guide frame (expo-image-manipulator)
- * before being scanned on-device for blur (lib/blurDetection.ts) — advisory,
- * not a hard gate.
- * Accepting it immediately advances to selfie-capture.tsx — no separate
- * "Continue"/"Done" tap, matching the prototype's shutter → next screen.
- * The "Continue" button below only matters when arriving here with a photo
- * already in the draft (e.g. Review's "Retake ID" link) and deciding it's
- * fine as-is — it isn't shown mid-fresh-capture since that path navigates
- * away on its own.
- *
- * The accepted shot is written straight into identity.tsx's own AsyncStorage
- * draft (DRAFT_KEY) as soon as it's taken, rather than carried back as a
- * route param — the camera hand-off can get the process killed and
- * relaunched on some devices, which would lose an in-flight param but not an
- * already-persisted draft.
- */
 import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';

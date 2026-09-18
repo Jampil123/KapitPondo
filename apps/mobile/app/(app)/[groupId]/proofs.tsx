@@ -1,28 +1,3 @@
-/**
- * app/(app)/[groupId]/proofs.tsx — "My proofs" (member). A gallery/list of
- * every proof image the member has uploaded — contributions AND loan
- * repayments, combined, since they're separate flows in the system but the
- * same object to the member (a receipt they sent).
- *
- * Repayments now cover ALL of the member's loans, not just the active one —
- * the old version deliberately limited itself to the active loan to avoid an
- * N+1 fetch (one call per past loan). listRepayments() already returns every
- * repayment across a member's loans in one query (self-scoped server-side),
- * so that limitation no longer applies; using it here removes it for free.
- *
- * The footer note is deliberately narrower than the design's "Only you and
- * the group's officers can open them" — the `proofs` storage bucket's RLS
- * policy (migration 0012) actually allows any authenticated app user to read
- * a file if they have its exact path, not just the member and their group's
- * officers. Paths aren't exposed outside this member's own API responses, so
- * it's not public, but it's not the tighter guarantee the design's copy
- * claims either — said honestly instead of promising a boundary that isn't
- * enforced at the storage layer.
- *
- * LoanPayment gained `payment_method`/`external_reference` in this pass —
- * real columns on loan_payments (migration 0001) that the TS type simply
- * never declared, so the reference number shown here was never reachable.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

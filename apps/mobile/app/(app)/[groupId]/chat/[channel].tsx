@@ -1,7 +1,3 @@
-/**
- * app/(app)/[groupId]/chat/[channel].tsx — group chat (officers or general).
- * Reached from GroupSheetNav's Chat sheet via route 'chat/officers' | 'chat/general'.
- */
 import { useEffect, useState } from 'react';
 import { View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

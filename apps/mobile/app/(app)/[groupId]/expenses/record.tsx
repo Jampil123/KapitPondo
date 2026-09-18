@@ -1,24 +1,3 @@
-/**
- * app/(app)/[groupId]/expenses/record.tsx — Treasurer (or Owner) records a
- * group expense. Redesigned per the "treasurer-expenses" reference, with one
- * real difference: the mockup's per-Treasurer spending limit that routes
- * over-threshold expenses to the Owner for authorization has NO backend
- * support at all — checked expenses.routes.js/service.js and the schema
- * before building, there's no limit column, no threshold check, no
- * authorization stage. Dropped entirely rather than faked; it's the same
- * real record → a-different-officer-approves flow as contributions/loan
- * repayments (and unlike those, expenses already used this correctly — no
- * instant-post bug to fix here).
- *
- * Also dropped for the same reason (no backing column, migration 0046
- * confirmed): a distinct "date paid," a separate "paid to" field, and a
- * separate "note for the verifier" — there's only one `description` column.
- *
- * Real fixes applied alongside this redesign (migration 0046): expenses now
- * have `rejection_reason` (previously missing entirely), a reject
- * self-check (previously absent), and the same Treasurer-recorded-needs-
- * Auditor rule contributions/loan repayments already got.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, Alert, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

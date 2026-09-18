@@ -1,27 +1,3 @@
-/**
- * app/(app)/[groupId]/cycles/configure.tsx
- * ----------------------------------------------------------------------------
- * Owner creates/manages fund cycles (M4). Wired to our API:
- *   name, contribution_amount, start_date, end_date, frequency, penalty_amount,
- *   contribution_due_day, default_interest_rate, minimum_loan_amount,
- *   early_termination_penalty.
- *
- * default_interest_rate is a suggested default only — the officer can still
- * set a different rate per loan at approval time (lending module is
- * unchanged); loan term limit, grace period, number of cycles, and cover
- * photo remain unimplemented (no column, no note faked here either).
- *
- * Creating a cycle activates it immediately unless the group already has an
- * active one, in which case it's created in "Setup" (draft) until that one
- * is closed — Activate / Close below cover that case (one active cycle
- * enforced by the DB — activating a second fails, surfaced as an alert).
- *
- * The "closing" checklist mirrors the real year-end distribution workflow
- * (preview → Auditor verifies → Owner finalizes, see distribution/year-end.tsx)
- * when one exists for this cycle — it's informational, not a hard gate:
- * closing a cycle and finalizing its distribution are separate actions
- * server-side, same as before this screen was redesigned.
- */
 import { useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, Modal, Platform, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

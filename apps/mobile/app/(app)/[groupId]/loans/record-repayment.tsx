@@ -1,23 +1,3 @@
-/**
- * app/(app)/[groupId]/loans/record-repayment.tsx — Treasurer's loan
- * repayments workspace. Redesigned per the "treasurer-repayments" reference,
- * mirroring contributions/confirm.tsx's real structure:
- *
- *   Pending          — member self-submitted repayment claims awaiting this
- *                       officer's confirm/reject (loan_payments.is_walk_in = false)
- *   Record new        — active loans list, opens loans/record.tsx to submit
- *                       a walk-in repayment claim (no longer posts instantly
- *                       — see migration 0045)
- *   Awaiting Auditor   — walk-ins THIS officer recorded, still waiting on a
- *                       different officer (specifically the Auditor when the
- *                       recorder is the Treasurer) to confirm
- *   Returned           — repayments THIS officer recorded that got rejected
- *
- * The allocation preview on Pending cards (interest first, then principal)
- * uses the same formula confirm_loan_repayment computes server-side —
- * shown here so the Treasurer can check it against the proof, not trusted
- * as the actual posting (the server recomputes it independently).
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

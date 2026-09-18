@@ -1,11 +1,3 @@
-/**
- * app/(app)/[groupId]/standing/index.tsx — My Standing (member).
- * The "am I okay?" glance: paid-up status, missed cycles, active-loan status,
- * heads/shares. All derived from data already fetched elsewhere — no new
- * endpoints needed. Penalties: no penalties API exists anywhere yet (see
- * penalties.tsx's own header comment), so that section is an honest
- * "not available yet" rather than a fabricated number.
- */
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';

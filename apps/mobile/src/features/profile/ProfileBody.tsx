@@ -5,9 +5,9 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Bell, HelpCircle, Lock, ChevronRight, LogOut, UserPen,
+  Bell, HelpCircle, Lock, ChevronRight, LogOut,
   Users, Plus, Mail, Smartphone, KeyRound,
-  Download, History, MessageCircle, Info,
+  Download, History, MessageCircle, Info, ScrollText,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -20,8 +20,6 @@ import { useGroups } from '@/context/GroupContext';
 import { updateProfile } from '@/api/members';
 import { uploadAvatar } from '@/lib/upload';
 import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
-
-function soon(label: string) { Alert.alert(label, 'Coming soon.'); }
 
 function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: string; sub?: string; pill?: { text: string; tone: IntentName }; onPress?: () => void }) {
   const tone = pill ? intent[pill.tone] : null;
@@ -96,40 +94,16 @@ export function ProfileBody() {
 
   return (
     <View style={{ flex: 1, backgroundColor: semantic.background }}>
-      {/* Fixed behind the scroll content — stays put while the white sheet below scrolls up over it. */}
+      {/* Purely decorative background — the interactive header (avatar, edit-profile
+          button) renders as a separate overlay below, AFTER the ScrollView, because a
+          position:absolute sibling declared before a flex:1 ScrollView still sits
+          BEHIND it in touch/paint order. Content placed directly here was untappable:
+          the ScrollView's transparent top spacer silently absorbed every tap meant
+          for the avatar and "Edit profile" button. */}
       <LinearGradient
         colors={['#4C7C90', semantic.brandDark, '#35606F']}
-        onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
-            <Avatar name={member?.full_name} uri={member?.avatar_url} size={64} />
-            <View
-              style={{
-                position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
-                backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
-                borderWidth: 2, borderColor: semantic.brandDark,
-              }}
-            >
-              {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <vmeta.icon size={12} color="#fff" strokeWidth={2.6} />}
-            </View>
-          </Pressable>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
-            <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
-              {member?.phone ? formatPH(member.phone) : 'No phone on file'}
-            </Text>
-            <Pressable
-              onPress={() => router.push('/(app)/edit-profile' as any)}
-              style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 }}
-            >
-              <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Edit profile</Text>
-              <ChevronRight size={12} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
-      </LinearGradient>
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: bandHeight }}
+      />
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={{ height: bandHeight }} />
@@ -214,24 +188,27 @@ export function ProfileBody() {
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Account</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={UserPen} label="Personal information" sub="Name, birthday, address" onPress={() => router.push('/(app)/edit-profile' as any)} />
             <Row icon={Smartphone} label="Mobile number" sub={member?.phone ? formatPH(member.phone) : undefined} pill={{ text: 'Confirmed', tone: 'success' }} />
             <Row
               icon={Mail}
               label="Email address"
               sub={member?.email ?? 'Add one to recover your account by email'}
               pill={member?.email ? undefined : { text: 'Not set', tone: 'warning' }}
-              onPress={() => router.push('/(app)/edit-profile' as any)}
+              onPress={() => router.push('/(app)/email-address' as any)}
             />
-            <Row icon={KeyRound} label="Change password" onPress={() => soon('Change password')} />
+            <Row icon={KeyRound} label="Change password" onPress={() => router.push('/(app)/change-password' as any)} />
           </View>
         </View>
 
-        {/* Notifications — one real row to the Notification Center, not fabricated per-category toggles */}
+        {/* Notifications — Notification Center is account-wide PREFERENCES
+            (what you get notified about), not the in-group feed/inbox
+            (/(app)/notifications) — the Settings half of the Inbox/Settings
+            split, which is why it lives here under Profile rather than
+            inside any one group's screens. */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Notifications</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={Bell} label="Notification Center" sub="Payments, postings and group announcements" onPress={() => router.push('/(app)/notifications' as any)} />
+            <Row icon={Bell} label="Notification Center" sub="Choose what you get notified about" onPress={() => router.push('/(app)/notification-center' as any)} />
           </View>
         </View>
 
@@ -239,9 +216,10 @@ export function ProfileBody() {
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Privacy &amp; security</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={History} label="Login activity" onPress={() => soon('Login activity')} />
-            <Row icon={Lock} label="My data & consent" sub="Review what we collect and why" onPress={() => soon('My data & consent')} />
-            <Row icon={Download} label="Download my records" sub="Contributions, loans and payouts" onPress={() => soon('Download my records')} />
+            <Row icon={History} label="Login activity" sub="Devices and times your account signed in" onPress={() => router.push('/(app)/login-activity' as any)} />
+            <Row icon={ScrollText} label="Privacy Policy" onPress={() => router.push('/(app)/privacy-policy' as any)} />
+            <Row icon={Lock} label="My data & consent" sub="Review what we collect and why" onPress={() => router.push('/(app)/my-data-consent' as any)} />
+            <Row icon={Download} label="Download my records" sub="Contributions, loans and payouts" onPress={() => router.push('/(app)/download-records' as any)} />
           </View>
         </View>
 
@@ -249,9 +227,9 @@ export function ProfileBody() {
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Support</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={HelpCircle} label="Help centre" onPress={() => soon('Help centre')} />
-            <Row icon={MessageCircle} label="Send feedback" onPress={() => soon('Send feedback')} />
-            <Row icon={Info} label="About KapitPondo" sub={`Version ${Constants.expoConfig?.version ?? '—'}`} onPress={() => soon('About KapitPondo')} />
+            <Row icon={HelpCircle} label="Help Center" onPress={() => router.push('/(app)/help-center' as any)} />
+            <Row icon={MessageCircle} label="Send feedback" onPress={() => router.push('/(app)/send-feedback' as any)} />
+            <Row icon={Info} label="About KapitPondo" sub={`Version ${Constants.expoConfig?.version ?? '—'}`} onPress={() => router.push('/(app)/about' as any)} />
           </View>
         </View>
 
@@ -268,6 +246,45 @@ export function ProfileBody() {
         </Text>
         </View>
       </ScrollView>
+
+      {/* Rendered last (on top of the ScrollView) so it's actually tappable.
+          pointerEvents="box-none" on the wrapper lets taps/drags on its empty
+          padding pass through to the ScrollView beneath (so scrolling still
+          works from that region) while the Pressables inside still catch their
+          own touches. */}
+      <View
+        pointerEvents="box-none"
+        onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+          <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
+            <Avatar name={member?.full_name} uri={member?.avatar_url} size={64} />
+            <View
+              style={{
+                position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
+                backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
+                borderWidth: 2, borderColor: semantic.brandDark,
+              }}
+            >
+              {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <vmeta.icon size={12} color="#fff" strokeWidth={2.6} />}
+            </View>
+          </Pressable>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
+            <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
+              {member?.phone ? formatPH(member.phone) : 'No phone on file'}
+            </Text>
+            <Pressable
+              onPress={() => router.push('/(app)/edit-profile' as any)}
+              style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 }}
+            >
+              <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Edit profile</Text>
+              <ChevronRight size={12} color="#fff" />
+            </Pressable>
+          </View>
+        </View>
+      </View>
     </View>
   );
 }

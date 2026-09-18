@@ -1,27 +1,3 @@
-/**
- * app/(app)/selfie-capture.tsx — screen 2 of the verification flow, reached
- * from identity-capture.tsx once the ID photo is accepted.
- *
- * Uses a live front-camera preview (expo-camera) rather than the system
- * camera app, with an oval face-guide overlay, mirroring the card-guide
- * pattern in identity-capture.tsx. Camera only — deliberately no "choose
- * from gallery" fallback, same as the system-camera flow this replaces: a
- * selfie picked from an existing photo would defeat the point of comparing
- * it against the ID photo.
- *
- * The shot is scanned on-device for blur (lib/blurDetection.ts) before being
- * accepted, same as the ID capture flow — advisory, not a hard gate.
- * Accepting it immediately advances to identity.tsx's personal-info step —
- * no separate confirm tap, matching the prototype's shutter → next screen.
- *
- * The accepted shot is written straight into identity.tsx's own AsyncStorage
- * draft (DRAFT_KEY) as soon as it's taken, rather than carried back as a
- * route param — the camera hand-off can get the process killed and
- * relaunched on some devices, which would lose an in-flight param but not an
- * already-persisted draft. `step` is only bumped up to 3 (personal info),
- * never down — so re-capturing a selfie from Review's "Retake" link (where
- * step is already 4) lands back on Review, not personal info.
- */
 import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,12 +1,3 @@
-/**
- * app/+not-found.tsx
- * ----------------------------------------------------------------------------
- * Catches any route that doesn't match a screen. Uses the theme primitives so
- * it matches the rest of the app instead of the default Expo Router fallback.
- *
- * Assumes the `@/*` path alias (-> src/*). If you haven't set it yet, see the
- * one-time step in MOBILE_STRUCTURE.md, or switch these to relative imports.
- */
 import { View } from 'react-native';
 import { Link, Stack } from 'expo-router';
 import { Text } from '@/components/ui/Text';

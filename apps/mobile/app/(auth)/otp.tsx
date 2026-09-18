@@ -10,6 +10,7 @@ import { ScreenHeader } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
+import { recordCurrentLogin } from '@/lib/loginActivity';
 
 const OTP_VALIDITY_SECONDS = 5 * 60;
 
@@ -36,6 +37,7 @@ export default function Otp() {
     try {
       setPendingRedirect('/(app)/verify-landing');
       await confirmOtp(phone, code);
+      recordCurrentLogin();
     } catch (e) {
       Alert.alert('Verification failed', (e as Error).message);
     } finally {

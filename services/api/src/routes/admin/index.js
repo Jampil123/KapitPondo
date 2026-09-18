@@ -10,6 +10,7 @@ const { requireSysadmin } = require('../../middleware/requireSysadmin');
 const verifications = require('./verifications');
 const metrics = require('./metrics');
 const audit = require('./audit');
+const profileUpdateRequests = require('./profileUpdateRequests');
 
 const router = Router();
 
@@ -24,5 +25,6 @@ router.get('/me', (req, res) => {
 router.use('/metrics', metrics);
 router.use('/verifications', verifications);
 router.use('/audit', audit);
+router.use('/profile-update-requests', profileUpdateRequests);
 
 module.exports = router;

@@ -1,14 +1,3 @@
-/**
- * app/(app)/[groupId]/audit/postings.tsx — auditor verifies postings (M8).
- * Combines submitted contributions + expenses into one queue; the auditor
- * approves or rejects each (recorder != approver). Flagged tab has no backend
- * yet, so it's empty.
- *
- * Proof images render from proof_signed_url — proof_url itself is just a
- * path inside the private `proofs` bucket (like an ID document), not
- * something any client can load directly. The API signs it fresh on every
- * list fetch (short TTL), so this always uses whatever came back most recently.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

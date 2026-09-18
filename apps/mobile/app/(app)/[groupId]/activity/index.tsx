@@ -1,13 +1,3 @@
-/**
- * app/(app)/[groupId]/activity/index.tsx — Activity feed (member).
- * Built directly from the member's own ledger feed rather than merging
- * separate contributions/loans lists — the ledger already captures every
- * posted financial event (contribution, loan disbursement/repayment, penalty,
- * expense, distribution) in one place, self-scoped to the caller, with a real
- * timestamp. `posted_by` is always the approving officer (see the SQL RPCs),
- * now joined to a name in reporting.service.js, so this is a real "who did
- * this, when" feed — not a fabricated one.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

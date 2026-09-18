@@ -1,12 +1,3 @@
-/**
- * app/(app)/[groupId]/heads.tsx — Heads (member dashboard tile).
- * Promotes the read-only "Heads / shares" card that used to live only on the
- * Standing page into its own screen, and gives setHeads() a UI: self-service
- * for EVERYONE (member or officer alike) to configure their OWN heads — not
- * an Owner/organizer-configures-everyone screen. The server enforces the
- * "own row only" restriction (services/api/.../distributions.routes.js), so
- * this never sends another member's membership id.
- */
 import { useEffect, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,10 +1,3 @@
-/**
- * app/(app)/[groupId]/announcements/compose.tsx — Owner-only announcement
- * composer. Posts to POST /api/groups/:groupId/announcements (see
- * services/api/src/modules/announcements) — a real broadcast: it inserts a
- * group-readable `announcements` row and (unless push is switched off) sends
- * a push+notification-center entry to every resolved recipient.
- */
 import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Switch, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

@@ -1,11 +1,3 @@
-/**
- * app/(app)/[groupId]/dm/[memberId].tsx — 1:1 conversation with another
- * active member of this group (an officer or a plain member — same screen,
- * see directMessages.routes.js: any two active members can message each
- * other). Reached by tapping a row under "Contact an officer"/"Members" on
- * messages.tsx. Mirrors chat/[channel].tsx's composer (sticker tray, photo
- * picker, gradient send button) — a DM is just a different message source.
- */
 import { useState } from 'react';
 import { View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, ActivityIndicator, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

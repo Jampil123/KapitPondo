@@ -1,20 +1,3 @@
-/**
- * app/(app)/[groupId]/loans/record.tsx — Treasurer records a single member's
- * loan repayment (cash/GCash/bank received outside the app). Mirrors
- * contributions/record.tsx: submits a claim (status 'submitted', tagged
- * is_walk_in) instead of posting instantly — a DIFFERENT officer must
- * confirm it via confirm_loan_repayment before it reaches the ledger (see
- * migration 0045). When the recorder holds the Treasurer role specifically,
- * that confirmer must be the Auditor.
- *
- * The interest-first allocation preview shown here is the REAL formula from
- * confirm_loan_repayment (checked before building):
- *   interest  = min(round(outstanding_balance * interest_rate, 2), amount)
- *   principal = min(amount - interest, outstanding_balance)
- * computed live client-side so the Treasurer can check it against the proof
- * before submitting — the server recomputes it independently at confirm
- * time (it doesn't trust this preview), so it can't drift out of sync.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

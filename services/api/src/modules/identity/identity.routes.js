@@ -6,6 +6,7 @@ const service = require('./identity.service');
 const { extractText } = require('../../integrations/ocr/googleVision');
 const { parseIdFields } = require('../../integrations/ocr/idFieldParser');
 const { structureIdImage } = require('../../integrations/ai/gemini');
+const { LOCKABLE_FIELDS } = require('../profileUpdateRequests/profileUpdateRequests.service');
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 // ~8MB source image, base64-encoded (~1.37x larger) — same budget as
@@ -90,9 +91,21 @@ router.get('/me/profile', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Update my own personal info (not the KYC document/selfie/status)
+// Update my own personal info (not the KYC document/selfie/status).
+// Once verified, this "personal information shall be locked from direct
+// editing" — a member must submit an Information Update Request instead
+// (POST /me/profile-update-requests). avatar_url is cosmetic, not KYC
+// data, and stays editable regardless of verification status.
 router.patch('/me/profile', requireAuth, async (req, res, next) => {
   try {
+    if (req.member.verification_status === 'verified') {
+      const lockedFieldsPresent = LOCKABLE_FIELDS.filter((f) => req.body[f] !== undefined);
+      if (lockedFieldsPresent.length) {
+        return res.status(400).json({
+          error: `These fields are locked once your identity is verified: ${lockedFieldsPresent.join(', ')}. Submit an Information Update Request instead.`,
+        });
+      }
+    }
     const {
       full_name, first_name, middle_name, last_name, email, birthday,
       nationality, region, province, city, barangay, street_address, zip_code,

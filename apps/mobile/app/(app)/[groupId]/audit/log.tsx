@@ -1,17 +1,3 @@
-/**
- * app/(app)/[groupId]/audit/log.tsx — the Auditor's audit trail.
- * Redesigned per the "audit-log" reference. Before building this, checked
- * whether audit_log (declared in migration 0001) was actually populated —
- * it wasn't; no code path anywhere wrote to it, and no endpoint read it for
- * the group Auditor role. Migration 0047 + services/api/src/lib/auditLog.js
- * wire it up for real: every approve/reject/verify/finalize/waive/role-
- * change/heads-change/cycle-lifecycle/reversal-workflow action across the
- * app now writes one row here, with the actor's role AT THE TIME (not their
- * current role, which can change later).
- *
- * Every entry, delta, and reason shown here comes directly from a real
- * audit_log row — nothing is synthesized client-side.
- */
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

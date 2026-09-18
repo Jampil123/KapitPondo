@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { ScreenHeader, LogoMark, Wordmark } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
+import { recordCurrentLogin } from '@/lib/loginActivity';
 
 const PREFIX = '+63 ';
 
@@ -36,6 +37,7 @@ export default function SignIn() {
     setLoading(true);
     try {
       await signInWithPassword(phone, password);
+      recordCurrentLogin();
       router.replace('/(app)/groups' as any);
     } catch (e) {
       Alert.alert('Sign in failed', (e as Error).message);

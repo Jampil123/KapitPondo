@@ -1,11 +1,3 @@
-/**
- * app/(app)/[groupId]/index.tsx — the ONE group dashboard, role-switched.
- * All four dashboards live here; the screen picks one from the caller's role in
- * THIS group. Now also handles the non-dashboard states:
- *   - still loading the groups list        → spinner
- *   - not a member of this group           → "no access"
- *   - joined but not yet approved (pending) → "waiting for approval"
- */
 import { useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

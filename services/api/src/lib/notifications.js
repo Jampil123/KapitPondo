@@ -10,10 +10,60 @@
  * Fire-and-forget by design: neither the DB write nor the push send may ever
  * fail the money/approval action that triggered them, so errors are logged,
  * not thrown.
+ *
+ * Every notify() call in the app funnels through here, which makes this the
+ * one place to enforce a member's notification_preferences (migration 0058,
+ * set via PATCH /api/me/notification-preferences) — a `type` is mapped to a
+ * category, and if that category is off, both the DB write and the push are
+ * skipped. Categories aren't in this codebase anywhere else, so this map is
+ * the source of truth for which `type` belongs to which toggle.
  */
 const supabase = require('../config/supabase');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+
+const DEFAULT_PREFERENCES = {
+  payments: true,
+  loans: true,
+  group_announcements: true,
+  direct_messages: true,
+  account_security: true,
+};
+
+// Matched by prefix (e.g. "loan.approved" -> "loan"). A type with no match
+// falls through ungated — better to over-notify an uncategorized event than
+// silently drop something nobody can turn off.
+const CATEGORY_BY_PREFIX = {
+  loan: 'loans',
+  contribution: 'payments',
+  gcash: 'payments',
+  payment: 'payments',
+  ledger: 'payments',
+  penalty: 'payments',
+  membership: 'group_announcements',
+  distribution: 'group_announcements',
+  announcement: 'group_announcements',
+  balance: 'group_announcements',
+  direct_message: 'direct_messages',
+  identity: 'account_security',
+  audit: 'account_security',
+  profile_update: 'account_security',
+};
+
+function categoryFor(type) {
+  const prefix = type.split('.')[0];
+  return CATEGORY_BY_PREFIX[prefix] ?? null;
+}
+
+async function isCategoryEnabled(memberId, type) {
+  const category = categoryFor(type);
+  if (!category) return true; // uncategorized types are never gated
+  const { data, error } = await supabase
+    .from('members').select('notification_preferences').eq('id', memberId).single();
+  if (error || !data) return true; // best-effort — don't block a real notification over a lookup failure
+  const prefs = { ...DEFAULT_PREFERENCES, ...(data.notification_preferences ?? {}) };
+  return prefs[category] !== false;
+}
 
 async function sendPush(memberId, { title, message, type }) {
   const { data: tokens, error } = await supabase
@@ -44,6 +94,7 @@ async function sendPush(memberId, { title, message, type }) {
 
 async function notify({ memberId, groupId = null, type, title, message }) {
   if (!memberId || !type) return;
+  if (!(await isCategoryEnabled(memberId, type))) return;
   const { error } = await supabase.from('notifications').insert({
     member_id: memberId,
     group_id: groupId,

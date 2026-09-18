@@ -1,20 +1,3 @@
-/**
- * app/(app)/notifications.tsx — Notification Center.
- * Lists every notification written by lib/notifications.js on the backend
- * (identity verify/reject, membership reject, and whatever future modules
- * wire in) — newest first, tap to mark read, "Mark all read" in the header.
- * Reads from NotificationsContext, which keeps the list live over Supabase
- * Realtime — no local fetch/refetch of its own.
- *
- * Scoped to the group it was opened from (DashboardHeader passes its own
- * groupId): only that group's notifications plus account-level ones
- * (group_id null, e.g. identity verification results) show here. Previously
- * this always listed every notification across every group the member
- * belongs to, so Group A's bell opened a list containing Group B's items too.
- * "Mark all read" is scoped the same way — it marks only what's visible here,
- * not the member's entire notification history, since the backend's
- * read-all endpoint has no group filter of its own.
- */
 import { useMemo } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';

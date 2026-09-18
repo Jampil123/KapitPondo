@@ -1,15 +1,3 @@
-/**
- * app/(app)/[groupId]/chatbot.tsx — KapitBot, the member support/FAQ
- * chatbot (see services/api/src/modules/ai/ai.routes.js + integrations/ai/
- * gemini.js). Stateless: this screen keeps the transcript in local state and
- * resends the recent turns as `history` on every message — there's no
- * server-side chat storage.
- *
- * KapitBot has no access to any member's real account data and never states
- * a number as if it were a real balance (see gemini.js's CHAT_SYSTEM) — the
- * suggested prompts below are deliberately scoped to what it CAN answer
- * (how the app/paluwagan model works), not account-specific questions.
- */
 import { useRef, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
