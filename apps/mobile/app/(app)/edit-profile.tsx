@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, ScrollView, Pressable, Alert, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { ChevronDown, ChevronRight, Check, X, Phone, Mail, Lock, AlertTriangle } from 'lucide-react-native';
+import { ChevronDown, ChevronRight, Check, X, Phone, Mail, Lock, AlertTriangle, Camera } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
+import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { updateProfile } from '@/api/members';
@@ -15,7 +16,7 @@ import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
 import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employmentStatus';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
-import { uploadImage } from '@/lib/upload';
+import { uploadImage, uploadAvatar } from '@/lib/upload';
 
 const BAND_TOP = '#4C7C90';
 
@@ -143,6 +144,35 @@ export default function EditProfile() {
 
   const pendingCount = (pendingRequests ?? []).filter((r) => r.status === 'pending').length;
 
+  // ---- profile photo (cosmetic, not KYC data — stays editable regardless of verification status) ----
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  async function pickAvatar() {
+    if (!member) return;
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to change your profile picture.');
+      return;
+    }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (res.canceled) return;
+    setUploadingAvatar(true);
+    try {
+      const avatarUrl = await uploadAvatar(member.id, res.assets[0].uri);
+      await updateProfile({ avatar_url: avatarUrl });
+      await refreshMember();
+    } catch (e) {
+      Alert.alert('Upload failed', (e as Error).message);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   async function onSave() {
     if (!canSave) return;
     setSaving(true);
@@ -247,6 +277,27 @@ export default function EditProfile() {
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BAND_TOP }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
         <AppBar title="Edit Profile" backgroundColor={BAND_TOP} tintColor="#fff" />
+
+        <View style={{ alignItems: 'center', paddingTop: 4, paddingBottom: 22 }}>
+          <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
+            <Avatar name={member?.full_name} uri={member?.avatar_url} size={92} />
+            <View
+              style={{
+                position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15,
+                backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+                borderWidth: 2, borderColor: BAND_TOP,
+              }}
+            >
+              {uploadingAvatar ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <Camera size={14} color={semantic.brandDark} />}
+            </View>
+          </Pressable>
+          <Pressable onPress={pickAvatar} disabled={uploadingAvatar} hitSlop={8} style={{ marginTop: 12 }}>
+            <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: 'rgba(255,255,255,0.92)' }}>
+              {uploadingAvatar ? 'Uploading…' : 'Change photo'}
+            </Text>
+          </Pressable>
+        </View>
+
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
           {isVerified ? (
@@ -278,17 +329,18 @@ export default function EditProfile() {
           <SectionLabel>Contact Information</SectionLabel>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18, gap: 4 }, shadowToken.card]}>
             <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Phone size={16} color={semantic.textMuted} />
-              <Text variant="body">{member?.phone ? formatPH(member.phone) : '—'}</Text>
-              <Text variant="caption" color="secondary">(cannot be changed)</Text>
+              <Text variant="body" style={{ flexShrink: 1 }}>{member?.phone ? formatPH(member.phone) : '—'}</Text>
             </View>
+            <Text variant="caption" color="secondary" style={{ marginBottom: 10 }}>Cannot be changed</Text>
+
             <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Email Address</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
               <Mail size={16} color={semantic.textMuted} />
-              <Text variant="body">{member?.email || '—'}</Text>
-              <Text variant="caption" color="secondary">(manage from Email Address screen)</Text>
+              <Text variant="body" style={{ flexShrink: 1 }} numberOfLines={1}>{member?.email || '—'}</Text>
             </View>
+            <Text variant="caption" color="secondary">Manage from the Email Address screen</Text>
           </View>
 
           {renderSection('Residential Address', ADDRESS_FIELDS)}

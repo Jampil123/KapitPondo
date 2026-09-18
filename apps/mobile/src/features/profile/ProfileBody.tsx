@@ -92,18 +92,57 @@ export function ProfileBody() {
     ]);
   }
 
+  // Shared by two renders below: the real (visible) header and an invisible
+  // hit-target copy. A position:absolute header placed BEHIND a flex:1
+  // ScrollView paints correctly (the sheet's rounded top corners tuck over
+  // it exactly as designed) but isn't reachable by touch — the ScrollView's
+  // transparent top spacer swallows every tap meant for it. Rather than
+  // making the header itself opaque-and-topmost (which then hides the
+  // corner radius under its own paint, or — moved out of the way — leaves
+  // the corner with nothing colored behind it to cut against), the real
+  // header stays exactly where it visually needs to be, and an identical
+  // but invisible (opacity: 0) copy is rendered on top purely to catch taps.
+  function renderHeaderContent() {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+        <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
+          <Avatar name={member?.full_name} uri={member?.avatar_url} size={64} />
+          <View
+            style={{
+              position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
+              backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
+              borderWidth: 2, borderColor: semantic.brandDark,
+            }}
+          >
+            {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <vmeta.icon size={12} color="#fff" strokeWidth={2.6} />}
+          </View>
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
+          <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
+            {member?.phone ? formatPH(member.phone) : 'No phone on file'}
+          </Text>
+          <Pressable
+            onPress={() => router.push('/(app)/edit-profile' as any)}
+            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 }}
+          >
+            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Edit profile</Text>
+            <ChevronRight size={12} color="#fff" />
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: semantic.background }}>
-      {/* Purely decorative background — the interactive header (avatar, edit-profile
-          button) renders as a separate overlay below, AFTER the ScrollView, because a
-          position:absolute sibling declared before a flex:1 ScrollView still sits
-          BEHIND it in touch/paint order. Content placed directly here was untappable:
-          the ScrollView's transparent top spacer silently absorbed every tap meant
-          for the avatar and "Edit profile" button. */}
       <LinearGradient
         colors={['#4C7C90', semantic.brandDark, '#35606F']}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: bandHeight }}
-      />
+        onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
+      >
+        {renderHeaderContent()}
+      </LinearGradient>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
         <View style={{ height: bandHeight }} />
@@ -247,43 +286,20 @@ export function ProfileBody() {
         </View>
       </ScrollView>
 
-      {/* Rendered last (on top of the ScrollView) so it's actually tappable.
-          pointerEvents="box-none" on the wrapper lets taps/drags on its empty
-          padding pass through to the ScrollView beneath (so scrolling still
-          works from that region) while the Pressables inside still catch their
-          own touches. */}
+      {/* Invisible hit-target copy of the header above, rendered last (on top
+          of the ScrollView) purely so the avatar and "Edit profile" button
+          are actually tappable — the real header is BEHIND the ScrollView so
+          the sheet's rounded corners tuck over it correctly, but that means
+          the ScrollView's transparent top spacer sits on top of it and
+          swallows taps. opacity: 0 keeps this copy invisible (so it never
+          visually competes with the real header or scrolled content);
+          pointerEvents="box-none" lets taps/drags on its empty padding pass
+          through to the ScrollView beneath so scrolling still works there. */}
       <View
         pointerEvents="box-none"
-        onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26, opacity: 0 }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-          <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
-            <Avatar name={member?.full_name} uri={member?.avatar_url} size={64} />
-            <View
-              style={{
-                position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
-                backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
-                borderWidth: 2, borderColor: semantic.brandDark,
-              }}
-            >
-              {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <vmeta.icon size={12} color="#fff" strokeWidth={2.6} />}
-            </View>
-          </Pressable>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: '#fff' }} numberOfLines={1}>{member?.full_name ?? 'Your account'}</Text>
-            <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
-              {member?.phone ? formatPH(member.phone) : 'No phone on file'}
-            </Text>
-            <Pressable
-              onPress={() => router.push('/(app)/edit-profile' as any)}
-              style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 }}
-            >
-              <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Edit profile</Text>
-              <ChevronRight size={12} color="#fff" />
-            </Pressable>
-          </View>
-        </View>
+        {renderHeaderContent()}
       </View>
     </View>
   );
