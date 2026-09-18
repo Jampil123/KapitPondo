@@ -11,7 +11,7 @@ import { shareCsv } from '@/lib/csv';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { buildTimeline, periodLabel, type PeriodKind } from '@/features/contributions/periods';
+import { buildTimeline, type PeriodKind } from '@/features/contributions/periods';
 import { useMyBalance, useFundSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useLoans } from '@/features/lending/lending.hooks';
 import { useMyPenalties } from '@/features/penalties/penalties.hooks';
@@ -28,6 +28,16 @@ function shortDate(iso: string | null | undefined) {
   if (!iso) return '';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+// Always the calendar month's own initial (J, F, M, ...) regardless of the
+// cycle's frequency — periodLabel() returns different text per frequency
+// (e.g. "Week of ..." for weekly, "Q1 2026" for quarterly), so slicing ITS
+// first character gave "W" or "Q" instead of a month letter for anything
+// other than a monthly cycle.
+const MONTH_INITIAL = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
+function monthInitial(d: Date): string {
+  return MONTH_INITIAL[d.getMonth()];
 }
 
 function SectionHead({ title, aside }: { title: string; aside?: string }) {
@@ -104,13 +114,20 @@ export default function Reports() {
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const myContribRows = contribs.data ?? [];
   const timeline = useMemo(() => (cycle ? buildTimeline(cycle, myContribRows, heads) : []), [cycle, myContribRows, heads]);
+  const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
 
   const posted = timeline.filter((p) => p.kind === 'paid');
   const awaiting = timeline.filter((p) => p.kind === 'review');
   const owed = timeline.filter((p) => p.kind !== 'paid' && p.kind !== 'review');
   const postedTotal = posted.reduce((s, p) => s + p.amount, 0);
   const awaitingTotal = awaiting.reduce((s, p) => s + p.amount, 0);
-  const owedTotal = owed.reduce((s, p) => s + p.amount, 0);
+  // A rejected period still has a row (buildTimeline keeps its own claimed
+  // amount on p.amount so the period-by-period bar can show what was actually
+  // submitted), but "still owed" needs to mean the real cycle rate, not
+  // whatever the rejected/mistaken attempt happened to say — otherwise a
+  // returned proof with a wrong or partial figure shows as owing that same
+  // wrong figure instead of the real amount due for the period.
+  const owedTotal = owed.length * expected;
   const committedTotal = postedTotal + awaitingTotal + owedTotal;
 
   const balAll = useMyBalance(groupId!);
@@ -155,7 +172,7 @@ export default function Reports() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My reports" subtitle={`${group?.name ?? 'Group'} · ${cycle?.name ?? 'No active cycle'}`} />
+      <AppBar title="My reports" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Summary ---------------- */}
@@ -228,7 +245,14 @@ export default function Reports() {
                   top of it (via gap) has no room left for the label and overflows. */}
               <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 70 }}>
                 {timeline.map((p) => {
-                  const heightPct = p.kind === 'paid' || p.kind === 'review' ? 100 : p.kind === 'late' || p.kind === 'rejected' ? 4 : 14;
+                  // Resolved (paid/review) reads tallest. Late/rejected needs
+                  // attention, so it's raised ABOVE plain due/upcoming, not
+                  // buried under it — a returned proof shouldn't look less
+                  // significant on the chart than a period that isn't due yet.
+                  const heightPct =
+                    p.kind === 'paid' || p.kind === 'review' ? 100 :
+                    p.kind === 'late' || p.kind === 'rejected' ? 55 :
+                    p.kind === 'due' ? 30 : 15;
                   return (
                     <View key={p.index} style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
                       <View style={{ width: '100%', height: `${heightPct}%`, minHeight: 4, borderRadius: 3, backgroundColor: KIND_TONE[p.kind] }} />
@@ -240,7 +264,7 @@ export default function Reports() {
                 {timeline.map((p) => (
                   <View key={p.index} style={{ flex: 1, alignItems: 'center' }}>
                     <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
-                      {periodLabel(p.periodStart, cycle.frequency, true).slice(0, 1)}
+                      {monthInitial(p.periodStart)}
                     </Text>
                   </View>
                 ))}

@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Hash, Clock, Coins, Smartphone, Sparkles } from 'lucide-react-native';
+import { Camera, Hash, Clock, Coins } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -13,19 +13,28 @@ import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLoans, useSubmitRepayment } from '@/features/lending/lending.hooks';
-import type { PaymentMethod } from '@/api/lending';
+import { PayLoanGcashSheet } from '@/features/lending/PayLoanGcashSheet';
 
-const METHODS: { key: PaymentMethod; label: string }[] = [
-  { key: 'gcash', label: 'GCash' },
-  { key: 'cash', label: 'Cash' },
-  { key: 'bank_transfer', label: 'Bank' },
-  { key: 'other', label: 'Other' },
-];
+/** Same 'choose' vs 'manual' split as contributions/contribute.tsx — pick a
+ * way to pay first, then either hand off to GCash or record it yourself. */
+type PayRoute = 'choose' | 'manual';
+
+function SectionHead({ title }: { title: string }) {
+  return (
+    <View style={{ marginBottom: 9 }}>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
+    </View>
+  );
+}
 
 export default function Repay() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  // `suggested` comes from the "My loan" page's own expected-monthly-payment
+  // math (loans/index.tsx) — without it, defaulting to the full outstanding
+  // balance made "Make a repayment" suggest paying off the whole loan in one
+  // go instead of this month's actual due amount.
+  const { groupId, suggested } = useLocalSearchParams<{ groupId: string; suggested?: string }>();
   const router = useRouter();
-  const { membership } = useActiveGroup();
+  const { group, membership } = useActiveGroup();
   const loans = useLoans(groupId!, { status: 'active' });
   // listLoans only self-scopes server-side when role === 'member' — filter
   // here so an officer's own Member-tab submission only ever targets THEIR
@@ -33,11 +42,19 @@ export default function Repay() {
   const activeLoan = (loans.data ?? []).find((l) => l.membership_id === membership?.id) ?? null;
   const submit = useSubmitRepayment(groupId!);
 
-  const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('gcash');
+  // Same routing rule as contribute.tsx: GCash is only offered once the
+  // group's Owner has set a treasurer GCash number — otherwise there's
+  // nothing to build the sheet against, so skip straight to manual.
+  const hasTreasurerGcash = !!group?.treasurer_gcash_number;
+  const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
+  const [gcashSheetOpen, setGcashSheetOpen] = useState(false);
+  const [amount, setAmount] = useState(() => (suggested && Number(suggested) > 0 ? suggested : ''));
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
+  const suggestedAmount = suggested && Number(suggested) > 0 ? Number(suggested) : outstanding;
 
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -50,11 +67,11 @@ export default function Repay() {
     if (!activeLoan) return;
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid repayment amount.');
+    if (!proofUri) return Alert.alert('Proof required', 'Attach a photo or screenshot of your payment before submitting.');
     setUploading(true);
     try {
-      let proof_url: string | undefined;
-      if (proofUri) proof_url = await uploadImage('proofs', proofUri, 'repayment');
-      const ok = await submit.run(activeLoan.id, { amount: amt, payment_method: method, external_reference: reference || undefined, proof_url });
+      const proof_url = await uploadImage('proofs', proofUri, 'repayment');
+      const ok = await submit.run(activeLoan.id, { amount: amt, external_reference: reference || undefined, proof_url });
       if (ok !== undefined) {
         Alert.alert('Submitted', 'Your repayment was submitted for confirmation.');
         router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } });
@@ -71,7 +88,7 @@ export default function Repay() {
   if (!loans.loading && !activeLoan) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Repay a Loan" subtitle="Member" />
+        <AppBar title="Payment" subtitle="Member" />
         <View style={[{ margin: 16, backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center', gap: 10 }, shadowToken.card]}>
           <Coins size={26} color={semantic.textMuted} />
           <Text variant="body" color="muted" style={{ textAlign: 'center' }}>You don't have an active loan to repay right now.</Text>
@@ -80,11 +97,9 @@ export default function Repay() {
     );
   }
 
-  const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Repay a Loan" subtitle="Member" />
+      <AppBar title="Payment" subtitle="Member" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brand, marginBottom: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ gap: 3 }}>
@@ -97,66 +112,64 @@ export default function Repay() {
           <Coins size={30} color="rgba(255,255,255,0.85)" />
         </View>
 
-        <Pressable
-          onPress={() => Alert.alert('Coming soon', 'Automatic GCash payments aren\'t available yet — for now, submit your payment details and proof below.')}
-          style={[{
-            flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 14, marginBottom: 18,
-            backgroundColor: semantic.surface, borderWidth: 1.5, borderColor: semantic.brand, borderStyle: 'dashed',
-          }, shadowToken.card]}
-        >
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Smartphone size={20} color={semantic.brandDark} />
-          </View>
-          <View style={{ flex: 1, gap: 1 }}>
-            <Text variant="label" style={{ fontSize: 13.5 }}>Pay with GCash</Text>
-            <Text variant="caption" color="secondary">Automatic — no reference number or proof needed</Text>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: semantic.surfaceAlt, borderRadius: 999, paddingHorizontal: 9, paddingVertical: 4 }}>
-            <Sparkles size={11} color={semantic.brandDark} />
-            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '600', fontSize: 10.5 }}>Soon</Text>
-          </View>
-        </Pressable>
+        {route === 'choose' ? (
+          <>
+            <SectionHead title="How would you like to pay" />
+            <Button
+              label={`Pay ${formatPeso(suggestedAmount)} with GCash`}
+              onPress={() => setGcashSheetOpen(true)}
+            />
+            <Button label="I already paid — record it" variant="ghost" onPress={() => setRoute('manual')} style={{ marginTop: 10 }} />
+            <Text variant="caption" color="muted" style={{ marginTop: 12, lineHeight: 16 }}>
+              {suggestedAmount < outstanding
+                ? `${formatPeso(suggestedAmount)} is this month's expected payment, not the full ${formatPeso(outstanding)} balance — pay more anytime to settle it faster. `
+                : ''}
+              Scan the treasurer's QR to send the money, then upload your receipt — a different officer still confirms it before it posts.
+            </Text>
+          </>
+        ) : (
+          <>
+            <SectionHead title="Proof of payment" />
+            <Pressable onPress={pickProof} style={{ alignItems: 'center', gap: 8, borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 14, paddingVertical: 20, backgroundColor: semantic.surfaceAlt, marginBottom: 16 }}>
+              {proofUri ? (
+                <Image source={{ uri: proofUri }} style={{ width: '92%', height: 150, borderRadius: 10 }} resizeMode="cover" />
+              ) : (
+                <>
+                  <Camera size={24} color={semantic.brandDark} />
+                  <Text variant="bodySmall" color="secondary">Tap to attach a screenshot / photo</Text>
+                </>
+              )}
+            </Pressable>
 
-        <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 2 }}>Or submit manually</Text>
+            <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+            <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 14, marginLeft: 2 }}>
+              Paying less than the full balance is fine — it goes to interest first, then principal.
+            </Text>
 
-        <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-        <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 14, marginLeft: 2 }}>
-          Paying less than the full balance is fine — it goes to interest first, then principal.
-        </Text>
+            <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
 
-        <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 2 }}>Payment method</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 15 }}>
-          {METHODS.map((m) => {
-            const active = method === m.key;
-            return (
-              <Pressable key={m.key} onPress={() => setMethod(m.key)} style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, backgroundColor: active ? semantic.textPrimary : semantic.surfaceAlt }}>
-                <Text variant="label" style={{ fontSize: 12.5, color: active ? '#fff' : semantic.textSecondary }}>{m.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+            <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12, marginVertical: 14 }}>
+              <Clock size={18} color={semantic.brandDark} />
+              <Text variant="caption" color="secondary" style={{ flex: 1 }}>A different officer will confirm your repayment before it posts.</Text>
+            </View>
 
-        <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
-
-        <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 2 }}>Proof of payment</Text>
-        <Pressable onPress={pickProof} style={{ alignItems: 'center', gap: 8, borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 14, paddingVertical: 20, backgroundColor: semantic.surfaceAlt, marginBottom: 16 }}>
-          {proofUri ? (
-            <Image source={{ uri: proofUri }} style={{ width: '92%', height: 150, borderRadius: 10 }} resizeMode="cover" />
-          ) : (
-            <>
-              <Camera size={24} color={semantic.brandDark} />
-              <Text variant="bodySmall" color="secondary">Tap to attach a screenshot / photo</Text>
-            </>
-          )}
-        </Pressable>
-
-        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-          <Clock size={18} color={semantic.brandDark} />
-          <Text variant="caption" color="secondary" style={{ flex: 1 }}>A different officer will confirm your repayment before it posts.</Text>
-        </View>
-
-        <Button label="Submit repayment" onPress={onSubmit} loading={submit.loading || uploading} disabled={!activeLoan} />
+            <Button label="Submit repayment" onPress={onSubmit} loading={submit.loading || uploading} disabled={!activeLoan || !proofUri} />
+            {hasTreasurerGcash ? (
+              <Button label="Choose a different way to pay" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 10 }} />
+            ) : null}
+          </>
+        )}
       </ScrollView>
+
+      {activeLoan ? (
+        <PayLoanGcashSheet
+          visible={gcashSheetOpen}
+          onClose={() => setGcashSheetOpen(false)}
+          loanId={activeLoan.id}
+          suggestedAmount={suggestedAmount}
+          onSubmitted={() => { setGcashSheetOpen(false); router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } }); }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

@@ -10,6 +10,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
+import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLoans, useLoan, useMemberLoanEligibility, useCancelLoan } from '@/features/lending/lending.hooks';
 import type { Loan, LoanPayment } from '@/api/lending';
 
@@ -143,7 +144,8 @@ const ELIGIBILITY_CHECKS: { key: string; passTitle: string; failTitle: string; s
 export default function LoansOverview() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
-  const { group, membership } = useActiveGroup();
+  const { membership } = useActiveGroup();
+  const { cycle } = useActiveCycle(groupId!);
   const allLoans = useLoans(groupId!, {});
   const cancel = useCancelLoan(groupId!);
   const [showPast, setShowPast] = useState(false);
@@ -170,7 +172,8 @@ export default function LoansOverview() {
 
   const loading = allLoans.loading || (!!currentLoan && detail.loading) || (!currentLoan && eligibility.loading);
 
-  const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
+  const go = (route: string, extraParams?: Record<string, string>) =>
+    router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...extraParams } });
 
   async function onCancel() {
     if (!pendingLoan) return;
@@ -185,24 +188,41 @@ export default function LoansOverview() {
     ]);
   }
 
-  const TITLES: Record<PageState, { t: string; s: string }> = {
-    active: { t: 'My loan', s: group?.name ?? 'Group' },
-    pending: { t: 'My loan request', s: group?.name ?? 'Group' },
-    release: { t: 'My loan request', s: group?.name ?? 'Group' },
-    can: { t: 'Borrow from the fund', s: group?.name ?? 'Group' },
-    blocked: { t: 'Borrow from the fund', s: group?.name ?? 'Group' },
+  const TITLES: Record<PageState, string> = {
+    active: 'My loan',
+    pending: 'My loan request',
+    release: 'My loan request',
+    can: 'Loans',
+    blocked: 'Loans',
   };
 
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="My loan" />
+        <AppBar title="Loans" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={semantic.brand} /></View>
       </SafeAreaView>
     );
   }
 
-  const principal = Number(activeLoan?.principal ?? 0);
+  // The cycle can configure a default monthly rate (set at cycle creation,
+  // cycles/configure.tsx) — the Owner can still adjust it per loan at
+  // approval (see api/cycles.ts's own comment on default_interest_rate),
+  // but it's real, already-entered data, so pending/eligible members should
+  // see an actual estimate sourced from it instead of a vague "once the
+  // Owner sets a rate" placeholder.
+  const hasCycleRate = cycle?.default_interest_rate != null;
+  const cycleRatePct = hasCycleRate ? Number(cycle!.default_interest_rate) * 100 : null;
+
+  // TC-040 lets a loan be approved for LESS than requested when fund cash is
+  // short — outstanding_balance is initialized to that approved/disbursed
+  // amount (disburse_loan SQL), not the original request. Using the raw
+  // `principal` (what was requested) as the "repaid" baseline instead of
+  // what was actually lent inflates "repaid"/% complete by the undisbursed
+  // difference — e.g. a ₱10,000 request partially approved at ₱6,000, with
+  // ₱1,820 actually repaid, showed as "₱5,820 repaid (58%)" instead of the
+  // real ₱1,820 (30%).
+  const principal = Number(activeLoan?.approved_principal ?? activeLoan?.principal ?? 0);
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
   const repaidAmount = Math.max(0, principal - outstanding);
   const repaidPct = principal > 0 ? Math.min(100, Math.round((repaidAmount / principal) * 100)) : 0;
@@ -210,9 +230,16 @@ export default function LoansOverview() {
     .filter((p) => p.status === 'approved' || p.status === 'paid')
     .reduce((s, p) => s + Number(p.interest_portion), 0);
 
+  // Same flat-rate convention as the request page and the card below —
+  // "Make a repayment" should suggest what's actually due this month, not
+  // the whole remaining balance.
+  const expectedMonthlyTotal = activeLoan?.term_months && activeLoan?.interest_rate
+    ? principal / activeLoan.term_months + principal * Number(activeLoan.interest_rate)
+    : outstanding;
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title={TITLES[state].t} subtitle={TITLES[state].s} />
+      <AppBar title={TITLES[state]} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Active loan ---------------- */}
@@ -226,6 +253,7 @@ export default function LoansOverview() {
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(outstanding)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18 }}>
                 Borrowed <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(principal)}</Text> on {shortDate(activeLoan.disbursed_at ?? activeLoan.applied_at)}
+                {' '}· {activeLoan.term_months} month{activeLoan.term_months === 1 ? '' : 's'}
                 {activeLoan.interest_rate ? ` · ${(Number(activeLoan.interest_rate) * 100).toFixed(1)}% monthly interest` : ''}
               </Text>
 
@@ -242,13 +270,42 @@ export default function LoansOverview() {
               <Split items={[{ k: 'Principal left', v: formatPeso(outstanding) }, { k: 'Interest paid to date', v: formatPeso(interestToDate) }]} />
             </View>
 
+            {/* Expected monthly payment — same flat-rate convention as the
+                request page (interest = principal × rate each month, not a
+                declining balance), split out over the loan's term so "how
+                much do I owe every month" has an actual answer instead of
+                just a lump "principal left" figure. */}
+            {activeLoan.term_months && activeLoan.interest_rate ? (() => {
+              const rate = Number(activeLoan.interest_rate);
+              const months = activeLoan.term_months;
+              const monthlyPrincipal = principal / months;
+              const monthlyInterest = principal * rate;
+              return (
+                <>
+                  <SectionHead title="Expected monthly payment" />
+                  <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                    {[
+                      ['Principal / month', formatPeso(monthlyPrincipal)],
+                      ['Interest / month', formatPeso(monthlyInterest)],
+                      ['Total / month', formatPeso(monthlyPrincipal + monthlyInterest)],
+                    ].map(([k, v], i, a) => (
+                      <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: i < a.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                        <Text variant="body" color="secondary">{k}</Text>
+                        <Text variant="label">{v}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              );
+            })() : null}
+
             <View style={{ marginTop: 15, backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13 }}>
               <Text variant="caption" color="secondary" style={{ lineHeight: 17 }}>
                 Pay any amount, any time — each repayment goes to interest first, then principal. Submit one with proof for an officer to confirm, or pay an officer directly and they'll record it.
               </Text>
             </View>
 
-            <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} style={{ marginTop: 14 }} />
+            <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay', { suggested: String(Math.min(expectedMonthlyTotal, outstanding)) })} style={{ marginTop: 14 }} />
 
             <SectionHead title="Repayment history" aside={`${payments.length} made`} />
             {payments.length === 0 ? (
@@ -295,7 +352,10 @@ export default function LoansOverview() {
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, marginTop: 15 }, CARD_SHADOW]}>
               <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 18 }}>
                 {pendingLoan.purpose ? `Purpose: ${pendingLoan.purpose}. ` : ''}
-                Estimated principal per month: <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(Number(pendingLoan.principal) / pendingLoan.term_months)}</Text> — interest is added once the Owner sets the rate.
+                Estimated principal per month: <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(Number(pendingLoan.principal) / pendingLoan.term_months)}</Text>
+                {hasCycleRate
+                  ? <> — interest estimated at this cycle's <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{cycleRatePct!.toFixed(2)}%</Text> monthly rate, confirmed by the Owner at approval.</>
+                  : ' — interest is added once the Owner sets the rate.'}
               </Text>
             </View>
 
@@ -360,7 +420,9 @@ export default function LoansOverview() {
             <SectionHead title="Before you request" />
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, CARD_SHADOW]}>
               <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 19 }}>
-                The Owner makes the final decision and sets the interest rate when approving — approval isn't automatic, and the amount may be reduced if the fund needs to keep cash for other members.
+                {hasCycleRate
+                  ? `This cycle's loans use a default interest rate of ${cycleRatePct!.toFixed(2)}% per month, set when the cycle was configured. The Owner confirms it at approval — approval isn't automatic, and the amount may be reduced if the fund needs to keep cash for other members.`
+                  : "The Owner makes the final decision and sets the interest rate when approving — approval isn't automatic, and the amount may be reduced if the fund needs to keep cash for other members."}
               </Text>
             </View>
 

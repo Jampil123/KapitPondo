@@ -18,6 +18,7 @@ export function TreasurerNav() {
         { label: 'Confirm disbursement', icon: Coins, route: 'loans/disburse' },
       ] }}
       more={{ title: 'More', items: [
+        { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
         { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },
         { label: 'Group settings', icon: Smartphone, route: 'group/settings' },
         { label: 'Reversals', icon: SlidersHorizontal, soon: true },

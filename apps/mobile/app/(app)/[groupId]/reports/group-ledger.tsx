@@ -58,32 +58,40 @@ function iconTone(e: LedgerEntry): { bg: string; fg: string; Icon: any } {
   return { bg: semantic.surfaceAlt, fg: semantic.brandDark, Icon: ArrowUpRight };
 }
 
-function Row({ e, mine, balance }: { e: LedgerEntry; mine: boolean; balance: number }) {
+function Row({ e, mine }: { e: LedgerEntry; mine: boolean }) {
   const tone = iconTone(e);
   const credit = e.direction === 'credit';
   const who = e.membership?.members?.full_name ?? (e.entry_type === 'expense' ? 'Group' : null);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, backgroundColor: mine ? semantic.surfaceAlt : 'transparent' }}>
-      <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, backgroundColor: mine ? semantic.surfaceAlt : 'transparent' }}>
+      <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
         <tone.Icon size={16} color={tone.fg} />
       </View>
+      {/* Type and name each get their own line, and nothing here is capped
+          to one line with an ellipsis — this ledger is the group's
+          transparency record, so a long member name or a long "confirmed
+          by" name should wrap instead of hiding behind "...". */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
-          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
-            {TYPE_LABEL[e.entry_type] ?? e.entry_type}{who ? ` · ${who}` : ''}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
+            {TYPE_LABEL[e.entry_type] ?? e.entry_type}
           </Text>
-          {mine ? <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>· you</Text> : null}
+          {mine ? (
+            <View style={{ backgroundColor: semantic.brandDark, paddingHorizontal: 6, paddingVertical: 1.5, borderRadius: 20 }}>
+              <Text style={{ fontSize: 9, fontFamily: 'Poppins_700Bold', color: '#fff' }}>You</Text>
+            </View>
+          ) : null}
         </View>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>
+        {who ? (
+          <Text variant="caption" color="secondary" style={{ marginTop: 2, fontFamily: 'Poppins_600SemiBold' }}>{who}</Text>
+        ) : null}
+        <Text variant="caption" color="muted" style={{ marginTop: 2, lineHeight: 15 }}>
           {shortDate(e.posted_at)}{e.poster?.full_name ? ` · confirmed by ${e.poster.full_name}` : ''}
         </Text>
       </View>
-      <View style={{ alignItems: 'flex-end' }}>
-        <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
-          {credit ? '+' : '−'}{formatPeso(e.amount)}
-        </Text>
-        <Text variant="caption" color="muted" style={{ marginTop: 2, fontSize: 10.5 }}>{formatPeso(balance)}</Text>
-      </View>
+      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary, marginTop: 1 }}>
+        {credit ? '+' : '−'}{formatPeso(e.amount)}
+      </Text>
     </View>
   );
 }
@@ -93,10 +101,22 @@ export default function GroupLedger() {
   const { group, membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
   const fund = useFundSummary(groupId!);
-  const ledger = useFundLedger(groupId!);
+  // Explicit, generous limit — the default server-side cap (300) is fine for
+  // a young group, but this page's own "Net of postings shown" is summed
+  // from exactly what's fetched (see composition below), so once a
+  // long-running group crosses that cap, that total would silently stop
+  // matching "Cash on hand" above it with no indication why. A member
+  // reading a transparency ledger for discrepancies deserves either the
+  // real total or an explicit note that it's partial — never a silent one.
+  // Supabase's PostgREST layer caps any single request at 1000 rows
+  // (supabase/config.toml's db.max_rows) regardless of what's asked for, so
+  // this is the real ceiling — requesting more would just be a silent lie.
+  const LEDGER_FETCH_LIMIT = 1000;
+  const ledger = useFundLedger(groupId!, { limit: LEDGER_FETCH_LIMIT });
   const [filter, setFilter] = useState<Filter>('all');
 
   const entries = ledger.data ?? [];
+  const possiblyTruncated = entries.length >= LEDGER_FETCH_LIMIT;
 
   // Running balance walked backward from the current cash on hand — entries
   // arrive newest-first, so entries[0]'s balance IS available_cash, and each
@@ -152,7 +172,7 @@ export default function GroupLedger() {
     { key: 'all', label: 'All postings' },
     { key: 'in', label: 'Money in' },
     { key: 'out', label: 'Money out' },
-    { key: 'mine', label: 'Mine only' },
+    { key: 'mine', label: 'My entries' },
   ];
 
   return (
@@ -188,6 +208,11 @@ export default function GroupLedger() {
                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Net of postings shown</Text>
                 <Text style={{ marginLeft: 'auto', fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(compositionTotal)}</Text>
               </View>
+              {possiblyTruncated ? (
+                <Text variant="caption" color="muted" style={{ lineHeight: 15 }}>
+                  Showing the most recent {LEDGER_FETCH_LIMIT.toLocaleString()} postings — this group has more, so the breakdown above may not match cash on hand exactly.
+                </Text>
+              ) : null}
             </View>
           ) : null}
         </View>
@@ -239,8 +264,8 @@ export default function GroupLedger() {
                 <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_700Bold' }}>Balance {formatPeso(g.balance)}</Text>
               </View>
               <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-                {g.list.map(({ e, balance }) => (
-                  <Row key={e.id} e={e} mine={e.membership_id === membership?.id} balance={balance} />
+                {g.list.map(({ e }) => (
+                  <Row key={e.id} e={e} mine={e.membership_id === membership?.id} />
                 ))}
               </View>
             </View>

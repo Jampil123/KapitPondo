@@ -248,7 +248,7 @@ export default function ContributionsOverview() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My contributions" subtitle={`${group?.name ?? 'Group'} · ${cycle?.name ?? 'No active cycle'}`} />
+      <AppBar title="My contributions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: nextPayable ? 110 : 40 }}>
 
         {/* ---------------- Summary (transparent, no card) ---------------- */}

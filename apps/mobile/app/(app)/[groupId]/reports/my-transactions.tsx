@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react-native';
@@ -23,6 +23,15 @@ const TYPE_LABEL: Partial<Record<LedgerEntryType, string>> = {
   reversal: 'Reversal',
 };
 
+type Category = 'all' | 'contribution' | 'loan_repayment' | 'loan_disbursement';
+
+const CATEGORIES: { key: Category; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'contribution', label: 'Contributions' },
+  { key: 'loan_repayment', label: 'Loan repayments' },
+  { key: 'loan_disbursement', label: 'Disbursements' },
+];
+
 function shortDate(iso: string) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -44,11 +53,17 @@ function Row({ e }: { e: LedgerEntry }) {
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
       </View>
+      {/* Type and name each get their own line — joined on one truncated line
+          ("Contribution · Some Very Long Name") cut the name off behind an
+          ellipsis; splitting them keeps both fully readable. */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
-          {TYPE_LABEL[e.entry_type] ?? e.entry_type} · {who}
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
+          {TYPE_LABEL[e.entry_type] ?? e.entry_type}
         </Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>
+        <Text variant="caption" color="secondary" style={{ marginTop: 2, fontFamily: 'Poppins_600SemiBold' }} numberOfLines={2}>
+          {who}
+        </Text>
+        <Text variant="caption" color="muted" style={{ marginTop: 2 }} numberOfLines={1}>
           {shortDate(e.posted_at)}{e.description ? ` · ${e.description}` : ''}
         </Text>
       </View>
@@ -68,17 +83,28 @@ export default function MyTransactions() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { member } = useAuth();
   const ledger = useLedger(groupId!, { limit: 500 });
+  const [category, setCategory] = useState<Category>('all');
 
   const mine = useMemo(
     () => (ledger.data ?? []).filter((e) => e.posted_by === member?.id),
     [ledger.data, member?.id],
   );
 
-  const totalPosted = useMemo(() => mine.reduce((s, e) => s + Number(e.amount), 0), [mine]);
+  // A single blended sum across every entry type is misleading — a loan
+  // disbursement is cash LEAVING the fund (debit) while a contribution or
+  // repayment is cash coming IN (credit), so adding them together produces a
+  // number that means nothing. Split by direction instead.
+  const receivedTotal = useMemo(() => mine.filter((e) => e.direction === 'credit').reduce((s, e) => s + Number(e.amount), 0), [mine]);
+  const releasedTotal = useMemo(() => mine.filter((e) => e.direction === 'debit').reduce((s, e) => s + Number(e.amount), 0), [mine]);
+
+  const filtered = useMemo(
+    () => (category === 'all' ? mine : mine.filter((e) => e.entry_type === category)),
+    [mine, category],
+  );
 
   const grouped = useMemo(() => {
     const map = new Map<string, LedgerEntry[]>();
-    for (const e of mine) {
+    for (const e of filtered) {
       const key = monthKey(e.posted_at);
       const list = map.get(key) ?? [];
       list.push(e);
@@ -87,31 +113,52 @@ export default function MyTransactions() {
     return [...map.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([key, list]) => ({ label: monthLabel(list[0].posted_at), list }));
-  }, [mine]);
+  }, [filtered]);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="My Transactions" subtitle="Treasurer" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, shadowToken.card]}>
-          <Text variant="overline" color="muted">Total you've posted</Text>
           {ledger.loading ? (
-            <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginTop: 8 }} />
+            <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
           ) : (
-            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(totalPosted)}</Text>
+            <View style={{ flexDirection: 'row' }}>
+              <View style={{ flex: 1 }}>
+                <Text variant="overline" color="muted">Received</Text>
+                <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: intent.success.text, marginTop: 4 }}>{formatPeso(receivedTotal)}</Text>
+                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>Contributions + repayments</Text>
+              </View>
+              <View style={{ flex: 1, paddingLeft: 14, borderLeftWidth: 1, borderColor: semantic.border }}>
+                <Text variant="overline" color="muted">Released</Text>
+                <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(releasedTotal)}</Text>
+                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>Loans disbursed</Text>
+              </View>
+            </View>
           )}
-          <Text variant="caption" color="secondary" style={{ marginTop: 6 }}>{mine.length} entr{mine.length === 1 ? 'y' : 'ies'} you confirmed</Text>
+          <Text variant="caption" color="secondary" style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border }}>
+            {mine.length} entr{mine.length === 1 ? 'y' : 'ies'} you personally confirmed and pushed to the ledger — not what other officers recorded or approved.
+          </Text>
         </View>
 
-        <Text variant="caption" color="muted" style={{ lineHeight: 16, marginTop: 12 }}>
-          Every posting you personally confirmed and pushed to the ledger — not what other officers recorded or approved.
-        </Text>
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+          {CATEGORIES.map((c) => {
+            const active = category === c.key;
+            return (
+              <Pressable key={c.key} onPress={() => setCategory(c.key)} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>
+                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{c.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
 
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : grouped.length === 0 ? (
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, shadowToken.card]}>
-            <Text variant="body" color="muted">You haven't confirmed any postings yet.</Text>
+            <Text variant="body" color="muted">
+              {category === 'all' ? "You haven't confirmed any postings yet." : 'Nothing in this category yet.'}
+            </Text>
           </View>
         ) : (
           grouped.map((g) => (

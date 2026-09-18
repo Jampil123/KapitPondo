@@ -46,8 +46,8 @@ export interface Loan {
   approver: { full_name: string } | null;
   /** Who actually released the funds — a separate step/actor from approval (see disburseLoan()). Null until disbursed. */
   disburser: { full_name: string } | null;
-  /** Who the loan actually belongs to (the borrower) — not who approved it. */
-  membership: { member_id: string; members: { full_name: string } | null } | null;
+  /** Who the loan actually belongs to (the borrower) — not who approved it. `role` tells whether the borrower is the Owner (no-self-approval rule — the Treasurer decides those instead). */
+  membership: { member_id: string; role: string; members: { full_name: string } | null } | null;
 }
 
 export interface LoanEligibility {
@@ -215,6 +215,12 @@ export function submitRepayment(groupId: string, loanId: string, input: SubmitRe
 export async function listRepayments(groupId: string, status?: LoanPaymentStatus) {
   const res = await api.get<{ repayments: LoanPayment[] }>(`/api/groups/${groupId}/repayments`, status ? { status } : undefined);
   return res.repayments;
+}
+
+/** GET — is this reference number already attached to another repayment in this group? Mirrors api/contributions.ts's checkDuplicateReference. */
+export async function checkDuplicateExternalReference(groupId: string, ref: string) {
+  const res = await api.get<{ duplicate: boolean }>(`/api/groups/${groupId}/repayments/check-reference`, { ref });
+  return res.duplicate;
 }
 
 /** POST — confirm a submitted repayment claim (a DIFFERENT officer than whoever submitted it). Posts the ledger credit and updates the loan balance. */

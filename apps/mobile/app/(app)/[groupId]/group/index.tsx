@@ -106,7 +106,7 @@ export default function GroupOverview() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title={group?.name ?? 'Group'} subtitle={cycle?.name ?? 'No active cycle'} />
+      <AppBar title="Group & Officers" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Fund composition ---------------- */}

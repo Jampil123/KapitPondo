@@ -132,14 +132,20 @@ router.get(
   }
 );
 
-// The lending decision — Owner only (not Treasurer). Sets the interest rate
-// and, per TC-040, may approve LESS than the requested principal
-// (approved_principal) when liquidity can't cover the full amount instead of
-// only being able to block/reject. Does not disburse — see /disburse below.
+// The lending decision — Owner only, EXCEPT when the Owner themselves is the
+// borrower: an Owner can't approve their own loan (see the self-check
+// below), and until now nothing else was allowed through this route at all,
+// so an Owner's own request could never be decided by anyone. When the
+// loan's borrower is the Owner, the Treasurer is authorized to decide it
+// instead — for every other borrower, this stays Owner-only exactly as
+// before. Sets the interest rate and, per TC-040, may approve LESS than the
+// requested principal (approved_principal) when liquidity can't cover the
+// full amount instead of only being able to block/reject. Does not
+// disburse — see /disburse below.
 router.post(
   '/groups/:groupId/loans/:id/approve',
   requireAuth,
-  requireGroupRole(['owner']),
+  requireGroupRole(['owner', 'treasurer']),
   async (req, res, next) => {
     try {
       const { interest_rate, approved_principal } = req.body;
@@ -151,7 +157,14 @@ router.post(
         return res.status(400).json({ error: 'Loan does not belong to this group' });
       }
       if (loan.membership_id === req.membership.id) {
-        return res.status(403).json({ error: 'You cannot approve your own loan' });
+        return res.status(403).json({ error: 'You cannot approve your own loan — the Treasurer reviews it instead' });
+      }
+      const borrowerIsOwner = loan.membership?.role === 'owner';
+      if (borrowerIsOwner && req.membership.role !== 'treasurer') {
+        return res.status(403).json({ error: 'The Owner cannot approve their own loan — the Treasurer reviews it instead' });
+      }
+      if (!borrowerIsOwner && req.membership.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the Owner can decide on this loan' });
       }
       const approvedLoan = await service.approveLoan({
         loanId: req.params.id,
@@ -175,11 +188,14 @@ router.post(
   }
 );
 
-// Disburse an already-approved loan — Treasurer or Owner (TC-019).
+// Disburse an already-approved loan — Treasurer only. The Owner decides
+// (approves); the Treasurer is the one who actually releases fund cash —
+// keeping those two steps on different people, same segregation-of-duties
+// shape as everywhere else in this module.
 router.post(
   '/groups/:groupId/loans/:id/disburse',
   requireAuth,
-  requireGroupRole(['treasurer', 'owner']),
+  requireGroupRole(['treasurer']),
   async (req, res, next) => {
     try {
       const loan = await service.getLoan(req.params.id);
@@ -205,13 +221,28 @@ router.post(
   }
 );
 
-// Reject a pending loan, with a reason (owner only — mirrors the approve gate)
+// Reject a pending loan, with a reason — mirrors the approve gate: Owner
+// only, except the Treasurer decides when the Owner is the borrower.
 router.post(
   '/groups/:groupId/loans/:id/reject',
   requireAuth,
-  requireGroupRole(['owner']),
+  requireGroupRole(['owner', 'treasurer']),
   async (req, res, next) => {
     try {
+      const target = await service.getLoan(req.params.id);
+      if (target.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Loan does not belong to this group' });
+      }
+      if (target.membership_id === req.membership.id) {
+        return res.status(403).json({ error: 'You cannot reject your own loan — the Treasurer reviews it instead' });
+      }
+      const borrowerIsOwner = target.membership?.role === 'owner';
+      if (borrowerIsOwner && req.membership.role !== 'treasurer') {
+        return res.status(403).json({ error: 'The Owner cannot decide on their own loan — the Treasurer reviews it instead' });
+      }
+      if (!borrowerIsOwner && req.membership.role !== 'owner') {
+        return res.status(403).json({ error: 'Only the Owner can decide on this loan' });
+      }
       const loan = await service.rejectLoan(req.params.id, req.body?.reason);
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
@@ -305,6 +336,26 @@ router.get(
         status: req.query.status,
       });
       res.json({ repayments });
+    } catch (err) { next(err); }
+  }
+);
+
+// Member-safe pre-submit check: is this reference number already attached to
+// another repayment in this group? Mirrors contributions' identical
+// /contributions/check-reference route — used by the loan-repayment GCash
+// sheet's OCR validation the same way contributions' does.
+router.get(
+  '/groups/:groupId/repayments/check-reference',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const ref = req.query.ref;
+      if (!ref || typeof ref !== 'string') {
+        return res.status(400).json({ error: 'ref is required' });
+      }
+      const duplicate = await service.hasDuplicateExternalReference(req.params.groupId, ref);
+      res.json({ duplicate });
     } catch (err) { next(err); }
   }
 );

@@ -20,7 +20,7 @@ const SOFT_SHADOW = {
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
-import { useLoans, useLoanEligibility, useRejectLoan, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
@@ -154,9 +154,38 @@ function DecisionHead({ type, name, sub, amount }: { type: string; name: string;
 
 function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { groupId: string; loan: Loan; onPress: () => void; onChanged: () => void; moreCount?: number }) {
   const { data: elig, loading } = useLoanEligibility(groupId, loan.id);
+  const { cycle } = useActiveCycle(groupId);
+  const approveLoan = useApproveLoan(groupId);
   const reject = useRejectLoan(groupId);
   const [rejecting, setRejecting] = useState(false);
   const name = loan.membership?.members?.full_name ?? 'Member';
+  // This cycle has a configured default rate (cycles/configure.tsx), so
+  // there's nothing left to type in — approving here directly, instead of
+  // sending the Owner to the full Loan Decisions page just to re-enter a
+  // rate that's already known, removes a redundant extra screen.
+  const hasCycleRate = cycle?.default_interest_rate != null;
+
+  async function doApprove(rate: number, amount: number) {
+    const ok = await approveLoan.run(loan.id, rate, String(amount));
+    if (ok !== undefined) onChanged();
+    else if (approveLoan.error) Alert.alert('Could not approve', approveLoan.error.message);
+  }
+
+  function onApprove() {
+    if (!hasCycleRate) return onPress(); // no default rate to approve with — needs the full review screen
+    const rate = Number(cycle!.default_interest_rate);
+    const available = Number(elig?.available_cash ?? 0);
+    const amount = available > 0 && available < Number(loan.principal) ? available : Number(loan.principal);
+    const partial = amount < Number(loan.principal);
+    Alert.alert(
+      'Approve this loan?',
+      `${formatPeso(amount)}${partial ? ` of the ${formatPeso(loan.principal)} requested (fund cash is short)` : ''} at ${(rate * 100).toFixed(2)}% monthly, ${loan.term_months} month${loan.term_months === 1 ? '' : 's'}, for ${name}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Approve', onPress: () => doApprove(rate, amount) },
+      ],
+    );
+  }
 
   async function onRejectConfirm(reason: string) {
     setRejecting(false);
@@ -180,15 +209,17 @@ function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { gr
           ) : elig ? (
             <>
               <Chip tone={elig.eligible ? 'pass' : 'fail'}>{elig.eligible ? 'Eligible' : 'Not eligible'}</Chip>
-              <Chip tone={Number(elig.available_cash) >= Number(loan.principal) ? 'pass' : 'fail'}>Liquidity {formatPeso(elig.available_cash)}</Chip>
               {elig.reasons.map((r) => <Chip key={r} tone="warn">{r}</Chip>)}
             </>
           ) : null}
         </View>
-        {/* Lower-right of the card, flexed alongside the eligibility chips above. Approving needs an interest rate, so it opens the full review screen rather than acting inline. */}
+        {/* Lower-right of the card, flexed alongside the eligibility chips above.
+            Approves directly using this cycle's default rate when one is
+            configured; only falls back to the full review screen when there's
+            no rate to approve with (nothing to default to). */}
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <QuickAction label="Reject" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={reject.loading} />
-          <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onPress} />
+          <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onApprove} disabled={approveLoan.loading} />
         </View>
       </View>
       {moreCount ? (
@@ -484,7 +515,7 @@ type DecisionItem =
   | { kind: 'treasurer-repayment'; date: string; payment: LoanPayment };
 
 function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const { group } = useActiveGroup();
+  const { group, membership } = useActiveGroup();
   const { refresh: refreshGroups } = useGroups();
   const pendingLoans = useLoans(groupId, { status: 'pending' });
   const pendingMembersQ = useQuery(
@@ -498,7 +529,10 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
   const pendingRepaymentsQ = useRepayments(groupId, 'submitted');
   const membersRosterQ = useQuery(() => listMembers(groupId), [groupId]);
 
-  const loans = pendingLoans.data ?? [];
+  // The Owner can't decide on their own loan (no-self-approval rule — the
+  // Treasurer reviews those instead, see lending.routes.js), so it must not
+  // appear in the Owner's own "needs your decision" queue.
+  const loans = (pendingLoans.data ?? []).filter((l) => l.membership_id !== membership?.id);
   const members = (Array.isArray(pendingMembersQ.data) ? pendingMembersQ.data : []).map(normalizePendingMember);
   const penalties = pendingPenalties.data ?? [];
   const gcashPending = group?.treasurer_gcash_status === 'pending';

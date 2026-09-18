@@ -67,8 +67,13 @@ export default function RecordRepayment() {
   const loansById = useMemo(() => new Map(allLoans.map((l) => [l.id, l])), [allLoans]);
 
   const rows = repayments.data ?? [];
-  const pendingRows = rows.filter((p) => p.status === 'submitted' && !p.is_walk_in);
-  const awaitingRows = rows.filter((p) => p.status === 'submitted' && p.is_walk_in && p.recorded_by === member?.id);
+  // Split purely on "did I record this," not is_walk_in — a Treasurer's own
+  // GENUINE self-submission (is_walk_in: false, since they really are the
+  // borrower) used to only get excluded from "Pending" when it was a
+  // walk-in they recorded for someone else, so their own repayment claim
+  // sat in their own Pending queue with no way for them to confirm it.
+  const pendingRows = rows.filter((p) => p.status === 'submitted' && p.recorded_by !== member?.id);
+  const awaitingRows = rows.filter((p) => p.status === 'submitted' && p.recorded_by === member?.id);
   const returnedRows = rows.filter((p) => p.status === 'rejected' && p.recorded_by === member?.id);
 
   // Per-loan status tag for the "Record new" list — is there already a claim
@@ -238,7 +243,11 @@ export default function RecordRepayment() {
                 <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                   {activeLoans.map((l) => {
                     const outstanding = Number(l.outstanding_balance ?? 0);
-                    const principal = Number(l.principal ?? 0);
+                    // TC-040: outstanding_balance is seeded from approved_principal
+                    // (what was actually disbursed) at disbursement, not the raw
+                    // requested principal — using the requested amount here understates
+                    // progress on any loan that was partially approved.
+                    const principal = Number(l.approved_principal ?? l.principal ?? 0);
                     const pct = principal ? Math.max(0, Math.min(100, Math.round((1 - outstanding / principal) * 100))) : 0;
                     const awaitingP = awaitingByLoan.get(l.id);
                     const pendingP = pendingByLoan.get(l.id);
