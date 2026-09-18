@@ -15,7 +15,6 @@ const loginActivityRoutes = require('./modules/loginActivity/loginActivity.route
 const feedbackRoutes = require('./modules/feedback/feedback.routes');
 const recordsRoutes = require('./modules/records/records.routes');
 const profileUpdateRequestsRoutes = require('./modules/profileUpdateRequests/profileUpdateRequests.routes');
-const expensesRoutes = require('./modules/expenses/expenses.routes');
 const distributionsRoutes = require('./modules/distribution/distributions.routes');
 const monitoringRoutes = require('./modules/monitoring/monitoring.routes');
 const reportsRoutes = require('./modules/reporting/reporting.routes');
@@ -25,7 +24,7 @@ const chatRoutes = require('./modules/chat/chat.routes');
 const announcementsRoutes = require('./modules/announcements/announcements.routes');
 const directMessagesRoutes = require('./modules/directMessages/directMessages.routes');
 const paymentsRoutes = require('./modules/payments/payments.routes'); // PayMongo checkout + webhook — see payments.routes.js
-const aiRoutes = require('./modules/ai/ai.routes'); // Gemini: proof-photo field extraction + support chatbot
+const aiRoutes = require('./modules/ai/ai.routes'); // Gemini: proof-photo field extraction
 const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: plain OCR text extraction
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
@@ -54,7 +53,6 @@ app.use('/api', contributionsRoutes);
 app.use('/api', groupsRoutes);
 app.use('/api', cyclesRoutes);
 app.use('/api', lendingRoutes);
-app.use('/api', expensesRoutes);
 app.use('/api', membershipsRoutes);
 app.use('/api', identityRoutes);
 app.use('/api', addressRoutes);

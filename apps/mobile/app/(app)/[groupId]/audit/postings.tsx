@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Modal, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpRight, Minus, Receipt, X, Check, ImageOff } from 'lucide-react-native';
+import { ArrowUpRight, Receipt, X, Check, ImageOff } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -11,10 +11,9 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useExpenses, useApproveExpense, useRejectExpense } from '@/features/expenses/expenses.hooks';
 
 type Tab = 'pending' | 'approved' | 'flagged';
-type Kind = 'contribution' | 'expense';
+type Kind = 'contribution';
 type Posting = { id: string; kind: Kind; who: string; date: string; amount: string | number; proof: boolean; proofUrl: string | null; status: string };
 
 function cName(c: any) { return c.member_name ?? c.members?.full_name ?? c.member?.full_name ?? 'Member'; }
@@ -26,29 +25,21 @@ export default function ReviewPostings() {
   const [zoom, setZoom] = useState<string | null>(null);
 
   const contribs = useContributions(groupId!, {});
-  const expenses = useExpenses(groupId!, {});
   const approveC = useApproveContribution(groupId!);
   const rejectC = useRejectContribution(groupId!);
-  const approveE = useApproveExpense(groupId!);
-  const rejectE = useRejectExpense(groupId!);
 
   const postings = useMemo<Posting[]>(() => {
-    const c: Posting[] = (contribs.data ?? []).map((x: any) => ({ id: x.id, kind: 'contribution', who: cName(x), date: x.created_at ?? x.submitted_at ?? '', amount: x.amount, proof: !!x.proof_url, proofUrl: x.proof_signed_url ?? null, status: x.status }));
-    const e: Posting[] = (expenses.data ?? []).map((x: any) => ({ id: x.id, kind: 'expense', who: x.description ?? 'Expense', date: x.created_at ?? '', amount: x.amount, proof: !!x.proof_url, proofUrl: x.proof_signed_url ?? null, status: x.status }));
-    return [...c, ...e];
-  }, [contribs.data, expenses.data]);
+    return (contribs.data ?? []).map((x: any) => ({ id: x.id, kind: 'contribution' as const, who: cName(x), date: x.created_at ?? x.submitted_at ?? '', amount: x.amount, proof: !!x.proof_url, proofUrl: x.proof_signed_url ?? null, status: x.status }));
+  }, [contribs.data]);
 
   const pendingCount = postings.filter((p) => p.status === 'submitted').length;
   const list = postings.filter((p) => (tab === 'pending' ? p.status === 'submitted' : tab === 'approved' ? p.status === 'approved' : false));
-  const loading = contribs.loading || expenses.loading;
+  const loading = contribs.loading;
 
-  function refetch() { contribs.refetch(); expenses.refetch(); }
+  function refetch() { contribs.refetch(); }
 
   async function decide(p: Posting, approve: boolean) {
-    const run = p.kind === 'contribution'
-      ? (approve ? approveC.run(p.id) : rejectC.run(p.id))
-      : (approve ? approveE.run(p.id) : rejectE.run(p.id));
-    const ok = await run;
+    const ok = await (approve ? approveC.run(p.id) : rejectC.run(p.id));
     setTarget(null);
     if (ok !== undefined) refetch();
     else Alert.alert('Action failed', 'Could not update this posting.');
@@ -80,7 +71,7 @@ export default function ReviewPostings() {
             {list.map((p) => (
               <Pressable key={`${p.kind}-${p.id}`} onPress={() => p.status === 'submitted' && setTarget(p)} style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 13, flexDirection: 'row', alignItems: 'center', gap: 12 }, shadowToken.card]}>
                 <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  {p.kind === 'contribution' ? <ArrowUpRight size={19} color="#3E8E66" /> : <Minus size={19} color="#C25C5E" />}
+                  <ArrowUpRight size={19} color="#3E8E66" />
                 </View>
                 <View style={{ flex: 1, gap: 3 }}>
                   <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{p.who}</Text>
@@ -93,7 +84,7 @@ export default function ReviewPostings() {
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 3 }}>
                   <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(p.amount)}</Text>
-                  {p.status === 'approved' ? <StatusBadge entity="expense" value="approved" /> : null}
+                  {p.status === 'approved' ? <StatusBadge entity="contribution" value="approved" /> : null}
                 </View>
               </Pressable>
             ))}
@@ -135,7 +126,7 @@ export default function ReviewPostings() {
 
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <Button label="Reject" variant="ghost" onPress={() => target && decide(target, false)} style={{ flex: 1 }} />
-              <Button label="Approve" leading={<Check size={16} color="#fff" />} onPress={() => target && decide(target, true)} loading={approveC.loading || approveE.loading} style={{ flex: 1 }} />
+              <Button label="Approve" leading={<Check size={16} color="#fff" />} onPress={() => target && decide(target, true)} loading={approveC.loading} style={{ flex: 1 }} />
             </View>
           </View>
         </View>

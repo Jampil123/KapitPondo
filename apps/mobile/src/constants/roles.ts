@@ -20,9 +20,6 @@ export type Capability =
   | 'approveLoan'              // approve+disburse fused; SPEC §1.2 wanted Owner-authorize vs Treasurer-disburse
   | 'recordRepayment'
   | 'viewLiquidity'
-  // expenses
-  | 'recordExpense'
-  | 'approveExpense'
   // ledger
   | 'reverseLedger'
   | 'postAdjustment'
@@ -56,9 +53,6 @@ export const CAPABILITY_ROLES: Record<Capability, GroupRole[]> = {
   approveLoan: ['owner', 'treasurer'],
   recordRepayment: ['owner', 'treasurer'],
   viewLiquidity: ['owner', 'treasurer', 'auditor'],
-
-  recordExpense: ['owner', 'treasurer'],
-  approveExpense: ['owner', 'auditor'],
 
   reverseLedger: ['owner'],
   postAdjustment: ['owner', 'treasurer'],

@@ -49,7 +49,7 @@ export default function JoinGroup() {
             Your request to join was sent to the group owner. You'll get access once it's approved — the group shows as <Text variant="label" color="secondary">Pending</Text> until then.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
-            <Button label="Back to My Groups" onPress={() => router.replace('/(app)/groups')} />
+            <Button label="Back to Home" onPress={() => router.replace('/(app)/groups')} />
           </View>
         </View>
       </SafeAreaView>

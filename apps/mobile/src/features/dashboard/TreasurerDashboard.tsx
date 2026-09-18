@@ -1,44 +1,13 @@
-/**
- * features/dashboard/TreasurerDashboard.tsx
- * ----------------------------------------------------------------------------
- * The Treasurer's dashboard home, restructured per the reference
- * (kapitpondo-treasurer-dashboard): cash reconciled as one statement instead
- * of three loose boxes, real work lists instead of bare counters ("confirm"
- * relabeled to "review"/"release" — those are recording acts, not the
- * Auditor's approval), who still owes on the dashboard, and a 4-tile Record
- * grid. Every value below comes from hooks that already existed — this pass
- * changes how they're grouped and rendered, not what's fetched.
- *
- * Two sections from the reference were dropped rather than faked:
- *   - "Needs correction" (Auditor returns a posted entry) — no such workflow
- *     exists; a contribution/expense either gets approved (posts once,
- *     immediately) or rejected before posting. There's no post-posting return.
- *   - "Awaiting Auditor" (recorded-but-not-yet-verified) — confirmed absent
- *     by AuditorDashboard.tsx itself ("no discrepancy/flag API", "reversal is
- *     owner-only; no auditor-verify step"). A single officer's approval posts
- *     straight to the ledger; there's no second sign-off stage to show here.
- * Year-End Preview and Confirm Disbursement left the grid (matching the
- * reference) but stay reachable — Confirm Disbursement folds into "To
- * release" below, and Year-End Preview is already in TreasurerNav's "More"
- * sheet, so nothing lost.
- *
- * Data status:
- *   cash reconciliation   → useSummary          ✅ real (received/paid rows sum to available_cash)
- *   proofs to review      → useContributions/useRepayments ✅ real (same 'submitted' lists the old counters used)
- *   member names on them  → useMemberBalances    ✅ real (Contribution has no membership name of its own)
- *   to release            → useLoans (approved)  ✅ real (Loan already carries the borrower's name)
- *   this month's collection→ useContributions    ✅ real (same per-member dedup CollectionBlock uses on the Owner dashboard)
- *   recent transactions   → useLedger            ✅ real (unchanged)
- */
 import { useMemo, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowUpRight, Repeat, Minus, BarChart3, ArrowDownRight, CheckCircle2,
+  ArrowUpRight, Repeat, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useAuth } from '@/context/AuthContext';
 import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
@@ -148,9 +117,10 @@ function EmptyRow({ title, sub }: { title: string; sub: string }) {
 }
 
 /* ---------------- Proofs to review ---------------- */
-type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean };
+type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean; kind: 'contribution' | 'repayment' };
 
 function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: Record<string, string>) => void }) {
+  const { member } = useAuth();
   const pendingContribs = useContributions(groupId, { status: 'submitted' });
   const pendingRepayments = useRepayments(groupId, 'submitted');
   const balances = useMemberBalances(groupId);
@@ -161,26 +131,36 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
     return m;
   }, [balances.data]);
 
-  const contribRows: ProofRow[] = (pendingContribs.data ?? []).map((c: Contribution) => ({
-    id: c.id,
-    name: nameById.get(c.membership_id) ?? 'Member',
-    sub: `Contribution · sent ${shortDate(c.created_at)}`,
-    amount: Number(c.amount),
-    late: c.is_late,
-  }));
-  const repayRows: ProofRow[] = (pendingRepayments.data ?? []).map((p) => ({
-    id: p.id,
-    name: p.loans?.membership?.members?.full_name ?? 'Member',
-    sub: `Loan repayment · sent ${shortDate(p.created_at)}`,
-    amount: Number(p.amount),
-  }));
+  // Excludes what I recorded myself — the Treasurer can't verify their own
+  // contribution/repayment (the Owner does, see "Needs your decision" on
+  // their dashboard), so it's not actionable here and would just be
+  // confusing to show as something to review.
+  const contribRows: ProofRow[] = (pendingContribs.data ?? [])
+    .filter((c: Contribution) => c.recorded_by !== member?.id)
+    .map((c: Contribution) => ({
+      id: c.id,
+      name: nameById.get(c.membership_id) ?? 'Member',
+      sub: `Contribution · sent ${shortDate(c.created_at)}`,
+      amount: Number(c.amount),
+      late: c.is_late,
+      kind: 'contribution',
+    }));
+  const repayRows: ProofRow[] = (pendingRepayments.data ?? [])
+    .filter((p) => p.recorded_by !== member?.id)
+    .map((p) => ({
+      id: p.id,
+      name: p.loans?.membership?.members?.full_name ?? 'Member',
+      sub: `Loan repayment · sent ${shortDate(p.created_at)}`,
+      amount: Number(p.amount),
+      kind: 'repayment',
+    }));
 
   const rows = [...contribRows, ...repayRows];
   const loading = pendingContribs.loading || pendingRepayments.loading || balances.loading;
 
   return (
     <>
-      <SectionHead title="Proofs to review" aside={loading ? undefined : rows.length > 0 ? `${rows.length} waiting` : 'All clear'} tone={rows.length > 0 ? 'hot' : 'calm'} />
+      <SectionHead title="Payment Verifications" aside={loading ? undefined : rows.length > 0 ? `${rows.length} waiting` : 'All clear'} tone={rows.length > 0 ? 'hot' : 'calm'} />
 
       {loading ? (
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.card]}>
@@ -199,7 +179,15 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
                   {r.late ? <Tag tone="late">Late</Tag> : null}
                 </View>
               </View>
-              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.amount)}</Text>
+              <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.amount)}</Text>
+                <Pressable
+                  onPress={() => go(r.kind === 'repayment' ? 'loans/record-repayment' : 'contributions/confirm', r.kind === 'repayment' ? undefined : { tab: 'pending' })}
+                  style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 }}
+                >
+                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Review</Text>
+                </Pressable>
+              </View>
             </View>
           ))}
           <Pressable onPress={() => go('contributions/confirm', { tab: 'pending' })} style={{ padding: 13, alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
@@ -362,7 +350,7 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
 const ACTIONS: { label: string; icon: any; route: string; params?: Record<string, string> }[] = [
   { label: 'Contribution', icon: ArrowUpRight, route: 'contributions/confirm', params: { tab: 'record' } },
   { label: 'Repayment', icon: Repeat, route: 'loans/record-repayment' },
-  { label: 'Expense', icon: Minus, route: 'expenses/record' },
+  { label: 'Transactions', icon: ScrollText, route: 'reports/my-transactions' },
   { label: 'Reports', icon: BarChart3, route: 'reports/group-ledger' },
 ];
 
@@ -426,7 +414,7 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
       <CollectionBlock groupId={groupId} go={go} />
 
-      <SectionHead title="Record" />
+      <SectionHead title="Records" />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {ACTIONS.map((a) => (
           <Pressable

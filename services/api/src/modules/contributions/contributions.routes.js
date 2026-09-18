@@ -134,7 +134,7 @@ router.post('/groups/:groupId/contributions/:id/approve',
       });
       res.json({ message: 'Contribution approved', ledgerEntry });
     } catch (err) {
-      if (err.message && err.message.includes('must be confirmed by the Auditor')) {
+      if (err.message && err.message.includes('must be confirmed by')) {
         return res.status(403).json({ error: err.message });
       }
       next(err);

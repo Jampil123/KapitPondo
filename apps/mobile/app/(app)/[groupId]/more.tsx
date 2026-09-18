@@ -17,7 +17,7 @@ const MEMBER_ITEMS = [
   { icon: Layers, label: 'Heads', key: 'heads', section: 'My records' },
   { icon: BadgeCheck, label: 'My Standing', key: 'standing', section: 'My records' },
   { icon: Users, label: 'Group & Officers', key: 'group', section: 'Group' },
-  { icon: PiggyBank, label: 'Fund Ledger', key: 'reports/group-ledger', section: 'Group' },
+  { icon: PiggyBank, label: 'Group Ledger', key: 'reports/group-ledger', section: 'Group' },
   { icon: UserCircle, label: 'Profile & Settings', key: 'profile', section: 'Support' },
   { icon: LifeBuoy, label: 'Help', key: 'help', section: 'Support', soon: true },
 ];

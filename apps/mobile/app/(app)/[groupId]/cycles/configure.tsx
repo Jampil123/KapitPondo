@@ -7,7 +7,6 @@ import { Calendar } from 'lucide-react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Segmented';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
@@ -15,7 +14,7 @@ import { toAmountString, formatPeso } from '@/lib/money';
 import { useQuery } from '@/hooks/useApi';
 import { listOfficers } from '@/api/groups';
 import { listDistributions } from '@/api/distribution';
-import { selectActiveCycle, type Frequency } from '@/api/cycles';
+import { selectActiveCycle } from '@/api/cycles';
 import { useCycles, useCycleProgress, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
 import { useFundSummary } from '@/features/reporting/reporting.hooks';
 
@@ -40,13 +39,16 @@ function formatDisplayDate(value: string): string {
   const d = parseIsoDate(value);
   return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
 }
+function countMonthlyPeriods(startValue: string, endValue: string): number {
+  const start = parseIsoDate(startValue);
+  const end = parseIsoDate(endValue);
+  if (!start || !end || end <= start) return 0;
+  const months = (end.getFullYear() - start.getFullYear()) * 12
+    + (end.getMonth() - start.getMonth())
+    + (end.getDate() >= start.getDate() ? 1 : 0);
+  return Math.max(1, months);
+}
 
-/**
- * Tap-to-open date field backed by @expo/ui's native DateTimePicker (already
- * an app dependency, works via the dev client — see expo-dev-client). Web has
- * no native picker to back it (@expo/ui's web build is a no-op there), so it
- * falls back to the original typed YYYY-MM-DD input.
- */
 function DateInput({ label, value, onChange, minimumDate }: {
   label: string;
   value: string;
@@ -160,7 +162,6 @@ export default function ConfigureCycle() {
   const [amount, setAmount] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const [freq, setFreq] = useState<Frequency>('monthly');
   const [penalty, setPenalty] = useState('');
   const [dueDay, setDueDay] = useState('');
   const [interestRate, setInterestRate] = useState('');
@@ -171,6 +172,8 @@ export default function ConfigureCycle() {
   const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
   const penNum = toAmountString(penalty) ? Number(toAmountString(penalty)) : 0;
   const perPeriod = amtNum * heads;
+  const periods = start.trim() && end.trim() ? countMonthlyPeriods(start, end) : 0;
+  const cycleTotal = periods > 0 ? perPeriod * periods : 0;
   const missing = [
     { label: 'name', ok: !!name.trim() },
     { label: 'start date', ok: !!start.trim() },
@@ -180,7 +183,6 @@ export default function ConfigureCycle() {
   function onCopySettings() {
     if (!latestCycle) return;
     setAmount(String(latestCycle.contribution_amount ?? ''));
-    setFreq(latestCycle.frequency === 'weekly' ? 'weekly' : 'monthly');
     setPenalty(latestCycle.penalty_amount ? String(latestCycle.penalty_amount) : '');
     setDueDay(latestCycle.contribution_due_day ? String(latestCycle.contribution_due_day) : '');
     setInterestRate(latestCycle.default_interest_rate ? String(Number(latestCycle.default_interest_rate) * 100) : '');
@@ -205,7 +207,7 @@ export default function ConfigureCycle() {
       contribution_amount: toAmountString(amount)!,
       start_date: start.trim(),
       end_date: end.trim() || undefined,
-      frequency: freq,
+      frequency: 'monthly',
       penalty_amount: penalty ? toAmountString(penalty) ?? undefined : undefined,
       penalty_type: 'fixed',
       contribution_due_day: day,
@@ -362,14 +364,9 @@ export default function ConfigureCycle() {
                 <View style={{ flex: 1 }}><DateInput label="Start date" value={start} onChange={setStart} /></View>
                 <View style={{ flex: 1 }}><DateInput label="End date" value={end} onChange={setEnd} minimumDate={parseIsoDate(start) ?? undefined} /></View>
               </View>
-              <View style={{ padding: 13 }}>
-                <Label>Frequency</Label>
-                <Segmented<Frequency>
-                  options={[{ key: 'monthly', label: 'Monthly' }, { key: 'weekly', label: 'Weekly' }]}
-                  value={freq}
-                  onChange={setFreq}
-                />
-              </View>
+              <Text variant="caption" color="secondary" style={{ paddingHorizontal: 13, paddingBottom: 13, lineHeight: 16 }}>
+                Contributions are collected monthly.
+              </Text>
             </View>
           </View>
 
@@ -442,8 +439,13 @@ export default function ConfigureCycle() {
           {/* ---------------- Live preview ---------------- */}
           <View style={{ backgroundColor: semantic.dashCard, borderRadius: 20, padding: 18 }}>
             <Text variant="overline" style={{ color: '#88A9B6', marginBottom: 6 }}>What this means for the group</Text>
-            <Row label="Collected each period" value={amtNum ? formatPeso(perPeriod) : '—'} />
-            <Row label="Expected fund size at cycle end" value={amtNum ? formatPeso(perPeriod) : '—'} big />
+            <Row label="Expected per period (all heads pay)" value={amtNum ? formatPeso(perPeriod) : '—'} />
+            <Row label="Projected total for the cycle" value={amtNum && cycleTotal ? formatPeso(cycleTotal) : '—'} big />
+            <Text style={{ fontSize: 11, lineHeight: 15, color: '#7FA0AC', marginTop: 2 }}>
+              {amtNum && cycleTotal
+                ? `${periods} monthly contribution${periods === 1 ? '' : 's'}, start to end date`
+                : 'Add an end date to project the cycle total'}
+            </Text>
 
             <View style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.09)', gap: 8 }}>
               <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#9BBAC7' }}>
@@ -455,7 +457,7 @@ export default function ConfigureCycle() {
                 <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{penNum ? formatPeso(penNum) : '—'}</Text> in penalty.
               </Text>
               <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#9BBAC7' }}>
-                Based on today&apos;s <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{memberCount} member{memberCount === 1 ? '' : 's'} · {heads} head{heads === 1 ? '' : 's'}</Text>.
+                Based on today&apos;s <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{memberCount} member{memberCount === 1 ? '' : 's'} · {heads} head{heads === 1 ? '' : 's'}</Text> — these are targets, not guarantees. Members who miss or partially pay will collect less.
               </Text>
             </View>
           </View>

@@ -1,56 +1,35 @@
-/**
- * features/dashboard/OwnerDashboard.tsx
- * ----------------------------------------------------------------------------
- * The Owner's dashboard home, restructured per the "decision queue" reference
- * (kapitpondo-owner-dashboard): fund composition instead of a lone cash
- * figure, real pending items instead of bare counters, an actual collection
- * progress block, a "cycle closing" card that only appears once a year-end
- * distribution needs the Owner's finalization, a manage grid, and a real
- * group-wide activity feed. Every value below comes from hooks that already
- * existed — this pass changes how they're grouped and rendered, not what's
- * fetched. Approve/Reject stay on their existing dedicated screens (approving
- * a loan needs an interest-rate input, rejecting can take a reason) — cards
- * here are tap-to-review previews, not new inline mutations.
- *
- * Data status:
- *   fund composition        → useSummary            ✅ real (cash + disbursed-repaid = on loan)
- *   cycle status pill       → useActiveCycle         ✅ real
- *   decision queue rows     → useLoans/listPendingMembers/usePenalties ✅ real (same lists the old counters used)
- *   loan eligibility chips  → useLoanEligibility      ✅ real (per-loan, already-existing endpoint)
- *   this period's collection→ useContributions        ✅ real (cycle-scoped rows, officer sees all members)
- *   cycle closing gates     → useDistributions        ✅ real (status only — no preparer/verifier name or date is tracked server-side, so gates 2 & 3 don't claim one)
- *   recent activity         → useLedger               ✅ real (same hook TreasurerDashboard already uses)
- */
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, Alert, Image, Modal, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useQuery } from '@/hooks/useApi';
+import { useQuery, useAction } from '@/hooks/useApi';
 import {
-  Users, Coins, AlertTriangle, SlidersHorizontal, UserCheck, CalendarClock,
-  Wallet, ScrollText, Receipt, CheckCircle2, Check, ArrowUpRight, ArrowDownRight,
+  Users, AlertTriangle, SlidersHorizontal, CalendarClock,
+  Wallet, ScrollText, Receipt, CheckCircle2, Check, X, ArrowUpRight, ArrowDownRight,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent } from '@/theme/colors';
 
-// A softer, lower-contrast shadow than the shared shadowToken.card (opacity
-// 0.07) — barely-there lift instead of a visibly dark edge under each card.
+
 const SOFT_SHADOW = {
   shadowColor: '#2A3E4B', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
   elevation: 1, boxShadow: '0px 2px 10px rgba(42,62,75,0.04)',
 } as const;
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
-import { useLoans, useLoanEligibility } from '@/features/lending/lending.hooks';
+import { useLoans, useLoanEligibility, useRejectLoan, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { usePenalties } from '@/features/penalties/penalties.hooks';
+import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
-import { useContributions } from '@/features/contributions/contributions.hooks';
+import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
 import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
-import { listPendingMembers, listMembers } from '@/api/groups';
-import type { Loan } from '@/api/lending';
+import { listPendingMembers, listMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
+import type { Loan, LoanPayment } from '@/api/lending';
 import type { Penalty } from '@/api/penalties';
+import type { Contribution } from '@/api/contributions';
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -135,6 +114,23 @@ function Chip({ tone, children }: { tone: 'pass' | 'fail' | 'warn'; children: Re
   );
 }
 
+// Small, corner-anchored — a quick decision without leaving the dashboard.
+// Sits at the bottom-right of each DecisionCard, below the rest of its content.
+function QuickAction({ label, tone, Icon, onPress, disabled }: { label: string; tone: 'ok' | 'danger'; Icon: any; onPress: () => void; disabled?: boolean }) {
+  const t = tone === 'ok' ? intent.success : intent.danger;
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      hitSlop={6}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.soft, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 11, opacity: disabled ? 0.5 : 1 }}
+    >
+      <Icon size={12} color={t.text} strokeWidth={2.6} />
+      <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
+    </Pressable>
+  );
+}
+
 function DecisionCard({ children, onPress }: { children: ReactNode; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, SOFT_SHADOW]}>
@@ -156,9 +152,19 @@ function DecisionHead({ type, name, sub, amount }: { type: string; name: string;
   );
 }
 
-function LoanDecisionCard({ groupId, loan, onPress }: { groupId: string; loan: Loan; onPress: () => void }) {
+function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { groupId: string; loan: Loan; onPress: () => void; onChanged: () => void; moreCount?: number }) {
   const { data: elig, loading } = useLoanEligibility(groupId, loan.id);
+  const reject = useRejectLoan(groupId);
+  const [rejecting, setRejecting] = useState(false);
   const name = loan.membership?.members?.full_name ?? 'Member';
+
+  async function onRejectConfirm(reason: string) {
+    setRejecting(false);
+    const ok = await reject.run(loan.id, reason || undefined);
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not reject', reject.error.message);
+  }
+
   return (
     <DecisionCard onPress={onPress}>
       <DecisionHead
@@ -167,18 +173,39 @@ function LoanDecisionCard({ groupId, loan, onPress }: { groupId: string; loan: L
         sub={`Requested ${shortDate(loan.applied_at)} · ${loan.term_months} months${loan.purpose ? ` · ${loan.purpose}` : ''}`}
         amount={formatPeso(loan.principal)}
       />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {loading ? (
-          <ActivityIndicator size="small" color={semantic.brand} />
-        ) : elig ? (
-          <>
-            <Chip tone={elig.eligible ? 'pass' : 'fail'}>{elig.eligible ? 'Eligible' : 'Not eligible'}</Chip>
-            <Chip tone={Number(elig.available_cash) >= Number(loan.principal) ? 'pass' : 'fail'}>Liquidity {formatPeso(elig.available_cash)}</Chip>
-            {elig.reasons.map((r) => <Chip key={r} tone="warn">{r}</Chip>)}
-          </>
-        ) : null}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          {loading ? (
+            <ActivityIndicator size="small" color={semantic.brand} />
+          ) : elig ? (
+            <>
+              <Chip tone={elig.eligible ? 'pass' : 'fail'}>{elig.eligible ? 'Eligible' : 'Not eligible'}</Chip>
+              <Chip tone={Number(elig.available_cash) >= Number(loan.principal) ? 'pass' : 'fail'}>Liquidity {formatPeso(elig.available_cash)}</Chip>
+              {elig.reasons.map((r) => <Chip key={r} tone="warn">{r}</Chip>)}
+            </>
+          ) : null}
+        </View>
+        {/* Lower-right of the card, flexed alongside the eligibility chips above. Approving needs an interest rate, so it opens the full review screen rather than acting inline. */}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <QuickAction label="Reject" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={reject.loading} />
+          <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onPress} />
+        </View>
       </View>
-      <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_600SemiBold' }}>Tap to review →</Text>
+      {moreCount ? (
+        <Pressable onPress={onPress} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
+          <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_700Bold', textAlign: 'center' }}>
+            View all {moreCount} loan request{moreCount === 1 ? '' : 's'}
+          </Text>
+        </Pressable>
+      ) : null}
+      <ReasonPrompt
+        visible={rejecting}
+        title={`Reject ${name}'s loan request?`}
+        confirmLabel="Reject"
+        destructive
+        onCancel={() => setRejecting(false)}
+        onConfirm={onRejectConfirm}
+      />
     </DecisionCard>
   );
 }
@@ -193,26 +220,241 @@ function normalizePendingMember(item: any): PendingMemberRow {
   };
 }
 
-function MembershipDecisionCard({ row, onPress }: { row: PendingMemberRow; onPress: () => void }) {
+function MembershipDecisionCard({ groupId, row, onPress, onChanged, moreCount }: { groupId: string; row: PendingMemberRow; onPress: () => void; onChanged: () => void; moreCount?: number }) {
+  const approve = useAction((id: string) => approveMember(groupId, id));
+  const reject = useAction(({ id, reason }: { id: string; reason: string }) => rejectMember(groupId, id, reason || undefined));
+  const [rejecting, setRejecting] = useState(false);
+  const busy = approve.loading || reject.loading;
+
+  async function onApprove() {
+    const ok = await approve.run(row.id);
+    if (ok !== undefined) onChanged();
+    else if (approve.error) Alert.alert('Could not approve', approve.error.message);
+  }
+  async function onRejectConfirm(reason: string) {
+    setRejecting(false);
+    const ok = await reject.run({ id: row.id, reason });
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not reject', reject.error.message);
+  }
+
   return (
     <DecisionCard onPress={onPress}>
       <DecisionHead type="Membership request" name={row.name} sub={row.date ? `Joined ${shortDate(row.date)}` : 'Awaiting review'} />
-      {row.verification ? (
-        <View style={{ flexDirection: 'row' }}>
-          <StatusBadge entity="verification" value={row.verification} />
+      {/* Verification banner and actions flexed on the same row — actions still land lower-right. */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        {row.verification ? <StatusBadge entity="verification" value={row.verification} /> : <View />}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <QuickAction label="Reject" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
+          <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onApprove} disabled={busy} />
         </View>
+      </View>
+      {moreCount ? (
+        <Pressable onPress={onPress} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
+          <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_700Bold', textAlign: 'center' }}>
+            View all {moreCount} membership request{moreCount === 1 ? '' : 's'}
+          </Text>
+        </Pressable>
       ) : null}
-      <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_600SemiBold' }}>Tap to review →</Text>
+      <ReasonPrompt
+        visible={rejecting}
+        title={`Reject ${row.name}?`}
+        confirmLabel="Reject"
+        destructive
+        onCancel={() => setRejecting(false)}
+        onConfirm={onRejectConfirm}
+      />
     </DecisionCard>
   );
 }
 
-function PenaltyDecisionCard({ penalty, onPress }: { penalty: Penalty; onPress: () => void }) {
+function PenaltyDecisionCard({ groupId, penalty, onPress, onChanged, moreCount }: { groupId: string; penalty: Penalty; onPress: () => void; onChanged: () => void; moreCount?: number }) {
+  const waive = useWaivePenalty(groupId);
+  const [waiving, setWaiving] = useState(false);
   const name = penalty.membership?.members?.full_name ?? 'Member';
+
+  async function onWaiveConfirm(reason: string) {
+    setWaiving(false);
+    const ok = await waive.run(penalty.id, reason);
+    if (ok !== undefined) onChanged();
+    else if (waive.error) Alert.alert('Could not waive', waive.error.message);
+  }
+
   return (
     <DecisionCard onPress={onPress}>
       <DecisionHead type="Penalty review" name={name} sub={`${penalty.reason} · applied ${shortDate(penalty.created_at)}`} amount={formatPeso(penalty.amount)} />
-      <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_600SemiBold' }}>Tap to review →</Text>
+      {/* Penalties only support "waive" — there's no separate approve/confirm step. */}
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+        <QuickAction label="Waive" tone="danger" Icon={X} onPress={() => setWaiving(true)} disabled={waive.loading} />
+      </View>
+      {moreCount ? (
+        <Pressable onPress={onPress} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
+          <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_700Bold', textAlign: 'center' }}>
+            View all {moreCount} penalt{moreCount === 1 ? 'y' : 'ies'} to review
+          </Text>
+        </Pressable>
+      ) : null}
+      <ReasonPrompt
+        visible={waiving}
+        title={`Waive ${name}'s penalty?`}
+        confirmLabel="Waive"
+        destructive
+        onCancel={() => setWaiving(false)}
+        onConfirm={onWaiveConfirm}
+      />
+    </DecisionCard>
+  );
+}
+
+function GcashDecisionCard({ groupId, submittedAt, onPress, onChanged }: { groupId: string; submittedAt: string | null; onPress: () => void; onChanged: () => void }) {
+  const officers = useQuery(() => listOfficers(groupId), [groupId]);
+  const treasurerName = officers.data?.officers.find((o) => o.role === 'treasurer')?.full_name ?? 'The Treasurer';
+  const approve = useAction(() => approveGcashProposal(groupId));
+  const reject = useAction((reason: string) => rejectGcashProposal(groupId, reason));
+  const [rejecting, setRejecting] = useState(false);
+  const busy = approve.loading || reject.loading;
+
+  async function onApprove() {
+    const ok = await approve.run();
+    if (ok !== undefined) onChanged();
+    else if (approve.error) Alert.alert('Could not approve', approve.error.message);
+  }
+  async function onRejectConfirm(reason: string) {
+    setRejecting(false);
+    if (!reason.trim()) return Alert.alert('Reason required', 'Explain what needs to be corrected before resubmission.');
+    const ok = await reject.run(reason.trim());
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not reject', reject.error.message);
+  }
+
+  return (
+    <DecisionCard onPress={onPress}>
+      <DecisionHead type="GCash proposal" name={treasurerName} sub={`Submitted ${shortDate(submittedAt)}`} />
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+        <QuickAction label="Reject" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
+        <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onApprove} disabled={busy} />
+      </View>
+      <ReasonPrompt
+        visible={rejecting}
+        title="Reject this GCash proposal?"
+        confirmLabel="Reject"
+        destructive
+        onCancel={() => setRejecting(false)}
+        onConfirm={onRejectConfirm}
+      />
+    </DecisionCard>
+  );
+}
+
+function TreasurerContributionCard({ groupId, contribution, onChanged }: { groupId: string; contribution: Contribution; onChanged: () => void }) {
+  const approve = useApproveContribution(groupId);
+  const reject = useRejectContribution(groupId);
+  const [rejecting, setRejecting] = useState(false);
+  const [viewingProof, setViewingProof] = useState(false);
+  const busy = approve.loading || reject.loading;
+  const name = contribution.memberships?.members?.full_name ?? 'Member';
+
+  async function onApprove() {
+    const ok = await approve.run(contribution.id);
+    if (ok !== undefined) onChanged();
+    else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
+  }
+  async function onRejectConfirm(reason: string) {
+    setRejecting(false);
+    const ok = await reject.run(contribution.id, reason || undefined);
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not return', reject.error.message);
+  }
+
+  return (
+    <DecisionCard onPress={() => {}}>
+      <DecisionHead
+        type="Contribution — Treasurer-recorded"
+        name={name}
+        sub={`Recorded by the Treasurer · sent ${shortDate(contribution.created_at)}`}
+        amount={formatPeso(contribution.amount)}
+      />
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {contribution.proof_signed_url ? (
+          <Pressable onPress={() => setViewingProof(true)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
+            <Image source={{ uri: contribution.proof_signed_url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+            <Receipt size={16} color={semantic.textMuted} />
+          </View>
+        )}
+        <View style={{ flex: 1 }} />
+        <QuickAction label="Return" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
+        <QuickAction label="Confirm" tone="ok" Icon={Check} onPress={onApprove} disabled={busy} />
+      </View>
+      <ReasonPrompt
+        visible={rejecting}
+        title={`Return ${name}'s contribution?`}
+        confirmLabel="Return"
+        destructive
+        onCancel={() => setRejecting(false)}
+        onConfirm={onRejectConfirm}
+      />
+      <Modal visible={viewingProof} transparent animationType="fade" onRequestClose={() => setViewingProof(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewingProof(false)}>
+          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Text variant="label">{name}</Text>
+                <Text variant="caption" color="secondary">{formatPeso(contribution.amount)}</Text>
+              </View>
+              <Pressable onPress={() => setViewingProof(false)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
+            </View>
+            {contribution.proof_signed_url ? (
+              <Image source={{ uri: contribution.proof_signed_url }} style={{ width: '100%', height: 360 }} resizeMode="contain" />
+            ) : null}
+          </View>
+        </Pressable>
+      </Modal>
+    </DecisionCard>
+  );
+}
+
+function TreasurerRepaymentCard({ groupId, payment, onPress, onChanged }: { groupId: string; payment: LoanPayment; onPress: () => void; onChanged: () => void }) {
+  const confirm = useConfirmRepayment(groupId);
+  const reject = useRejectRepayment(groupId);
+  const [rejecting, setRejecting] = useState(false);
+  const busy = confirm.loading || reject.loading;
+  const name = payment.loans?.membership?.members?.full_name ?? 'Member';
+
+  async function onConfirmPress() {
+    const ok = await confirm.run(payment.id);
+    if (ok !== undefined) onChanged();
+    else if (confirm.error) Alert.alert('Could not confirm', confirm.error.message);
+  }
+  async function onRejectConfirm(reason: string) {
+    setRejecting(false);
+    const ok = await reject.run(payment.id, reason || undefined);
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not return', reject.error.message);
+  }
+
+  return (
+    <DecisionCard onPress={onPress}>
+      <DecisionHead
+        type="Loan repayment — Treasurer-recorded"
+        name={name}
+        sub={`Recorded by the Treasurer · sent ${shortDate(payment.created_at)}`}
+        amount={formatPeso(payment.amount)}
+      />
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
+        <QuickAction label="Return" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
+        <QuickAction label="Confirm" tone="ok" Icon={Check} onPress={onConfirmPress} disabled={busy} />
+      </View>
+      <ReasonPrompt
+        visible={rejecting}
+        title={`Return ${name}'s repayment?`}
+        confirmLabel="Return"
+        destructive
+        onCancel={() => setRejecting(false)}
+        onConfirm={onRejectConfirm}
+      />
     </DecisionCard>
   );
 }
@@ -233,30 +475,17 @@ function EmptyQueue({ decidedCount }: { decidedCount: number }) {
   );
 }
 
-/* ---------------- Action-required stat tile (kept — the "see all of X" surface) ---------------- */
-type Tone = 'accent' | 'warn' | 'danger';
-const TONE: Record<Tone, { bg: string; fg: string; dot: string }> = {
-  accent: { bg: '#EAF2F6', fg: '#5E8497', dot: '#7FA6B8' },
-  warn: { bg: '#F8EFDA', fg: '#A87C2C', dot: '#A87C2C' },
-  danger: { bg: '#F7E5E5', fg: '#C25C5E', dot: '#C25C5E' },
-};
-function StatTile({ icon: Icon, count, label, tone, onPress }: { icon: any; count: number; label: string; tone: Tone; onPress: () => void }) {
-  const t = TONE[tone];
-  return (
-    <Pressable onPress={onPress} style={[{ flex: 1, backgroundColor: semantic.surface, borderRadius: 16, padding: 13 }, SOFT_SHADOW]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-        <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: t.bg, alignItems: 'center', justifyContent: 'center' }}>
-          <Icon size={19} color={t.fg} strokeWidth={1.8} />
-        </View>
-        {count > 0 ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: t.dot }} /> : null}
-      </View>
-      <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, lineHeight: 28 }}>{count}</Text>
-      <Text variant="caption" color="secondary" style={{ marginTop: 3, fontSize: 11 }}>{label}</Text>
-    </Pressable>
-  );
-}
+type DecisionItem =
+  | { kind: 'loan'; date: string; loan: Loan }
+  | { kind: 'member'; date: string; row: PendingMemberRow }
+  | { kind: 'penalty'; date: string; penalty: Penalty }
+  | { kind: 'gcash'; date: string }
+  | { kind: 'treasurer-contribution'; date: string; contribution: Contribution }
+  | { kind: 'treasurer-repayment'; date: string; payment: LoanPayment };
 
 function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => void }) {
+  const { group } = useActiveGroup();
+  const { refresh: refreshGroups } = useGroups();
   const pendingLoans = useLoans(groupId, { status: 'pending' });
   const pendingMembersQ = useQuery(
     () => listPendingMembers(groupId),
@@ -265,17 +494,47 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
   );
   const pendingPenalties = usePenalties(groupId, 'pending');
   const decidedPenalties = usePenalties(groupId, 'waived');
+  const pendingContribsQ = useContributions(groupId, { status: 'submitted' });
+  const pendingRepaymentsQ = useRepayments(groupId, 'submitted');
+  const membersRosterQ = useQuery(() => listMembers(groupId), [groupId]);
 
   const loans = pendingLoans.data ?? [];
   const members = (Array.isArray(pendingMembersQ.data) ? pendingMembersQ.data : []).map(normalizePendingMember);
   const penalties = pendingPenalties.data ?? [];
-  const total = loans.length + members.length + penalties.length;
+  const gcashPending = group?.treasurer_gcash_status === 'pending';
+  const roleByMemberId = useMemo(() => new Map((membersRosterQ.data ?? []).map((m) => [m.member_id, m.role])), [membersRosterQ.data]);
+  const treasurerContribs = (pendingContribsQ.data ?? []).filter((c) => c.recorded_by && roleByMemberId.get(c.recorded_by) === 'treasurer');
+  const treasurerRepayments = (pendingRepaymentsQ.data ?? []).filter((p) => p.recorded_by && roleByMemberId.get(p.recorded_by) === 'treasurer');
+  const total = loans.length + members.length + penalties.length + (gcashPending ? 1 : 0) + treasurerContribs.length + treasurerRepayments.length;
 
-  const loading = pendingLoans.loading || pendingMembersQ.loading || pendingPenalties.loading;
+  const loading = pendingLoans.loading || pendingMembersQ.loading || pendingPenalties.loading || pendingContribsQ.loading || pendingRepaymentsQ.loading;
+
+  function onChanged() {
+    pendingLoans.refetch();
+    pendingMembersQ.refetch();
+    pendingPenalties.refetch();
+    pendingContribsQ.refetch();
+    pendingRepaymentsQ.refetch();
+    refreshGroups();
+  }
+
+  const items: DecisionItem[] = useMemo(() => {
+    const list: DecisionItem[] = [
+      ...loans.map((loan) => ({ kind: 'loan' as const, date: loan.applied_at, loan })),
+      ...members.map((row) => ({ kind: 'member' as const, date: row.date ?? new Date(0).toISOString(), row })),
+      ...penalties.map((penalty) => ({ kind: 'penalty' as const, date: penalty.created_at, penalty })),
+      ...(gcashPending ? [{ kind: 'gcash' as const, date: group?.treasurer_gcash_submitted_at ?? new Date(0).toISOString() }] : []),
+      ...treasurerContribs.map((contribution) => ({ kind: 'treasurer-contribution' as const, date: contribution.created_at, contribution })),
+      ...treasurerRepayments.map((payment) => ({ kind: 'treasurer-repayment' as const, date: payment.created_at, payment })),
+    ];
+    return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [loans, members, penalties, gcashPending, group?.treasurer_gcash_submitted_at, treasurerContribs, treasurerRepayments]);
+
+  const visible = items.slice(0, 2);
 
   return (
     <>
-      <SectionHead title="Needs your decision" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} hot={total > 0} />
+      <SectionHead title="Pending Actions" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} hot={total > 0} />
 
       {loading ? (
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, SOFT_SHADOW]}>
@@ -285,21 +544,31 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
         <EmptyQueue decidedCount={decidedPenalties.data?.length ?? 0} />
       ) : (
         <View>
-          {loans.slice(0, 2).map((loan) => (
-            <LoanDecisionCard key={loan.id} groupId={groupId} loan={loan} onPress={() => go('loans/decisions')} />
-          ))}
-          {members.slice(0, 2).map((row) => (
-            <MembershipDecisionCard key={row.id} row={row} onPress={() => go('members/approvals')} />
-          ))}
-          {penalties.slice(0, 1).map((p) => (
-            <PenaltyDecisionCard key={p.id} penalty={p} onPress={() => go('penalties')} />
-          ))}
-
-          <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
-            <StatTile icon={UserCheck} count={members.length} label="Membership requests" tone="accent" onPress={() => go('members/approvals')} />
-            <StatTile icon={Coins} count={loans.length} label="Loan decisions" tone="warn" onPress={() => go('loans/decisions')} />
-            <StatTile icon={AlertTriangle} count={penalties.length} label="Penalties to review" tone="danger" onPress={() => go('penalties')} />
-          </View>
+          {visible.map((item, i) => {
+            const isLast = i === visible.length - 1;
+            if (item.kind === 'loan') {
+              const visibleOfKind = visible.filter((v) => v.kind === 'loan').length;
+              const moreCount = isLast && loans.length > visibleOfKind ? loans.length : undefined;
+              return <LoanDecisionCard key={`loan-${item.loan.id}`} groupId={groupId} loan={item.loan} onPress={() => go('loans/decisions')} onChanged={onChanged} moreCount={moreCount} />;
+            }
+            if (item.kind === 'member') {
+              const visibleOfKind = visible.filter((v) => v.kind === 'member').length;
+              const moreCount = isLast && members.length > visibleOfKind ? members.length : undefined;
+              return <MembershipDecisionCard key={`member-${item.row.id}`} groupId={groupId} row={item.row} onPress={() => go('members/approvals')} onChanged={onChanged} moreCount={moreCount} />;
+            }
+            if (item.kind === 'gcash') {
+              return <GcashDecisionCard key="gcash-proposal" groupId={groupId} submittedAt={group?.treasurer_gcash_submitted_at ?? null} onPress={() => go('group/settings')} onChanged={onChanged} />;
+            }
+            if (item.kind === 'treasurer-contribution') {
+              return <TreasurerContributionCard key={`treasurer-contrib-${item.contribution.id}`} groupId={groupId} contribution={item.contribution} onChanged={onChanged} />;
+            }
+            if (item.kind === 'treasurer-repayment') {
+              return <TreasurerRepaymentCard key={`treasurer-repay-${item.payment.id}`} groupId={groupId} payment={item.payment} onPress={() => go('loans/record-repayment')} onChanged={onChanged} />;
+            }
+            const visibleOfKind = visible.filter((v) => v.kind === 'penalty').length;
+            const moreCount = isLast && penalties.length > visibleOfKind ? penalties.length : undefined;
+            return <PenaltyDecisionCard key={`penalty-${item.penalty.id}`} groupId={groupId} penalty={item.penalty} onPress={() => go('penalties')} onChanged={onChanged} moreCount={moreCount} />;
+          })}
         </View>
       )}
     </>
@@ -475,7 +744,6 @@ const PRIMARY_ACTIONS: { label: string; icon: any; key: string }[] = [
 const ALL_ACTIONS: { label: string; icon: any; key: string }[] = [
   ...PRIMARY_ACTIONS,
   { label: 'Year-End Distribution', icon: CalendarClock, key: 'distribution/year-end' },
-  { label: 'Expenses', icon: Receipt, key: 'expenses/record' },
 ];
 
 /**

@@ -61,7 +61,6 @@ export default function RecordRepayment() {
   const repayments = useRepayments(groupId!);
   const confirmAction = useConfirmRepayment(groupId!);
   const rejectAction = useRejectRepayment(groupId!);
-
   const allLoans = loans.data ?? [];
   const activeLoans = allLoans.filter((l) => l.status === 'active' || l.status === 'approved');
   const settledLoans = allLoans.filter((l) => l.status === 'paid');
@@ -135,7 +134,7 @@ export default function RecordRepayment() {
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
-            { key: 'awaiting', label: 'Awaiting Auditor', count: awaitingRows.length },
+            { key: 'awaiting', label: 'Awaiting confirmation', count: awaitingRows.length },
             { key: 'returned', label: 'Returned', count: returnedRows.length, hot: returnedRows.length > 0 },
           ]}
           value={tab}
@@ -227,7 +226,7 @@ export default function RecordRepayment() {
                 <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
               </View>
               <Text variant="caption" style={{ flex: 1, color: intent.info.text, lineHeight: 16 }}>
-                For repayments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. The Auditor still confirms it before it posts.
+                For repayments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. Another officer still confirms it before it posts — the Owner, if you're the Treasurer.
               </Text>
             </View>
 
@@ -250,7 +249,7 @@ export default function RecordRepayment() {
                           <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{loanName(l)}</Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                             <Text variant="caption" color="secondary">{formatPeso(outstanding)} left</Text>
-                            {pendingP ? <Tag label="Awaiting your review" tone="review" /> : awaitingP ? <Tag label="Awaiting Auditor" tone="settle" /> : null}
+                            {pendingP ? <Tag label="Awaiting your review" tone="review" /> : awaitingP ? <Tag label="Awaiting confirmation" tone="settle" /> : null}
                           </View>
                           <View style={{ height: 5, borderRadius: 3, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 8 }}>
                             <View style={{ width: `${pct}%`, height: '100%', backgroundColor: intent.success.base, borderRadius: 3 }} />
@@ -289,14 +288,14 @@ export default function RecordRepayment() {
           </View>
         )}
 
-        {/* ================= AWAITING AUDITOR ================= */}
+        {/* ================= AWAITING CONFIRMATION ================= */}
         {tab === 'awaiting' && (
           <View style={{ marginTop: 16 }}>
             {repayments.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} /> :
             awaitingRows.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
                 <Text variant="h3" style={{ fontSize: 16 }}>Nothing waiting</Text>
-                <Text variant="body" color="secondary">Walk-ins you record show up here until the Auditor confirms them.</Text>
+                <Text variant="body" color="secondary">Walk-ins you record show up here until another officer confirms them.</Text>
               </View>
             ) : (
               <View style={{ backgroundColor: intent.info.soft, borderRadius: 16, overflow: 'hidden' }}>
@@ -313,7 +312,7 @@ export default function RecordRepayment() {
                   </View>
                 ))}
                 <Text variant="caption" style={{ padding: 13, paddingTop: 10, color: intent.info.text, opacity: 0.8, lineHeight: 16 }}>
-                  The Auditor confirms these before the loan balance changes. Members still see the amount outstanding as before.
+                  A Treasurer-recorded repayment needs the Owner to confirm it; anything else just needs another officer. Members still see the amount outstanding as before.
                 </Text>
               </View>
             )}

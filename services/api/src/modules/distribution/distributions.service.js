@@ -107,8 +107,63 @@ async function cancelPreview(distributionId) {
   return data;
 }
 
-// Set how many heads a membership carries (owner action)
-async function setHeads({ membershipId, heads }) {
+// Advances `d` in place by one period, per the cycle's cadence — same
+// stepping as apps/mobile's periods.ts stepPeriod().
+function stepPeriod(d, frequency) {
+  if (frequency === 'weekly') d.setDate(d.getDate() + 7);
+  else if (frequency === 'biweekly') d.setDate(d.getDate() + 14);
+  else if (frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
+  else d.setMonth(d.getMonth() + 1);
+}
+
+// The nearest due date at or after `today` — the current period's, if it
+// hasn't passed, otherwise the next one. Recurs every period for the life of
+// the cycle — same logic as apps/mobile's periods.ts nearestDueDate().
+function nearestDueDate(cycle, today) {
+  if (cycle.frequency === 'monthly' && cycle.contribution_due_day) {
+    const start = new Date(cycle.start_date);
+    const candidate = new Date(start.getFullYear(), start.getMonth(), cycle.contribution_due_day);
+    while (candidate < today) candidate.setMonth(candidate.getMonth() + 1);
+    return candidate;
+  }
+  const candidate = new Date(cycle.start_date);
+  while (candidate < today) stepPeriod(candidate, cycle.frequency);
+  return candidate;
+}
+
+// Self-service: a member adjusts their own head count. Free to change before
+// the active cycle's next due date is close — only locked in the week
+// leading up to it, once the cycle has actually started (contributions get
+// tracked against heads from then on). No active cycle yet, or one that
+// hasn't started, means nothing to lock against, so it's freely editable.
+async function setHeads({ groupId, membershipId, heads }) {
+  const { data: cycle, error: cErr } = await supabase
+    .from('cycles')
+    .select('start_date, contribution_due_day, frequency')
+    .eq('group_id', groupId)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (cErr) throw cErr;
+
+  if (cycle) {
+    const now = new Date();
+    // Date-only comparison — these are civil dates with no time-of-day
+    // meaning, so "due today" must still count as in-window.
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const started = today >= new Date(cycle.start_date);
+    if (started) {
+      const due = nearestDueDate(cycle, today);
+      const windowStart = new Date(due);
+      windowStart.setDate(windowStart.getDate() - 7);
+      if (today < windowStart || today > due) {
+        throw Object.assign(
+          new Error("Heads can only be changed in the week before a due date."),
+          { status: 409 },
+        );
+      }
+    }
+  }
+
   const { data: before } = await supabase
     .from('memberships').select('heads').eq('id', membershipId).maybeSingle();
 

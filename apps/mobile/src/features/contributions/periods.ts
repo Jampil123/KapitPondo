@@ -14,6 +14,14 @@ export interface PeriodEntry {
   amount: number;
 }
 
+/** Advances `d` in place by one period, per the cycle's cadence. */
+function stepPeriod(d: Date, frequency: string): void {
+  if (frequency === 'weekly') d.setDate(d.getDate() + 7);
+  else if (frequency === 'biweekly') d.setDate(d.getDate() + 14);
+  else if (frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
+  else d.setMonth(d.getMonth() + 1);
+}
+
 /** Every period's start date between a cycle's start and end, stepped by its frequency. Empty if the cycle is open-ended (no end_date to count periods against). */
 export function cyclePeriods(cycle: { start_date: string; end_date: string | null; frequency: string }): Date[] {
   if (!cycle.end_date) return [];
@@ -25,10 +33,7 @@ export function cyclePeriods(cycle: { start_date: string; end_date: string | nul
   let guard = 0;
   while (d <= end && guard < 120) {
     dates.push(new Date(d));
-    if (cycle.frequency === 'weekly') d.setDate(d.getDate() + 7);
-    else if (cycle.frequency === 'biweekly') d.setDate(d.getDate() + 14);
-    else if (cycle.frequency === 'quarterly') d.setMonth(d.getMonth() + 3);
-    else d.setMonth(d.getMonth() + 1);
+    stepPeriod(d, cycle.frequency);
     guard++;
   }
   return dates;
@@ -40,6 +45,57 @@ export function periodDueDate(periodStart: Date, cycle: { frequency: string; con
     return new Date(periodStart.getFullYear(), periodStart.getMonth(), cycle.contribution_due_day);
   }
   return periodStart;
+}
+
+/**
+ * The nearest due date at or after `today` — the current period's, if it
+ * hasn't passed yet, otherwise the next one. Recurs every period for the
+ * life of the cycle (not just the very first one), by walking forward from
+ * the cycle's start/due day until reaching today's period. `today` must
+ * already be date-only (no time-of-day) — see isHeadsEditable().
+ */
+function nearestDueDate(
+  cycle: { start_date: string; frequency: string; contribution_due_day: number | null },
+  today: Date,
+): Date {
+  if (cycle.frequency === 'monthly' && cycle.contribution_due_day) {
+    const start = parseApiDate(cycle.start_date);
+    const candidate = new Date(start.getFullYear(), start.getMonth(), cycle.contribution_due_day);
+    while (candidate < today) candidate.setMonth(candidate.getMonth() + 1);
+    return candidate;
+  }
+  const candidate = parseApiDate(cycle.start_date);
+  while (candidate < today) stepPeriod(candidate, cycle.frequency);
+  return candidate;
+}
+
+/**
+ * Whether a member's heads count can be changed right now — only within the
+ * week leading up to a period's due date, so it's locked once contributions
+ * start being tracked against that period. Recurs every period (not a
+ * one-time window right after the cycle starts) — each due date opens its
+ * own 7-day editing window as it approaches. No active cycle yet, or the
+ * active cycle's start date hasn't arrived yet, means nothing is being
+ * tracked against it yet, so it's freely editable — otherwise a cycle
+ * scheduled to start weeks from now (its first due date further still)
+ * would wrongly show as locked in the dead time before that window opens.
+ * Mirrors the server-side check in groups.service.js's updateMyHeads() —
+ * this is just for the UI to pre-check; the server enforces it either way.
+ */
+export function isHeadsEditable(
+  cycle: { start_date: string; frequency: string; contribution_due_day: number | null } | null,
+  now: Date = new Date(),
+): boolean {
+  if (!cycle) return true;
+  // Date-only comparison — these are civil dates with no time-of-day meaning
+  // (same reasoning as parseApiDate), so "due today" must count as in-window
+  // regardless of what time it currently is.
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (today < parseApiDate(cycle.start_date)) return true;
+  const due = nearestDueDate(cycle, today);
+  const windowStart = new Date(due);
+  windowStart.setDate(windowStart.getDate() - 7);
+  return today >= windowStart && today <= due;
 }
 
 export function periodLabel(periodStart: Date, frequency: Frequency | string, short = false): string {
@@ -121,8 +177,12 @@ export function buildTimeline(
   const expected = Number(cycle.contribution_amount) * heads;
 
   if (!periods.length) {
-    // Open-ended cycle — no fixed roster to fill in; just the real rows, in order.
-    return sorted.map((row, index) => ({
+    // Open-ended cycle — no fixed roster to fill in; just the real rows, in
+    // order. Still needs the same collapse as below: a resubmission inserts
+    // a NEW row rather than editing the rejected one, so without this an
+    // approved resubmission would leave its now-stale rejected row still
+    // showing as the "current" entry.
+    return collapseSupersededRejections(sorted).map((row, index) => ({
       index,
       periodStart: row.due_date ? parseApiDate(row.due_date) : new Date(row.created_at),
       dueDate: row.due_date ? parseApiDate(row.due_date) : new Date(row.created_at),
@@ -133,14 +193,22 @@ export function buildTimeline(
   }
 
   const collapsed = collapseSupersededRejections(sorted);
+  // A period only counts as "settled" once its row is actually approved — while
+  // it's still under review, or was rejected and hasn't been resubmitted yet,
+  // the NEXT period must not light up as due/late. Otherwise submitting proof
+  // (or resubmitting after a rejection) immediately advances a second dot
+  // before the current one is even resolved, instead of looping on the same
+  // one until an officer approves it.
+  const lastRow = collapsed[collapsed.length - 1] ?? null;
+  const lastRowSettled = !lastRow || lastRow.status === 'approved';
 
   return periods.map((periodStart, index) => {
     const row = collapsed[index] ?? null;
     const dueDate = periodDueDate(periodStart, cycle);
     if (row) return { index, periodStart, dueDate, row, kind: rowKind(row), amount: Number(row.amount) };
-    // Only the period right after the member's last row can already be due/late —
-    // everything further out hasn't opened yet.
-    const isNextUnpaid = index === collapsed.length;
+    // Only the period right after the member's last SETTLED row can already be
+    // due/late — everything further out hasn't opened yet.
+    const isNextUnpaid = index === collapsed.length && lastRowSettled;
     const kind: PeriodKind = isNextUnpaid ? (now > dueDate ? 'late' : 'due') : 'upcoming';
     return { index, periodStart, dueDate, row: null, kind, amount: expected };
   });

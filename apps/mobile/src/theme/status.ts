@@ -84,13 +84,6 @@ export const distributionStatus: Record<string, StatusMeta> = {
   finalized: { intent: 'success', label: 'Finalized' },
 };
 
-// M7 — expense_status
-export const expenseStatus: Record<string, StatusMeta> = {
-  submitted: { intent: 'info',    label: 'Submitted' },
-  approved:  { intent: 'success', label: 'Approved' },
-  rejected:  { intent: 'danger',  label: 'Rejected' },
-};
-
 /**
  * Single lookup used by <StatusBadge entity="contribution" value={...} />.
  * Falls back to a neutral "Unknown" so an unmapped value never crashes a row.
@@ -104,7 +97,6 @@ export const statusRegistry = {
   loan: loanStatus,
   loanPayment: loanPaymentStatus,
   distribution: distributionStatus,
-  expense: expenseStatus,
 } as const;
 
 export type StatusEntity = keyof typeof statusRegistry;

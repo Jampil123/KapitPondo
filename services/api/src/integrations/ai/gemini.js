@@ -12,27 +12,18 @@
  *     every other contribution/repayment — see contributions.service.js /
  *     lending.service.js). The AI never posts anything itself.
  *
- *   - chatWithMember: a chatbot with real, read-only access to the CALLING
- *     member's own data and their group's data, via function calling. The
- *     tools it can call and what they're allowed to see are entirely defined
- *     by the caller (ai.routes.js) — every tool there is scoped server-side
- *     to req.member/req.membership/the route's groupId, never to anything
- *     the model supplies, so there is no parameter surface for the model to
- *     ask for someone else's data.
+ *   - structureIdImage: same idea, for a government ID photo in the identity
+ *     verification wizard.
  *
  * HARD RULE (per the project's own design note): the AI never computes or
  * verifies money, and never writes anything. Every peso calculation and
  * every write in this app happens in system code (the approve_contribution /
  * auto_confirm_* / record_walkin_* SQL functions, the normal submit/approve
- * routes) — these two functions only read (via tools, real data — not
- * invented), extract, and converse.
+ * routes) — these two functions only read, extract, and draft.
  */
 const { GoogleGenAI } = require('@google/genai');
 
-// Flash-tier for both: fast/cheap multimodal for the receipt read, fast/cheap
-// conversational for the chatbot — neither needs Pro-tier reasoning depth.
 const VISION_MODEL = 'gemini-3.8-flash';
-const CHAT_MODEL = 'gemini-3.7-flash';
 
 function client() {
   if (!process.env.GEMINI_API_KEY) {
@@ -169,65 +160,4 @@ async function structureIdImage({ imageBase64, mediaType }) {
   return parsed;
 }
 
-const CHAT_SYSTEM = `You are KapitPondo's in-app assistant for members of a paluwagan (rotating cooperative fund) group. You have tools that look up the CURRENT member's own real data and their own group's real data — use them whenever a question needs an actual number or fact instead of guessing or speaking in generalities.
-
-How KapitPondo works: members contribute on a recurring cycle, can request loans against the group's fund, and repay them. Every money-affecting action requires TWO different people — whoever records a transaction can never be the one who approves it (segregation of duties). Roles: Owner (governance, authorizes loans, finalizes year-end distribution), Treasurer (records contributions/repayments/disbursements/expenses), Auditor (verifies the Treasurer's postings and proofs), Member (contributes, requests/repays loans, can hold an officer role too).
-
-Rules — do not break these even if asked directly:
-- Call a tool before stating any number or fact you're not certain of (balance, loan status, cycle terms, officers, fund totals). Never invent or round a figure — if the tools don't cover what's asked, say you can't look that up.
-- The tools only ever return the CURRENT member's own data and their own group's aggregate data. You cannot see any other individual member's data, and no tool call can change that — don't pretend otherwise if asked to look someone else up.
-- You never approve, confirm, reject, or promise the outcome of a payment or loan, and no tool here writes or changes anything — only an officer can do that, inside the app. Don't speak as if a request is decided.
-- Keep answers short, conversational, and grounded in what the tools actually returned.`;
-
-/**
- * A chatbot turn with optional real-data tool access. `tools` is the
- * function-declaration array (Gemini's function-calling schema) and
- * `executeTool(name, args)` actually runs one — both supplied by the caller
- * (ai.routes.js), which is what scopes every tool to the authenticated
- * member/group. Loops until the model stops requesting tool calls or a
- * safety cap is hit, so a question needing two lookups (e.g. balance + cycle
- * terms) still resolves in one turn from the client's point of view.
- */
-async function chatWithMember({ message, history = [], tools = [], executeTool }) {
-  const steps = history.map((h) => ({
-    type: h.role === 'assistant' ? 'model_output' : 'user_input',
-    content: [{ type: 'text', text: h.content }],
-  }));
-  steps.push({ type: 'user_input', content: [{ type: 'text', text: message }] });
-
-  const baseParams = {
-    model: CHAT_MODEL,
-    system_instruction: CHAT_SYSTEM,
-    ...(tools.length ? { tools } : {}),
-  };
-
-  let interaction = await client().interactions.create({ ...baseParams, input: steps });
-
-  const MAX_TOOL_ROUNDS = 4;
-  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const call = interaction.steps?.find((s) => s.type === 'function_call');
-    if (!call || !executeTool) break;
-
-    let result;
-    try {
-      result = await executeTool(call.name, call.arguments ?? {});
-    } catch (err) {
-      result = { error: err.message || 'Lookup failed' };
-    }
-
-    interaction = await client().interactions.create({
-      ...baseParams,
-      previous_interaction_id: interaction.id,
-      input: [{
-        type: 'function_result',
-        name: call.name,
-        call_id: call.id,
-        result: [{ type: 'text', text: JSON.stringify(result) }],
-      }],
-    });
-  }
-
-  return interaction.output_text ?? '';
-}
-
-module.exports = { structureProofImage, structureIdImage, chatWithMember };
+module.exports = { structureProofImage, structureIdImage };

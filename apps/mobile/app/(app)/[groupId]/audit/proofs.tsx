@@ -10,13 +10,12 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { useExpenses } from '@/features/expenses/expenses.hooks';
 import { useRepayments } from '@/features/lending/lending.hooks';
 import { useFlagPosting, useAskForProof } from '@/features/auditlog/auditlog.hooks';
 import type { ProofEntityType } from '@/api/auditLog';
 
 type ViewMode = 'list' | 'grid';
-type FilterKey = 'all' | 'none' | 'contribution' | 'loan_payment' | 'expense';
+type FilterKey = 'all' | 'none' | 'contribution' | 'loan_payment';
 
 interface ProofItem {
   id: string;
@@ -47,12 +46,11 @@ export default function ReviewProofs() {
   const [search, setSearch] = useState('');
 
   const contribs = useContributions(groupId!, {});
-  const expenses = useExpenses(groupId!, {});
   const repayments = useRepayments(groupId!);
   const flag = useFlagPosting(groupId!);
   const ask = useAskForProof(groupId!);
 
-  const loading = contribs.loading || expenses.loading || repayments.loading;
+  const loading = contribs.loading || repayments.loading;
 
   const items: ProofItem[] = useMemo(() => {
     const cs: ProofItem[] = (contribs.data ?? []).map((c) => ({
@@ -64,15 +62,6 @@ export default function ReviewProofs() {
       posted: c.status === 'approved',
       outcome: c.status === 'approved' ? 'posted' : c.status === 'rejected' ? 'rejected' : 'pending',
     }));
-    const es: ProofItem[] = (expenses.data ?? []).map((e) => ({
-      id: e.id, entityType: 'expense', title: `Expense · ${e.description ?? 'Expense'}`,
-      subtitle: e.category ?? 'Other',
-      amount: e.amount, date: e.created_at, proofUrl: e.proof_signed_url,
-      recordedByName: e.recorder?.full_name ?? null, recordedById: e.recorded_by,
-      verifiedByName: e.approver?.full_name ?? null,
-      posted: e.status === 'approved',
-      outcome: e.status === 'approved' ? 'posted' : e.status === 'rejected' ? 'rejected' : 'pending',
-    }));
     const ps: ProofItem[] = (repayments.data ?? []).map((p) => ({
       id: p.id, entityType: 'loan_payment', title: `Repayment · ${pName(p)}`,
       subtitle: p.status === 'paid' ? `${formatPeso(p.interest_portion)} interest` : 'Loan repayment',
@@ -82,8 +71,8 @@ export default function ReviewProofs() {
       posted: p.status === 'paid',
       outcome: p.status === 'paid' ? 'posted' : p.status === 'rejected' ? 'rejected' : 'pending',
     }));
-    return [...cs, ...es, ...ps].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [contribs.data, expenses.data, repayments.data]);
+    return [...cs, ...ps].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [contribs.data, repayments.data]);
 
   const missingProof = useMemo(() => items.filter((i) => i.posted && !i.proofUrl), [items]);
   const totalPosted = items.filter((i) => i.posted).length;
@@ -166,7 +155,6 @@ export default function ReviewProofs() {
               { key: 'none', label: 'No proof', count: missingProof.length, hot: missingProof.length > 0 },
               { key: 'contribution', label: 'Contributions' },
               { key: 'loan_payment', label: 'Repayments' },
-              { key: 'expense', label: 'Expenses' },
             ]}
             value={filter}
             onChange={setFilter}

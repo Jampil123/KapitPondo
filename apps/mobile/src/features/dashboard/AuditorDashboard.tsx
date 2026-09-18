@@ -16,12 +16,10 @@ import { listMembers } from '@/api/groups';
 import { useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useExpenses, useApproveExpense, useRejectExpense } from '@/features/expenses/expenses.hooks';
 import { useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { useReversalRequests, useVerifyReversal, useRejectReversal } from '@/features/ledger/ledger.hooks';
 import { useDistributions, useVerifyDistribution, useCancelDistribution } from '@/features/distribution/distribution.hooks';
 import type { Contribution } from '@/api/contributions';
-import type { Expense } from '@/api/expenses';
 import type { LoanPayment } from '@/api/lending';
 import type { ReversalRequest } from '@/api/ledger';
 
@@ -93,12 +91,10 @@ function VerificationHero({ groupId }: { groupId: string }) {
 
   const contribsForCycle = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
   const contribsPending = useContributions(groupId, { status: 'submitted' });
-  const expensesPending = useExpenses(groupId, { status: 'submitted' });
   const repaymentsPending = useRepayments(groupId, 'submitted');
   const reversalsPending = useReversalRequests(groupId, 'pending_verification');
 
   const contribsAll = useContributions(groupId, {});
-  const expensesAll = useExpenses(groupId, {});
   const repaymentsAll = useRepayments(groupId);
   const reversalsAll = useReversalRequests(groupId);
 
@@ -107,7 +103,7 @@ function VerificationHero({ groupId }: { groupId: string }) {
   const [expanded, setExpanded] = useState(true);
   const [showHealth, setShowHealth] = useState(false);
 
-  const loading = contribsPending.loading || expensesPending.loading || repaymentsPending.loading || reversalsPending.loading;
+  const loading = contribsPending.loading || repaymentsPending.loading || reversalsPending.loading;
 
   // Stage A — members with no resolved claim yet for the active cycle's current period
   // (same per-member dedup CollectionBlock uses on the Owner/Treasurer dashboards).
@@ -125,14 +121,13 @@ function VerificationHero({ groupId }: { groupId: string }) {
   const membersYetToPay = currentRows.filter((r) => r.status === 'pending').length;
 
   // Stage B — the exact total the "Waiting for you" queue below shows.
-  const waitingOnYou = (contribsPending.data?.length ?? 0) + (expensesPending.data?.length ?? 0) + (repaymentsPending.data?.length ?? 0) + (reversalsPending.data?.length ?? 0);
+  const waitingOnYou = (contribsPending.data?.length ?? 0) + (repaymentsPending.data?.length ?? 0) + (reversalsPending.data?.length ?? 0);
 
   // Stage C — real ledger entry count.
   const postedCount = ledger.data?.length ?? 0;
 
   const pendingAges = [
     ...(contribsPending.data ?? []).map((c) => computeAgeHours(c.created_at)),
-    ...(expensesPending.data ?? []).map((e) => computeAgeHours(e.created_at)),
     ...(repaymentsPending.data ?? []).map((p) => computeAgeHours(p.created_at)),
     ...(reversalsPending.data ?? []).map((r) => computeAgeHours(r.initiated_at)),
   ];
@@ -141,37 +136,28 @@ function VerificationHero({ groupId }: { groupId: string }) {
 
   const record = useMemo(() => {
     let verified = 0;
-    let returned = 0;
     let flagged = 0;
     (contribsAll.data ?? []).forEach((c) => { if (myName && c.approver?.full_name === myName && c.status === 'approved') verified++; });
-    (expensesAll.data ?? []).forEach((e) => {
-      if (membership && e.approved_by === membership.id) { if (e.status === 'approved') verified++; else if (e.status === 'rejected') returned++; }
-    });
     (repaymentsAll.data ?? []).forEach((p) => { if (myName && p.verifier?.full_name === myName && (p.status === 'approved' || p.status === 'paid')) verified++; });
     (reversalsAll.data ?? []).forEach((r) => { if (membership && r.verified_by === membership.id) flagged++; });
-    return { verified, returned, flagged };
-  }, [contribsAll.data, expensesAll.data, repaymentsAll.data, reversalsAll.data, myName, membership]);
+    return { verified, flagged };
+  }, [contribsAll.data, repaymentsAll.data, reversalsAll.data, myName, membership]);
 
-  const handled = record.verified + record.returned + record.flagged;
+  const handled = record.verified + record.flagged;
   const totalPostings = handled + waitingOnYou;
   const pct = totalPostings > 0 ? Math.round((handled / totalPostings) * 100) : 100;
 
   const proofless = useMemo(() => [
     ...(contribsAll.data ?? []).filter((c) => c.status !== 'rejected' && !c.proof_url),
-    ...(expensesAll.data ?? []).filter((e) => e.status !== 'rejected' && !e.proof_url),
     // LoanPayment has no 'rejected' status — a rejected claim just stays without one being reset.
     ...(repaymentsAll.data ?? []).filter((p) => !p.proof_url),
-  ].length, [contribsAll.data, expensesAll.data, repaymentsAll.data]);
+  ].length, [contribsAll.data, repaymentsAll.data]);
   const staleCount = pendingAges.filter((h) => h > 48).length;
-  const selfApproved = useMemo(() => (expensesAll.data ?? []).filter(
-    (e) => e.status === 'approved' && e.recorded_by && e.approved_by && e.recorded_by === e.approved_by,
-  ).length, [expensesAll.data]);
   const unlinkedReversals = useMemo(() => (reversalsAll.data ?? []).filter((r) => !r.entry).length, [reversalsAll.data]);
 
   const checks = [
     { label: 'Every posting has proof attached', failLabel: 'Postings without proof', n: proofless },
     { label: 'Nothing waiting over 48 hours', failLabel: 'Waiting over 48 hours', n: staleCount },
-    { label: 'No expense approved by its recorder', failLabel: 'Self-approved expenses', n: selfApproved },
     { label: 'All reversals linked to originals', failLabel: 'Reversals missing an original', n: unlinkedReversals },
   ];
   const issueCount = checks.reduce((s, c) => s + c.n, 0);
@@ -182,7 +168,7 @@ function VerificationHero({ groupId }: { groupId: string }) {
   }, [waitingOnYou]);
 
   const checkedAt = useMemo(() => new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }), []);
-  const totalScanned = (contribsAll.data?.length ?? 0) + (expensesAll.data?.length ?? 0) + (repaymentsAll.data?.length ?? 0) + (reversalsAll.data?.length ?? 0);
+  const totalScanned = (contribsAll.data?.length ?? 0) + (repaymentsAll.data?.length ?? 0) + (reversalsAll.data?.length ?? 0);
 
   const bg = issueCount > 0 ? '#5A1E16' : !loading && waitingOnYou === 0 ? '#173C30' : semantic.dashCard;
 
@@ -246,7 +232,6 @@ function VerificationHero({ groupId }: { groupId: string }) {
             </View>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 9 }}>
               <MiniLegend color="#3DD68C" label={`${record.verified} verified`} />
-              <MiniLegend color="#FFA98F" label={`${record.returned} returned`} />
               <MiniLegend color="#FFC77D" label={`${record.flagged} flagged`} />
             </View>
           </View>
@@ -345,7 +330,7 @@ function QueueActions({ busy, proofUrl, onViewProof, onReject, onVerify }: {
   );
 }
 
-type QueueType = 'contribution' | 'repayment' | 'expense' | 'reversal';
+type QueueType = 'contribution' | 'repayment' | 'reversal';
 type RejectTarget = { type: QueueType; id: string; label: string };
 type FilterKey = 'all' | QueueType;
 
@@ -353,14 +338,12 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'contribution', label: 'Contributions' },
   { key: 'repayment', label: 'Repayments' },
-  { key: 'expense', label: 'Expenses' },
   { key: 'reversal', label: 'Reversals' },
 ];
 
 /* ---------------- Verification queue ---------------- */
 function VerificationQueue({ groupId }: { groupId: string }) {
   const contribs = useContributions(groupId, { status: 'submitted' });
-  const expenses = useExpenses(groupId, { status: 'submitted' });
   const repayments = useRepayments(groupId, 'submitted');
   const reversals = useReversalRequests(groupId, 'pending_verification');
   const balances = useMemberBalances(groupId);
@@ -368,8 +351,6 @@ function VerificationQueue({ groupId }: { groupId: string }) {
 
   const approveContrib = useApproveContribution(groupId);
   const rejectContrib = useRejectContribution(groupId);
-  const approveExpense = useApproveExpense(groupId);
-  const rejectExpense = useRejectExpense(groupId);
   const confirmRepayment = useConfirmRepayment(groupId);
   const rejectRepaymentAction = useRejectRepayment(groupId);
   const verifyReversal = useVerifyReversal(groupId);
@@ -386,7 +367,7 @@ function VerificationQueue({ groupId }: { groupId: string }) {
     (balances.data ?? []).forEach((b) => m.set(b.membership_id, { full_name: b.full_name ?? 'Member', heads: b.heads }));
     return m;
   }, [balances.data]);
-  // Keyed by MEMBER id — matches contribution/expense/loan_payment.recorded_by
+  // Keyed by MEMBER id — matches contribution/loan_payment.recorded_by
   // (the recorder, who may be the payer themselves or a different officer).
   // A separate map on purpose: membership_id and member_id are not the same
   // key space, so reusing payerByMembership here would silently miss.
@@ -397,24 +378,21 @@ function VerificationQueue({ groupId }: { groupId: string }) {
   }, [members.data]);
 
   const contribRows = contribs.data ?? [];
-  const expenseRows = expenses.data ?? [];
   const repaymentRows = repayments.data ?? [];
   const reversalRows = reversals.data ?? [];
-  const total = contribRows.length + expenseRows.length + repaymentRows.length + reversalRows.length;
-  const loading = contribs.loading || expenses.loading || repayments.loading || reversals.loading;
+  const total = contribRows.length + repaymentRows.length + reversalRows.length;
+  const loading = contribs.loading || repayments.loading || reversals.loading;
 
   const showContribs = filter === 'all' || filter === 'contribution';
-  const showExpenses = filter === 'all' || filter === 'expense';
   const showRepayments = filter === 'all' || filter === 'repayment';
   const showReversals = filter === 'all' || filter === 'reversal';
   const filteredCount =
-    (showContribs ? contribRows.length : 0) + (showExpenses ? expenseRows.length : 0) +
+    (showContribs ? contribRows.length : 0) +
     (showRepayments ? repaymentRows.length : 0) + (showReversals ? reversalRows.length : 0);
 
   async function handleVerify(target: RejectTarget) {
     setActingId(target.id);
     if (target.type === 'contribution') { await approveContrib.run(target.id); contribs.refetch(); }
-    else if (target.type === 'expense') { await approveExpense.run(target.id); expenses.refetch(); }
     else if (target.type === 'repayment') { await confirmRepayment.run(target.id); repayments.refetch(); }
     else { await verifyReversal.run(target.id); reversals.refetch(); }
     setActingId(null);
@@ -426,7 +404,6 @@ function VerificationQueue({ groupId }: { groupId: string }) {
     setRejectTarget(null);
     setActingId(target.id);
     if (target.type === 'contribution') { await rejectContrib.run(target.id, reason || undefined); contribs.refetch(); }
-    else if (target.type === 'expense') { await rejectExpense.run(target.id, reason || undefined); expenses.refetch(); }
     else if (target.type === 'repayment') { await rejectRepaymentAction.run(target.id, reason || undefined); repayments.refetch(); }
     else { await rejectReversalAction.run(target.id, reason || undefined); reversals.refetch(); }
     setActingId(null);
@@ -506,40 +483,6 @@ function VerificationQueue({ groupId }: { groupId: string }) {
                   onViewProof={() => c.proof_signed_url && setViewProof({ title: `Contribution · ${payer?.full_name ?? 'Member'}`, url: c.proof_signed_url })}
                   onReject={() => setRejectTarget({ type: 'contribution', id: c.id, label: `${payer?.full_name ?? 'this'} contribution` })}
                   onVerify={() => handleVerify({ type: 'contribution', id: c.id, label: '' })}
-                />
-              </QueueCard>
-            );
-          })}
-
-          {showExpenses && expenseRows.map((e: Expense) => {
-            const age = ageLabel(e.created_at);
-            const busy = actingId === e.id;
-            const recorderName = e.recorder?.full_name ?? 'an officer';
-            const recorderRole = e.recorded_by ? roleByMember.get(e.recorded_by) : null;
-            return (
-              <QueueCard key={e.id} aged={age.aged}>
-                <View style={{ padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text variant="overline" color="muted">Expense{e.category ? ` · ${e.category}` : ''}</Text>
-                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(e.amount)}</Text>
-                  </View>
-                  <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_600Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{e.description ?? 'Group expense'}</Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
-                    <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_600Bold', color: semantic.textSecondary }}>
-                        Recorded by <Text style={{ color: semantic.textPrimary }}>{recorderName}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
-                      </Text>
-                    </View>
-                    {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
-                  </View>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 6 }}>{timeAgo(e.created_at)}</Text>
-                </View>
-                <QueueActions
-                  busy={busy}
-                  proofUrl={e.proof_signed_url}
-                  onViewProof={() => e.proof_signed_url && setViewProof({ title: e.description ?? 'Expense', url: e.proof_signed_url })}
-                  onReject={() => setRejectTarget({ type: 'expense', id: e.id, label: 'this expense' })}
-                  onVerify={() => handleVerify({ type: 'expense', id: e.id, label: '' })}
                 />
               </QueueCard>
             );
@@ -747,22 +690,17 @@ function VerificationRecord({ groupId }: { groupId: string }) {
   const myName = member?.full_name ?? null;
 
   const contribs = useContributions(groupId, {});
-  const expenses = useExpenses(groupId, {});
   const repayments = useRepayments(groupId);
   const reversals = useReversalRequests(groupId);
 
-  const loading = contribs.loading || expenses.loading || repayments.loading || reversals.loading;
+  const loading = contribs.loading || repayments.loading || reversals.loading;
 
   const counts = useMemo(() => {
     let verified = 0;
-    let returned = 0;
     let flagged = 0;
 
     (contribs.data ?? []).forEach((c) => {
       if (myName && c.approver?.full_name === myName) { if (c.status === 'approved') verified++; }
-    });
-    (expenses.data ?? []).forEach((e) => {
-      if (membership && e.approved_by === membership.id) { if (e.status === 'approved') verified++; else if (e.status === 'rejected') returned++; }
     });
     (repayments.data ?? []).forEach((p) => {
       if (myName && p.verifier?.full_name === myName) { if (p.status === 'approved' || p.status === 'paid') verified++; }
@@ -771,8 +709,8 @@ function VerificationRecord({ groupId }: { groupId: string }) {
       if (membership && r.verified_by === membership.id) flagged++;
     });
 
-    return { verified, returned, flagged };
-  }, [contribs.data, expenses.data, repayments.data, reversals.data, myName, membership]);
+    return { verified, flagged };
+  }, [contribs.data, repayments.data, reversals.data, myName, membership]);
 
   return (
     <>
@@ -783,8 +721,6 @@ function VerificationRecord({ groupId }: { groupId: string }) {
         ) : (
           <View style={{ flexDirection: 'row' }}>
             <RecordStat n={counts.verified} label="Verified" />
-            <View style={{ width: 1, backgroundColor: semantic.border }} />
-            <RecordStat n={counts.returned} label="Returned" />
             <View style={{ width: 1, backgroundColor: semantic.border }} />
             <RecordStat n={counts.flagged} label="Flagged" />
           </View>

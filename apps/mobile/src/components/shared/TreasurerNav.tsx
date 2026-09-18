@@ -1,5 +1,5 @@
 import {
-  ArrowUpRight, Repeat, Coins, Minus, SlidersHorizontal, CalendarClock,
+  ArrowUpRight, Repeat, Coins, SlidersHorizontal, CalendarClock,
   ScrollText, LifeBuoy, Repeat as Switch, Smartphone,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -16,7 +16,6 @@ export function TreasurerNav() {
         { label: 'Record contribution', icon: ArrowUpRight, route: 'contributions/confirm' },
         { label: 'Repayments', icon: Repeat, route: 'loans/record-repayment' },
         { label: 'Confirm disbursement', icon: Coins, route: 'loans/disburse' },
-        { label: 'Record expense', icon: Minus, route: 'expenses/record' },
       ] }}
       more={{ title: 'More', items: [
         { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },

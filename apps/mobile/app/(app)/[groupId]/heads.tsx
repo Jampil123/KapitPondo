@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Layers, Minus, Plus } from 'lucide-react-native';
+import { Layers, Minus, Plus, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useSetHeads } from '@/features/distribution/distribution.hooks';
+import { isHeadsEditable } from '@/features/contributions/periods';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -37,9 +38,10 @@ export default function Heads() {
 
   const dirty = draft !== heads;
   const expected = cycle ? Number(cycle.contribution_amount) * heads : null;
+  const editable = isHeadsEditable(cycle);
 
   async function onSave() {
-    if (!membership) return;
+    if (!membership || !editable) return;
     const ok = await setHeads.run(membership.id, draft);
     if (ok !== undefined) {
       setLocalHeads(draft);
@@ -75,12 +77,22 @@ export default function Heads() {
 
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 12 }, shadowToken.card]}>
           <Text variant="h3" style={{ fontSize: 15 }}>Change your heads</Text>
-          <Text variant="caption" color="muted">
-            Adjust how many heads you hold. This is self-service — you can only change your own, not another member's.
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          {editable ? (
+            <Text variant="caption" color="muted">
+              Adjust how many heads you hold. This is self-service — you can only change your own, not another member's.
+            </Text>
+          ) : (
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
+              <Lock size={15} color={intent.warning.text} style={{ marginTop: 1 }} />
+              <Text variant="caption" style={{ flex: 1, color: intent.warning.text, lineHeight: 16 }}>
+                Heads can only be changed in the week before a due date. Check back closer to your next one.
+              </Text>
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: editable ? 1 : 0.5 }}>
             <Pressable
-              onPress={() => setDraft((d) => Math.max(1, d - 1))}
+              onPress={() => editable && setDraft((d) => Math.max(1, d - 1))}
+              disabled={!editable}
               style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}
             >
               <Minus size={18} color={semantic.textPrimary} />
@@ -92,13 +104,15 @@ export default function Heads() {
                 setDraft(Number.isFinite(n) && n > 0 ? n : 1);
               }}
               keyboardType="number-pad"
+              editable={editable}
               style={{
                 flex: 1, textAlign: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12,
                 height: 44, fontFamily: 'Poppins_700Bold', fontSize: 18, color: semantic.textPrimary,
               }}
             />
             <Pressable
-              onPress={() => setDraft((d) => d + 1)}
+              onPress={() => editable && setDraft((d) => d + 1)}
+              disabled={!editable}
               style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}
             >
               <Plus size={18} color={semantic.textPrimary} />
@@ -107,7 +121,7 @@ export default function Heads() {
           <Button
             label={setHeads.loading ? 'Saving…' : 'Save'}
             onPress={onSave}
-            disabled={!dirty || setHeads.loading}
+            disabled={!editable || !dirty || setHeads.loading}
           />
           {setHeads.loading ? <ActivityIndicator color={semantic.brand} /> : null}
         </View>

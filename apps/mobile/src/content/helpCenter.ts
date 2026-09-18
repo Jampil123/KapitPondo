@@ -61,7 +61,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     items: [
       {
         q: 'What does each group role do?',
-        a: 'Owner — governance, lending decisions, and finalizing cycles. Treasurer — records money movement (contributions, repayments, disbursements, expenses). Auditor — verifies and approves the Treasurer\'s postings and proofs. Member — joins, contributes, and requests or repays loans.',
+        a: 'Owner — governance, lending decisions, and finalizing cycles. Treasurer — records money movement (contributions, repayments, disbursements). Auditor — verifies and approves the Treasurer\'s postings and proofs. Member — joins, contributes, and requests or repays loans.',
       },
       {
         q: 'Why can\'t the Treasurer also approve their own postings?',
@@ -87,6 +87,3 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
 ];
-
-export const HELP_KAPITBOT_NOTE =
-  "Need help with your own account or a specific group? Ask KapitBot from inside any group's menu — it can look up your real balance, loans, and cycle details. This page only covers general, account-wide questions.";

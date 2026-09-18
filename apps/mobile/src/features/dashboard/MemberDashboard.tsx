@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 import { Alert, View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowUpCircle, Coins, Users, BarChart3,
+  ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -16,13 +16,7 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 import { cyclePeriods, buildTimeline } from '@/features/contributions/periods';
 import type { Contribution } from '@/api/contributions';
 
-// Lighter than semantic.surfaceAlt so the secondary cards read as barely-tinted,
-// but still distinct from the pure-white StandingCard hero at the top.
 const CARD_BG = '#F5F9FA';
-
-// Softer than the shared shadowToken.card — this dashboard's cards sit close
-// together (CARD_BG is already barely-tinted), so the default shadow read as
-// too high-contrast here. Same shape, lower opacity/spread/elevation.
 const CARD_SHADOW = {
   shadowColor: '#2A3E4B', shadowOpacity: 0.045, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2,
   boxShadow: '0px 4px 14px rgba(42,62,75,0.045)',
@@ -74,25 +68,6 @@ const STANDING_ICON: Record<IntentName, any> = {
   primary: HelpCircle, accent: HelpCircle, neutral: HelpCircle,
 };
 
-/** The row this member should see front-and-center: their most recent
- *  not-yet-approved submission, else their latest row overall.
- *
- *  Deliberately the MOST RECENTLY CREATED unresolved row, not the earliest
- *  due — a resubmission after a rejection always INSERTS a new row rather
- *  than editing the rejected one (contributions.service.js: rejectContribution
- *  only flips status on that same row; submitContribution always inserts).
- *  Picking by earliest due/created date used to mean the stale rejected row
- *  kept winning forever (it's always older than its own resubmission), so
- *  this screen stayed stuck showing "rejected" even after a successful
- *  resubmit already created a fresh 'submitted' row. */
-export function pickCurrent(rows: Contribution[]): Contribution | null {
-  if (!rows.length) return null;
-  const byCreatedDesc = (a: Contribution, b: Contribution) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  const unresolved = rows.filter((r) => r.status !== 'approved').sort(byCreatedDesc);
-  if (unresolved.length) return unresolved[0];
-  return [...rows].sort(byCreatedDesc)[0];
-}
-
 /** Standing card: status banner, amount, meta line, and the one action available for that status. */
 function StandingCard({ groupId }: { groupId: string }) {
   const router = useRouter();
@@ -101,20 +76,12 @@ function StandingCard({ groupId }: { groupId: string }) {
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
   const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
   const heads = membership?.heads ?? 1;
-
-  // Built from the full period timeline, not just existing rows — a member who has
-  // paid every period so far has no row at all for the NEXT one (nothing auto-creates
-  // it; see periods.ts), so picking straight from `rows` would leave the card stuck on
-  // "Up to date" forever instead of flipping to "Submit payment"/"Overdue" as that next
-  // period's due date approaches and passes.
   const timeline = cycle ? buildTimeline(cycle, rows, heads) : [];
   const entry = timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null;
   const current = entry?.row ?? null;
   const kind = entry?.kind ?? null;
 
   const loading = cycleLoading || contribs.loading;
-  // Standing is red whenever the period is late or rejected — kind otherwise collapses
-  // to the 3 states a member cares about: up to date, under review, or rejected.
   const meta: { intent: IntentName; label: string } = !cycle
     ? { intent: 'neutral', label: 'No active cycle' }
     : !entry
@@ -132,10 +99,6 @@ function StandingCard({ groupId }: { groupId: string }) {
   const amount = entry?.amount ?? (cycle ? Number(cycle.contribution_amount) * heads : null);
   const now = new Date();
   const due = entry?.dueDate ?? null;
-
-  // "View my contributions" (paid) goes to the history list; every other state goes to
-  // the state-aware payment screen (submit / review / overdue / rejected) — pointed at
-  // this exact period via `id` when there's a real row, or `due` when there isn't yet.
   function go() {
     if (!entry || kind === 'paid') {
       router.push({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } });
@@ -262,9 +225,6 @@ function CycleDots({ groupId }: { groupId: string }) {
 
   if (!cycle) return null;
 
-  // A "rejected" period reads as the same red dot as "late" here — the dot strip
-  // only distinguishes 5 colors; the contributions list is where rejected vs.
-  // actually-overdue gets its own icon.
   const timeline = buildTimeline(cycle, rows, membership?.heads ?? 1);
   const slots = timeline.length;
   const kinds = timeline.map((p) => (p.kind === 'rejected' ? 'late' : p.kind));
@@ -327,10 +287,15 @@ function Stat({ label, value, sub }: { label: string; value: ReactNode; sub: str
 
 /** My capital (this cycle's contributions) + heads, both already-fetched real values. */
 function MyPosition({ groupId }: { groupId: string }) {
+  const router = useRouter();
   const { membership } = useActiveGroup();
   const bal = useMyBalance(groupId);
   const { cycle } = useActiveCycle(groupId);
   const heads = membership?.heads ?? null;
+
+  function goToHeads() {
+    router.push({ pathname: '/(app)/[groupId]/heads' as any, params: { groupId } });
+  }
 
   return (
     <View style={{ flexDirection: 'row', gap: 11 }}>
@@ -339,11 +304,22 @@ function MyPosition({ groupId }: { groupId: string }) {
         value={bal.loading ? '…' : formatPeso(bal.data?.contributions)}
         sub="This cycle's contributions"
       />
-      <Stat
-        label="My heads"
-        value={heads ?? '—'}
-        sub={cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}
-      />
+      <Pressable
+        onPress={goToHeads}
+        style={[{ flex: 1, backgroundColor: CARD_BG, borderRadius: 16, padding: 15 }, CARD_SHADOW]}
+      >
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Text variant="overline" color="muted">My heads</Text>
+          <View style={{
+            width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: semantic.brandDark,
+          }}>
+            <ArrowRight size={12} color="#fff" strokeWidth={2.6} />
+          </View>
+        </View>
+        <Text style={{ fontSize: 21, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, letterSpacing: -0.4 }}>{heads ?? '—'}</Text>
+        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}</Text>
+      </Pressable>
     </View>
   );
 }

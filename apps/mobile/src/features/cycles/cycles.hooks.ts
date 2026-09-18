@@ -1,15 +1,3 @@
-/**
- * features/cycles/cycles.hooks.ts
- * ----------------------------------------------------------------------------
- * Hooks for the cycle lifecycle (M4). `useActiveCycle` is the one the
- * contribution submit screen needs — it resolves the cycle_id to attach to.
- *
- *   const { cycle: activeCycle, loading } = useActiveCycle(groupId);
- *   // then: submit({ cycle_id: activeCycle.id, amount, ... })
- *
- *   const { run: activate, error } = useActivateCycle(groupId);
- *   const ok = await activate(cycle.id);   // error if a cycle is already active
- */
 import { useCallback } from 'react';
 import { useQuery, useAction } from '../../hooks/useApi';
 import {

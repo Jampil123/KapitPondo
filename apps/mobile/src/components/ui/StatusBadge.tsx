@@ -3,7 +3,7 @@
  * ----------------------------------------------------------------------------
  * One pill for every status in the app. Drive it by entity + raw enum value;
  * color + label come from theme/status.ts. This is why the UI stays consistent
- * across contributions, loans, memberships, cycles, distributions, expenses.
+ * across contributions, loans, memberships, cycles, distributions.
  *
  *   <StatusBadge entity="contribution" value={c.status} />
  *   <StatusBadge entity="loan" value={loan.status} />

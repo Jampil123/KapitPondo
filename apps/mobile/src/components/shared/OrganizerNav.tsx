@@ -2,10 +2,10 @@
  * components/shared/OrganizerNav.tsx — owner's bottom nav (config over GroupSheetNav).
  * The "+" sheet is the owner's own member actions (officers are members too),
  * same as MemberNav's — admin actions (configure cycle, approve members, loan
- * decisions, record expense) live under "More" instead.
+ * decisions) live under "More" instead.
  */
 import {
-  ArrowUpCircle, Coins, Repeat, SlidersHorizontal, UserCheck, Receipt, Users, CalendarClock,
+  ArrowUpCircle, Coins, Repeat, SlidersHorizontal, UserCheck, Users, CalendarClock,
   LifeBuoy, Smartphone,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -27,7 +27,6 @@ export function OrganizerNav() {
         { label: 'Configure cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
         { label: 'Approve members', icon: UserCheck, route: 'members/approvals' },
         { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
-        { label: 'Record expense', icon: Receipt, soon: true },
         { label: 'Manage officers', icon: Users, route: 'members/officers' },
         { label: 'Group settings', icon: Smartphone, route: 'group/settings' },
         { label: 'Year-end distribution', icon: CalendarClock, route: 'distribution/year-end' },

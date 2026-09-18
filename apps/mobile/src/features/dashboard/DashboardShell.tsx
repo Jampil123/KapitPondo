@@ -5,7 +5,6 @@ import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { ChatbotFAB } from '@/components/shared/ChatbotFAB';
 import { semantic } from '@/theme/colors';
 import type { Group } from '@/api/groups';
 import type { GroupRole } from '@/constants/roles';
@@ -64,10 +63,6 @@ export function DashboardShell({
       >
         {children}
       </ScrollView>
-
-      <ChatbotFAB
-        onPress={() => router.push({ pathname: '/(app)/[groupId]/chatbot' as any, params: { groupId: group.id } })}
-      />
 
       {bottomBar}
     </SafeAreaView>

@@ -5,7 +5,7 @@ import { ChevronDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic } from '@/theme/colors';
-import { HELP_SECTIONS, HELP_KAPITBOT_NOTE } from '@/content/helpCenter';
+import { HELP_SECTIONS } from '@/content/helpCenter';
 
 const BAND_TOP = '#4C7C90';
 
@@ -46,10 +46,6 @@ export default function HelpCenter() {
             })}
           </View>
         ))}
-
-        <Text variant="caption" color="muted" style={{ lineHeight: 17, marginTop: 4 }}>
-          {HELP_KAPITBOT_NOTE}
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

@@ -21,7 +21,7 @@ router.patch(
       if (heads == null || Number(heads) < 1) {
         return res.status(400).json({ error: 'heads must be 1 or greater' });
       }
-      const { membership, previousHeads } = await service.setHeads({ membershipId: req.params.id, heads });
+      const { membership, previousHeads } = await service.setHeads({ groupId: req.params.groupId, membershipId: req.params.id, heads });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'heads_changed', entityType: 'membership_heads', entityId: req.params.id,

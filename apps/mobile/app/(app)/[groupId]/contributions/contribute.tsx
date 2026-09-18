@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import {
-  Hash, Camera, Check, Clock3, AlertTriangle, RotateCcw,
+  Hash, Camera, Check, Clock3, AlertTriangle, RotateCcw, CalendarClock, Users, Smartphone,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
@@ -17,23 +17,18 @@ import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
+import { buildTimeline } from '@/features/contributions/periods';
+import { useQuery } from '@/hooks/useApi';
+import { listOfficers } from '@/api/groups';
 import { PayGcashSheet } from '@/features/contributions/PayGcashSheet';
-import { useProofScan, confirmSubmitDespiteDuplicate } from '@/features/contributions/useProofScan';
+import { useProofScan, confirmSubmitDespiteDuplicate, type ProofFlags } from '@/features/contributions/useProofScan';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
-import { pickCurrent } from '@/features/dashboard/MemberDashboard';
-import type { PaymentMethod, Contribution } from '@/api/contributions';
+import type { Contribution } from '@/api/contributions';
 
 const CARD_SHADOW = {
   shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
 } as const;
-
-const METHODS: { key: PaymentMethod; label: string }[] = [
-  { key: 'gcash', label: 'GCash' },
-  { key: 'cash', label: 'Cash' },
-  { key: 'bank_transfer', label: 'Bank' },
-  { key: 'other', label: 'Other' },
-];
 
 type PageState = 'submit' | 'overdue' | 'review' | 'rejected';
 /** Only meaningful while PageState is 'submit'/'overdue' — how the member is paying this period. The QR flow lives in a pull-up sheet on top of 'choose', not a route of its own. */
@@ -109,41 +104,37 @@ function FlagRow({ label, tone }: { label: string; tone: 'warn' | 'danger' }) {
   );
 }
 
+/** Full-screen "can't proceed yet" card — no-cycle / no-officer / no-gcash states. */
+function BlockedState({ icon: Icon, tone, title, body }: { icon: any; tone: IntentName; title: string; body: string }) {
+  const t = intent[tone];
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }}>
+      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center', maxWidth: 340 }, CARD_SHADOW]}>
+        <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: t.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+          <Icon size={26} color={t.text} />
+        </View>
+        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'center' }}>{title}</Text>
+        <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 6, lineHeight: 19 }}>{body}</Text>
+      </View>
+    </View>
+  );
+}
+
 function PaymentForm({
-  amount, setAmount, method, setMethod, reference, setReference, proofUri, pickProof, amountHint, scanning,
+  amount, setAmount, reference, setReference, proofUri, pickProof, amountHint, scanning, flags, scanMeta, dueAmountLabel,
 }: {
   amount: string; setAmount: (v: string) => void;
-  method: PaymentMethod; setMethod: (v: PaymentMethod) => void;
   reference: string; setReference: (v: string) => void;
   proofUri: string | null; pickProof: () => void;
   amountHint: string;
   scanning?: boolean;
+  flags?: ProofFlags | null;
+  scanMeta?: { confidence: string; notes: string | null } | null;
+  dueAmountLabel: string;
 }) {
   return (
     <>
-      <SectionHead title="Record your payment" />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-        <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-        <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 4 }}>{amountHint}</Text>
-
-        <Text variant="overline" color="secondary" style={{ marginTop: 6, marginBottom: 8 }}>Payment method</Text>
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 4 }}>
-          {METHODS.map((m) => {
-            const active = method === m.key;
-            return (
-              <Pressable key={m.key} onPress={() => setMethod(m.key)} style={{ flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, backgroundColor: active ? semantic.textPrimary : semantic.surfaceAlt }}>
-                <Text variant="label" style={{ fontSize: 12.5, color: active ? '#fff' : semantic.textSecondary }}>{m.label}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={{ marginTop: 15 }}>
-          <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
-        </View>
-      </View>
-
-      <SectionHead title="Proof of payment" aside="Optional" />
+      <SectionHead title="Proof of payment" />
       <Pressable
         onPress={pickProof}
         disabled={scanning}
@@ -166,6 +157,24 @@ function PaymentForm({
           </View>
         )}
       </Pressable>
+
+      {!scanning && scanMeta ? (
+        <View style={{ marginTop: 14 }}>
+          {flags?.amountMismatch ? <FlagRow tone="warn" label={`The amount on the receipt doesn't match the ${dueAmountLabel} due — double-check before submitting.`} /> : null}
+          {flags?.recipientMismatch ? <FlagRow tone="danger" label="This doesn't look like it was sent to the treasurer's GCash number — make sure you sent it to the right account." /> : null}
+          {flags?.duplicateRef ? <FlagRow tone="danger" label="This reference number is already attached to another contribution in this group." /> : null}
+          {scanMeta.confidence === 'low' ? <FlagRow tone="warn" label={scanMeta.notes ? `Hard to read clearly: ${scanMeta.notes}` : 'The photo was hard to read clearly — double-check the fields below.'} /> : null}
+        </View>
+      ) : null}
+
+      <SectionHead title="Payment details" />
+      <View style={{ gap: 14 }}>
+        <View>
+          <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+          <Text variant="caption" color="muted" style={{ marginTop: 6 }}>{amountHint}</Text>
+        </View>
+        <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
+      </View>
     </>
   );
 }
@@ -182,12 +191,23 @@ export default function Contribute() {
   const { cycle, loading: cycleLoading } = useActiveCycle(groupId!);
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const submit = useSubmitContribution(groupId!);
+  const officers = useQuery(() => listOfficers(groupId!), [groupId]);
+  const hasFundOfficer = !!officers.data?.officers.some((o) => o.role === 'treasurer' || o.role === 'auditor');
+  const noOfficers = !officers.loading && !hasFundOfficer;
 
   const rows = (contribs.data ?? []).filter((c: Contribution) => c.membership_id === membership?.id);
-  const current = rowId ? (rows.find((r) => r.id === rowId) ?? null) : pickCurrent(rows);
-  const loading = cycleLoading || contribs.loading;
-
   const heads = membership?.heads ?? 1;
+  // Same "current period" rule as MemberDashboard's StandingCard — the first
+  // not-yet-paid entry, or the last period if everything's paid. Deliberately
+  // NOT "the most recent row regardless of status": a resubmission after a
+  // rejection inserts a NEW row rather than editing the old one, so picking
+  // by raw recency kept surfacing the superseded rejected row even after the
+  // resubmission was approved (buildTimeline already collapses that).
+  const timeline = cycle ? buildTimeline(cycle, rows, heads) : [];
+  const current = rowId
+    ? (rows.find((r) => r.id === rowId) ?? null)
+    : (timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null)?.row ?? null;
+  const loading = cycleLoading || contribs.loading;
   const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
   const payAmount = Number(current?.amount ?? expected);
   const due = current?.due_date ? parseApiDate(current.due_date) : dueParam ? new Date(dueParam) : null;
@@ -208,7 +228,6 @@ export default function Contribute() {
   const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
   const [paySheetOpen, setPaySheetOpen] = useState(false);
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('gcash');
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -220,7 +239,6 @@ export default function Contribute() {
     onFields: (fields) => {
       if (fields.amount) setAmount(fields.amount);
       if (fields.reference) setReference(fields.reference);
-      if (fields.method) setMethod(fields.method);
     },
   });
 
@@ -228,7 +246,6 @@ export default function Contribute() {
     if (loading) return;
     if (state === 'rejected' && current) {
       setAmount(String(current.amount));
-      setMethod(current.payment_method ?? 'gcash');
       setReference(current.external_reference ?? '');
     } else if ((state === 'submit' || state === 'overdue') && cycle && !amount) {
       setAmount(String(current?.amount ?? expected));
@@ -249,8 +266,11 @@ export default function Contribute() {
 
   async function onSubmit() {
     if (!cycle) return Alert.alert('No active cycle', 'There is no active cycle to contribute to yet.');
+    if (noOfficers) return Alert.alert('No officer assigned', 'This group has no treasurer or auditor to confirm payments yet. Contact the group owner before submitting.');
+    if (!hasTreasurerGcash) return Alert.alert('No GCash number set up', "The treasurer hasn't set up a verified GCash number yet. Check back once one has been approved before submitting.");
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid contribution amount.');
+    if (!proofUri) return Alert.alert('Proof required', 'Attach a photo or screenshot of your payment before submitting.');
 
     if (groupId) {
       const proceed = await confirmSubmitDespiteDuplicate(groupId, reference, !!flags);
@@ -259,9 +279,8 @@ export default function Contribute() {
 
     setUploading(true);
     try {
-      let proof_url: string | undefined;
-      if (proofUri) proof_url = await uploadImage('proofs', proofUri, 'contribution');
-      const ok = await submit.run({ cycle_id: cycle.id, amount: amt, payment_method: method, external_reference: reference || undefined, proof_url });
+      const proof_url = await uploadImage('proofs', proofUri, 'contribution');
+      const ok = await submit.run({ cycle_id: cycle.id, amount: amt, external_reference: reference || undefined, proof_url });
       if (ok !== undefined) {
         Alert.alert('Submitted', 'Your contribution was submitted for confirmation.');
         router.back();
@@ -279,7 +298,7 @@ export default function Contribute() {
     submit: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
     overdue: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''} · overdue` },
     review: { t: 'Payment status', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
-    rejected: { t: 'Resubmit proof', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
+    rejected: { t: 'Resubmit proof', s: '' },
   };
   const title = TITLES[state].t;
   const subtitle = TITLES[state].s;
@@ -305,9 +324,45 @@ export default function Contribute() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
         <AppBar title="Submit payment" />
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }}>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>This group has no active contribution cycle right now.</Text>
-        </View>
+        <BlockedState
+          icon={CalendarClock}
+          tone="info"
+          title="No active cycle yet"
+          body="This group doesn't have an active contribution cycle right now. Check back once the owner starts one."
+        />
+      </SafeAreaView>
+    );
+  }
+
+  if (noOfficers && (state === 'submit' || state === 'overdue')) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
+        <AppBar title="Submit payment" />
+        <BlockedState
+          icon={Users}
+          tone="warning"
+          title="No officer assigned"
+          body="This group has no treasurer or auditor yet, so there's no one to confirm your payment. Contact the group owner before submitting."
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // Blocks ALL payment methods here (not just GCash) — without a verified GCash
+  // number there's no confirmed treasurer to reconcile against yet. This is a
+  // stricter, separate use of hasTreasurerGcash from the choose/manual routing
+  // comment above; that comment still correctly explains the routing decision
+  // once submission IS allowed.
+  if (!hasTreasurerGcash && (state === 'submit' || state === 'overdue')) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
+        <AppBar title="Submit payment" />
+        <BlockedState
+          icon={Smartphone}
+          tone="warning"
+          title="No GCash number set up"
+          body="The treasurer hasn't set up a verified GCash number yet, so payments can't be recorded or confirmed. Check back once one has been approved."
+        />
       </SafeAreaView>
     );
   }
@@ -414,20 +469,11 @@ export default function Contribute() {
         {/* ---------------- Submit / Overdue: record payment ---------------- */}
         {(state === 'submit' || state === 'overdue') && route === 'manual' && (
           <>
-            {!scanning && scanMeta ? (
-              <View style={{ marginTop: 20 }}>
-                {flags?.amountMismatch ? <FlagRow tone="warn" label={`The amount on the receipt doesn't match the ${formatPeso(payAmount)} due — double-check before submitting.`} /> : null}
-                {flags?.recipientMismatch ? <FlagRow tone="danger" label="This doesn't look like it was sent to the treasurer's GCash number — make sure you sent it to the right account." /> : null}
-                {flags?.duplicateRef ? <FlagRow tone="danger" label="This reference number is already attached to another contribution in this group." /> : null}
-                {scanMeta.confidence === 'low' ? <FlagRow tone="warn" label={scanMeta.notes ? `Hard to read clearly: ${scanMeta.notes}` : 'The photo was hard to read clearly — double-check the fields below.'} /> : null}
-              </View>
-            ) : null}
-
             <PaymentForm
               amount={amount} setAmount={setAmount}
-              method={method} setMethod={setMethod}
               reference={reference} setReference={setReference}
               proofUri={proofUri} pickProof={pickProof} scanning={scanning}
+              flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
               amountHint="Paying more than expected? That's fine — extra counts as advance credit for future cycles."
             />
             <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
@@ -439,6 +485,7 @@ export default function Contribute() {
               label={state === 'overdue' ? 'Submit payment now' : 'Submit for review'}
               onPress={onSubmit}
               loading={submit.loading || uploading}
+              disabled={!proofUri}
               style={{ marginTop: 18 }}
             />
             {hasTreasurerGcash ? (
@@ -540,9 +587,9 @@ export default function Contribute() {
 
             <PaymentForm
               amount={amount} setAmount={setAmount}
-              method={method} setMethod={setMethod}
               reference={reference} setReference={setReference}
               proofUri={proofUri} pickProof={pickProof} scanning={scanning}
+              flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
               amountHint="Change this only if you actually sent a different amount."
             />
             <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
@@ -553,6 +600,7 @@ export default function Contribute() {
               leading={<RotateCcw size={16} color="#fff" />}
               onPress={onSubmit}
               loading={submit.loading || uploading}
+              disabled={!proofUri}
               style={{ marginTop: 18 }}
             />
           </>

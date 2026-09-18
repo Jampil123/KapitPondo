@@ -1,14 +1,3 @@
-/**
- * context/GroupContext.tsx
- * ============================================================================
- * Holds the caller's memberships (fetched after sign-in) and resolves role +
- * group by the active [groupId] route param. Updated for the nested MyGroup
- * shape ({ role, status, groups }).
- *
- *   const { groups, loading, refresh } = useGroups();          // the list
- *   const { group, role, membership } = useActiveGroup();      // inside [groupId]
- * ============================================================================
- */
 import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { useAuth } from './AuthContext';

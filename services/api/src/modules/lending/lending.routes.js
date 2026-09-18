@@ -335,7 +335,7 @@ router.post(
       });
       res.json({ message: 'Repayment confirmed', ledgerEntry });
     } catch (err) {
-      if (err.message && (err.message.includes('Approver cannot be') || err.message.includes('must be confirmed by the Auditor'))) {
+      if (err.message && (err.message.includes('Approver cannot be') || err.message.includes('must be confirmed by'))) {
         return res.status(403).json({ error: err.message });
       }
       next(err);

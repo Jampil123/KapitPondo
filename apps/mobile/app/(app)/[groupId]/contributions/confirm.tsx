@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Alert, ActivityIndicator, Image, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { X, Receipt, FileText } from 'lucide-react-native';
+import { X, Receipt, Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
@@ -45,13 +45,13 @@ function shortDate(iso: string | null) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function Fact({ label, value, tone }: { label: string; value: string; tone?: 'late' | 'warn' }) {
+function Fact({ label, value, tone }: { label?: string; value: string; tone?: 'late' | 'warn' }) {
   const bg = tone === 'late' ? intent.danger.soft : tone === 'warn' ? intent.warning.soft : semantic.surfaceAlt;
   const fg = tone === 'late' ? intent.danger.text : tone === 'warn' ? intent.warning.text : semantic.textSecondary;
   return (
     <View style={{ backgroundColor: bg, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5 }}>
       <Text style={{ fontSize: 11, fontFamily: 'Poppins_500Medium', color: fg }}>
-        {label} <Text style={{ fontFamily: 'Poppins_700Bold', color: fg }}>{value}</Text>
+        {label ? `${label} ` : ''}<Text style={{ fontFamily: 'Poppins_700Bold', color: fg }}>{value}</Text>
       </Text>
     </View>
   );
@@ -84,8 +84,22 @@ export default function ConfirmContributions() {
   const reject = useRejectContribution(groupId!);
 
   const rows = all.data ?? [];
-  const pendingRows = rows.filter((c) => c.status === 'submitted' && !c.is_walk_in);
-  const awaitingRows = rows.filter((c) => c.status === 'submitted' && c.is_walk_in && c.recorded_by === member?.id);
+  // How many live (non-rejected) rows in this cycle share a reference number —
+  // reused already-loaded data instead of a per-row API call, same idea as
+  // the member-side checkDuplicateReference but computed once here.
+  const refCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of rows) {
+      if (r.status === 'rejected' || !r.external_reference) continue;
+      counts.set(r.external_reference, (counts.get(r.external_reference) ?? 0) + 1);
+    }
+    return counts;
+  }, [rows]);
+  // My own contribution never shows here for me to act on — I can't approve
+  // what I recorded myself (own submission or a walk-in), so it moves to
+  // "Awaiting confirmation" instead, purely to track its status.
+  const pendingRows = rows.filter((c) => c.status === 'submitted' && !c.is_walk_in && c.recorded_by !== member?.id);
+  const awaitingRows = rows.filter((c) => c.status === 'submitted' && c.recorded_by === member?.id);
   const returnedRows = rows.filter((c) => c.status === 'rejected' && c.recorded_by === member?.id);
 
   // ---- Collection summary for the active cycle's current period ----
@@ -182,7 +196,7 @@ export default function ConfirmContributions() {
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
-            { key: 'awaiting', label: 'Awaiting Auditor', count: awaitingRows.length },
+            { key: 'awaiting', label: 'Awaiting confirmation', count: awaitingRows.length },
             { key: 'returned', label: 'Returned', count: returnedRows.length, hot: returnedRows.length > 0 },
           ]}
           value={tab}
@@ -203,6 +217,10 @@ export default function ConfirmContributions() {
                 const heads = headsById.get(c.membership_id) ?? 1;
                 const expectedAmt = cycle ? Number(cycle.contribution_amount) * heads : null;
                 const mismatch = expectedAmt != null && Math.abs(Number(c.amount) - expectedAmt) > 0.01;
+                // Same reference used by another live (non-rejected) row in this cycle —
+                // computed from already-loaded rows, not a fresh check per card.
+                const isDuplicateRef = !!c.external_reference && (refCounts.get(c.external_reference) ?? 0) > 1;
+                const noProof = !c.proof_signed_url;
                 return (
                   <View key={c.id} style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
@@ -216,21 +234,34 @@ export default function ConfirmContributions() {
                       <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(c.amount)}</Text>
                     </View>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 14, paddingBottom: 0 }}>
-                      {c.external_reference ? <Fact label="Ref" value={c.external_reference} /> : null}
+                      {c.external_reference ? <Fact label="Ref" value={c.external_reference} /> : <Fact value="No reference number" tone="warn" />}
                       <Fact label="Sent" value={shortDate(c.created_at)} />
                       {mismatch ? <Fact label="Amount differs · expected" value={formatPeso(expectedAmt)} tone="warn" /> : null}
+                      {isDuplicateRef ? <Fact value="Duplicate reference" tone="late" /> : null}
+                      {noProof ? <Fact value="No proof attached" tone="late" /> : null}
                     </View>
-                    <View style={{ flexDirection: 'row', gap: 8, padding: 14 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14 }}>
                       {c.proof_signed_url ? (
-                        <Pressable onPress={() => setViewProof(c)} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 11, paddingVertical: 11, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' }}>
-                          <FileText size={16} color={semantic.brandDark} />
+                        <Pressable onPress={() => setViewProof(c)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
+                          <Image source={{ uri: c.proof_signed_url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
                         </Pressable>
                       ) : null}
-                      <Pressable onPress={() => setReturnTarget(c)} disabled={reject.loading} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 11, borderWidth: 1.5, borderColor: semantic.borderStrong }}>
-                        <Text variant="label" style={{ fontSize: 13, color: semantic.textSecondary }}>Return</Text>
+                      <View style={{ flex: 1 }} />
+                      <Pressable
+                        onPress={() => setReturnTarget(c)}
+                        disabled={reject.loading}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.danger.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
+                      >
+                        <X size={12} color={intent.danger.text} strokeWidth={2.6} />
+                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>Return</Text>
                       </Pressable>
-                      <Pressable onPress={() => onApprove(c.id)} disabled={approve.loading} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 11, backgroundColor: semantic.brandDark }}>
-                        <Text variant="label" style={{ fontSize: 13, color: '#fff' }}>Confirm</Text>
+                      <Pressable
+                        onPress={() => onApprove(c.id)}
+                        disabled={approve.loading}
+                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.success.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
+                      >
+                        <Check size={12} color={intent.success.text} strokeWidth={2.6} />
+                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Confirm</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -251,7 +282,7 @@ export default function ConfirmContributions() {
                 <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
               </View>
               <Text variant="caption" style={{ flex: 1, color: intent.info.text, lineHeight: 16 }}>
-                For payments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. The Auditor still confirms it before it posts.
+                For payments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. Another officer still confirms it before it posts — the Owner, if you're the Treasurer.
               </Text>
             </View>
 
@@ -309,14 +340,14 @@ export default function ConfirmContributions() {
           </View>
         )}
 
-        {/* ================= AWAITING AUDITOR ================= */}
+        {/* ================= AWAITING CONFIRMATION ================= */}
         {tab === 'awaiting' && (
           <View style={{ marginTop: 16 }}>
             {all.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} /> :
             awaitingRows.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
                 <Text variant="h3" style={{ fontSize: 16 }}>Nothing waiting</Text>
-                <Text variant="body" color="secondary">Walk-ins you record show up here until another officer confirms them.</Text>
+                <Text variant="body" color="secondary">Your own contribution and any walk-ins you record show up here until another officer confirms them.</Text>
               </View>
             ) : (
               <View style={[{ backgroundColor: intent.info.soft, borderRadius: 16, overflow: 'hidden' }]}>
@@ -333,7 +364,7 @@ export default function ConfirmContributions() {
                   </View>
                 ))}
                 <Text variant="caption" style={{ padding: 13, paddingTop: 10, color: intent.info.text, opacity: 0.8, lineHeight: 16 }}>
-                  The Auditor confirms these before they reach the ledger. Members still see their own as under review.
+                  A Treasurer-recorded contribution needs the Owner to confirm it; anything else just needs another officer. Members still see their own as under review.
                 </Text>
               </View>
             )}
