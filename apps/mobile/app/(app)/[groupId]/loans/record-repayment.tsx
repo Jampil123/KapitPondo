@@ -174,7 +174,7 @@ export default function RecordRepayment() {
                       </View>
                     ) : null}
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
-                      <Avatar name={repaymentName(p)} size={44} />
+                      <Avatar name={repaymentName(p)} uri={p.loans?.membership?.members?.avatar_url} size={44} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 14.5 }} numberOfLines={1}>{repaymentName(p)}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>Submitted {timeAgo(p.created_at)}</Text>
@@ -253,7 +253,7 @@ export default function RecordRepayment() {
                     const pendingP = pendingByLoan.get(l.id);
                     return (
                       <Pressable key={l.id} onPress={() => goToRecordScreen(l)} style={{ flexDirection: 'row', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
-                        <Avatar name={loanName(l)} size={38} />
+                        <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={38} />
                         <View style={{ flex: 1, minWidth: 0 }}>
                           <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{loanName(l)}</Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
@@ -277,7 +277,7 @@ export default function RecordRepayment() {
                 <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                   {settledLoans.map((l, i) => (
                     <View key={l.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: i < settledLoans.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                      <Avatar name={loanName(l)} size={38} />
+                      <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={38} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{loanName(l)}</Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
@@ -348,7 +348,7 @@ export default function RecordRepayment() {
                       </View>
                     ) : null}
                     <View style={{ flexDirection: 'row', gap: 12, padding: 13 }}>
-                      <Avatar name={repaymentName(p)} size={40} />
+                      <Avatar name={repaymentName(p)} uri={p.loans?.membership?.members?.avatar_url} size={40} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{repaymentName(p)}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>

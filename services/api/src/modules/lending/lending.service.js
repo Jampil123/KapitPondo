@@ -30,7 +30,7 @@ async function listLoans({ groupId, membershipId, role, status }) {
   // actually belongs to (the borrower) — officer review screens need the
   // latter to show whose request this is, not just who decided it.
   let q = supabase.from('loans')
-    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name, avatar_url))')
     .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   if (status) q = q.eq('status', status);
@@ -42,7 +42,7 @@ async function listLoans({ groupId, membershipId, role, status }) {
 async function getLoan(id) {
   const { data, error } = await supabase
     .from('loans')
-    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name, avatar_url))')
     .eq('id', id).single();
   if (error) throw error;
   return data;
@@ -203,7 +203,7 @@ async function submitRepayment(input) {
 async function listRepayments({ groupId, membershipId, role, status }) {
   let q = supabase
     .from('loan_payments')
-    .select('*, recorder:members!recorded_by(full_name), verifier:members!approved_by(full_name), loans!inner(id, group_id, membership_id, membership:memberships!membership_id(member_id, members!member_id(full_name)))')
+    .select('*, recorder:members!recorded_by(full_name), verifier:members!approved_by(full_name), loans!inner(id, group_id, membership_id, membership:memberships!membership_id(member_id, members!member_id(full_name, avatar_url)))')
     .eq('loans.group_id', groupId);
   if (role === 'member') q = q.eq('loans.membership_id', membershipId);
   if (status) q = q.eq('status', status);

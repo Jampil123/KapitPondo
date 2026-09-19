@@ -29,14 +29,27 @@ export function cyclePeriods(cycle: { start_date: string; end_date: string | nul
   const end = parseApiDate(cycle.end_date);
   if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
   const dates: Date[] = [];
-  const d = new Date(start);
-  let guard = 0;
-  while (d <= end && guard < 120) {
-    dates.push(new Date(d));
-    stepPeriod(d, cycle.frequency);
-    guard++;
+  for (let i = 0; i < 120; i++) {
+    const d = periodStartAt(start, cycle.frequency, i);
+    if (d > end) break;
+    dates.push(d);
   }
   return dates;
+}
+
+/**
+ * The nth period's start, counted from the cycle's start. Month-based cadences
+ * are computed from the original start rather than stepped from the previous
+ * period, and the day is clamped to the target month's length — stepping a
+ * Date in place from the 31st overflows (Oct 31 + 1 month = Dec 1), which
+ * skips November and shifts every later period off by a month.
+ */
+function periodStartAt(start: Date, frequency: string, n: number): Date {
+  if (frequency === 'weekly') return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7 * n);
+  if (frequency === 'biweekly') return new Date(start.getFullYear(), start.getMonth(), start.getDate() + 14 * n);
+  const months = n * (frequency === 'quarterly' ? 3 : 1);
+  const daysInTarget = new Date(start.getFullYear(), start.getMonth() + months + 1, 0).getDate();
+  return new Date(start.getFullYear(), start.getMonth() + months, Math.min(start.getDate(), daysInTarget));
 }
 
 /** The calendar due date for a period — contribution_due_day only means anything for a monthly cadence (it's what the server's own lazy check assumes too). */

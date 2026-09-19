@@ -81,7 +81,7 @@ export default function Penalties() {
             {rows.map((p) => (
               <View key={p.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
                 <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-                  <Avatar name={memberName(p)} size={40} />
+                  <Avatar name={memberName(p)} uri={p.membership?.members?.avatar_url} size={40} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <Text variant="label" style={{ fontSize: 14.5 }}>{memberName(p)}</Text>
                     <Text variant="caption" color="secondary" numberOfLines={1}>{p.reason}</Text>

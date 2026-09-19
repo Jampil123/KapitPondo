@@ -43,7 +43,7 @@ function AvatarBadge({ m, size = 42 }: { m: GroupMember; size?: number }) {
   const verified = m.members?.verification_status === 'verified';
   return (
     <View>
-      <Avatar name={name(m)} size={size} />
+      <Avatar name={name(m)} uri={m?.members?.avatar_url} size={size} />
       {own ? null : (
         <View style={{
           position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8,
@@ -84,7 +84,7 @@ export default function MembersOfficers() {
   const changeRole = useAction((memberId: string, role: GroupRole) => setMemberRole(groupId!, memberId, role));
 
   const roster = members.data ?? [];
-  const pendingRows = (pending.data ?? []) as { member_id: string; members: { full_name: string | null; verification_status: string } | null }[];
+  const pendingRows = (pending.data ?? []) as { member_id: string; members: { full_name: string | null; avatar_url?: string | null; verification_status: string } | null }[];
 
   const owner = roster.find((m) => m.role === 'owner') ?? null;
   const treasurer = roster.find((m) => m.role === 'treasurer') ?? null;
@@ -171,7 +171,7 @@ export default function MembersOfficers() {
                     <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Owner</Text>
                     {owner ? (
                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                        <Avatar name={name(owner)} size={30} />
+                        <Avatar name={name(owner)} uri={owner?.members?.avatar_url} size={30} />
                         <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{name(owner)}</Text>
                       </View>
                     ) : <View style={{ flex: 1 }} />}
@@ -203,7 +203,7 @@ export default function MembersOfficers() {
                       <Pressable key={role} onPress={() => setSheetRole(role)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
                         <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{ROLE_LABEL[role]}</Text>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                          <Avatar name={name(holder)} size={30} />
+                          <Avatar name={name(holder)} uri={holder?.members?.avatar_url} size={30} />
                           <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{name(holder)}</Text>
                         </View>
                         <ChevronRight size={16} color={semantic.textMuted} />
@@ -237,7 +237,7 @@ export default function MembersOfficers() {
                       onPress={() => router.push({ pathname: '/(app)/[groupId]/members/approvals' as any, params: { groupId } })}
                       style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < pendingRows.length - 1 ? 1 : 0, borderColor: semantic.border }}
                     >
-                      <Avatar name={r.members?.full_name ?? 'Member'} size={42} />
+                      <Avatar name={r.members?.full_name ?? 'Member'} uri={r.members?.avatar_url} size={42} />
                       <View style={{ flex: 1 }}>
                         <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.members?.full_name ?? 'Unnamed'}</Text>
                         <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
@@ -350,7 +350,7 @@ export default function MembersOfficers() {
                             ))}
                             {pendingRows.map((r, i) => (
                               <View key={r.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < pendingRows.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                                <Avatar name={r.members?.full_name ?? 'Member'} size={38} />
+                                <Avatar name={r.members?.full_name ?? 'Member'} uri={r.members?.avatar_url} size={38} />
                                 <View style={{ flex: 1 }}>
                                   <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.members?.full_name ?? 'Unnamed'}</Text>
                                   <Text variant="caption" style={{ marginTop: 3, color: intent.warning.text }}>Membership still pending your approval</Text>

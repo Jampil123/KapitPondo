@@ -47,7 +47,7 @@ export interface Loan {
   /** Who actually released the funds — a separate step/actor from approval (see disburseLoan()). Null until disbursed. */
   disburser: { full_name: string } | null;
   /** Who the loan actually belongs to (the borrower) — not who approved it. `role` tells whether the borrower is the Owner (no-self-approval rule — the Treasurer decides those instead). */
-  membership: { member_id: string; role: string; members: { full_name: string } | null } | null;
+  membership: { member_id: string; role: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
 
 export interface LoanEligibility {
@@ -103,7 +103,7 @@ export interface LoanPayment {
   gateway_reference: string | null;
   auto_confirmed: boolean;
   /** Only present on the group-wide listRepayments() — who the loan (and therefore this repayment) belongs to. */
-  loans?: { id: string; group_id: string; membership_id: string; membership: { member_id: string; members: { full_name: string } | null } | null };
+  loans?: { id: string; group_id: string; membership_id: string; membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null };
 }
 
 export interface Liquidity {

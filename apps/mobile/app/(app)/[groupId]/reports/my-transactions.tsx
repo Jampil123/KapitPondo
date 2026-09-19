@@ -8,6 +8,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useLedger } from '@/features/reporting/reporting.hooks';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
@@ -23,13 +24,20 @@ const TYPE_LABEL: Partial<Record<LedgerEntryType, string>> = {
   reversal: 'Reversal',
 };
 
-type Category = 'all' | 'contribution' | 'loan_repayment' | 'loan_disbursement';
+type Category = 'all' | 'contribution' | 'loan_repayment' | 'loan_disbursement' | 'distribution';
 
 const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'contribution', label: 'Contributions' },
   { key: 'loan_repayment', label: 'Loan repayments' },
   { key: 'loan_disbursement', label: 'Disbursements' },
+];
+
+const OWNER_CATEGORIES: { key: Category; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'contribution', label: 'Contributions' },
+  { key: 'loan_repayment', label: 'Loan repayments' },
+  { key: 'distribution', label: 'Year-end shares' },
 ];
 
 function shortDate(iso: string) {
@@ -82,6 +90,12 @@ function Row({ e }: { e: LedgerEntry }) {
 export default function MyTransactions() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { member } = useAuth();
+  const { role } = useActiveGroup();
+  const isOwner = role === 'owner';
+  // The Owner confirms contributions and repayments the Treasurer recorded and
+  // finalizes year-end shares, but never releases loans — so the Treasurer's
+  // "Disbursements" chip and "Loans disbursed" caption don't apply to them.
+  const categories = isOwner ? OWNER_CATEGORIES : CATEGORIES;
   const ledger = useLedger(groupId!, { limit: 500 });
   const [category, setCategory] = useState<Category>('all');
 
@@ -117,7 +131,7 @@ export default function MyTransactions() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My Transactions" subtitle="Treasurer" />
+      <AppBar title="My Transactions" subtitle={isOwner ? 'Organizer' : 'Treasurer'} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, shadowToken.card]}>
           {ledger.loading ? (
@@ -130,9 +144,9 @@ export default function MyTransactions() {
                 <Text variant="caption" color="muted" style={{ marginTop: 2 }}>Contributions + repayments</Text>
               </View>
               <View style={{ flex: 1, paddingLeft: 14, borderLeftWidth: 1, borderColor: semantic.border }}>
-                <Text variant="overline" color="muted">Released</Text>
+                <Text variant="overline" color="muted">{isOwner ? 'Paid out' : 'Released'}</Text>
                 <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(releasedTotal)}</Text>
-                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>Loans disbursed</Text>
+                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{isOwner ? 'Year-end shares' : 'Loans disbursed'}</Text>
               </View>
             </View>
           )}
@@ -142,7 +156,7 @@ export default function MyTransactions() {
         </View>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          {CATEGORIES.map((c) => {
+          {categories.map((c) => {
             const active = category === c.key;
             return (
               <Pressable key={c.key} onPress={() => setCategory(c.key)} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>

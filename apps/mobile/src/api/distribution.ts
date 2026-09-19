@@ -49,7 +49,7 @@ export interface DistributionAllocation {
   memberships: {
     member_id: string;
     heads: number;
-    members: { full_name: string | null } | null;
+    members: { full_name: string | null; avatar_url?: string | null } | null;
   } | null;
 }
 

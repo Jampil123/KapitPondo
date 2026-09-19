@@ -16,6 +16,7 @@ import type { MyGroup } from '@/api/groups';
 
 export function GroupCard({ item, onPress }: { item: MyGroup; onPress: () => void }) {
   const ownerName = item.groups.owner?.full_name ?? null;
+  const ownerAvatar = item.groups.owner?.avatar_url ?? null;
 
   return (
     <Pressable
@@ -55,7 +56,7 @@ export function GroupCard({ item, onPress }: { item: MyGroup; onPress: () => voi
           <View>
             <Text variant="caption" color="secondary">Organized by</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-              <Avatar name={ownerName} size={18} />
+              <Avatar name={ownerName} uri={ownerAvatar} size={18} />
               <Text variant="label" style={{ fontSize: 13, flex: 1 }} numberOfLines={1}>
                 {ownerName ?? 'Unknown'}
               </Text>

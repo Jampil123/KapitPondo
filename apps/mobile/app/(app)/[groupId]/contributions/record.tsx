@@ -161,7 +161,7 @@ export default function RecordPayment() {
           <>
             {/* ---------------- Who + expected ---------------- */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>
-              <Avatar name={target.members?.full_name ?? 'Member'} size={48} />
+              <Avatar name={target.members?.full_name ?? 'Member'} uri={target.members?.avatar_url} size={48} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{target.members?.full_name ?? 'Member'}</Text>
                 <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>

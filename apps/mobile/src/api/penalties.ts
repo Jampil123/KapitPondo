@@ -28,7 +28,7 @@ export interface Penalty {
   ledger_entry_id: string | null; // set only once actually paid — not reachable yet, no "pay" flow exists
   created_at: string;
   /** Who the penalty belongs to. */
-  membership: { member_id: string; members: { full_name: string } | null } | null;
+  membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
 
 /** GET — list penalties for a group (officers). Optional status filter. */

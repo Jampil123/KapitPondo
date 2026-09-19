@@ -15,7 +15,7 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { usePresentMembers } from '@/context/PresenceContext';
 import { can } from '@/constants/roles';
 import { useQuery } from '@/hooks/useApi';
-import { listOfficers } from '@/api/groups';
+import { listOfficers, listMemberDirectory } from '@/api/groups';
 import { uploadChatImage } from '@/lib/upload';
 import { useMessages, useSendMessage } from '@/features/chat/chat.hooks';
 import type { ChatChannel } from '@/api/messages';
@@ -49,6 +49,7 @@ export default function Chat() {
   const [showStickers, setShowStickers] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const officers = useQuery(() => listOfficers(groupId!), [groupId]);
+  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
   const present = usePresentMembers();
 
   // Access guard: a plain member deep-linking to /chat/officers gets bounced.
@@ -139,7 +140,7 @@ export default function Chat() {
                 inverted
                 keyExtractor={(m) => m.id}
                 renderItem={({ item }) => (
-                  <MessageBubble message={item} isOwn={item.sender_id === member?.id} />
+                  <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />
                 )}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}

@@ -35,7 +35,7 @@ async function resolveUnpaidMembers(groupId) {
 
   const { data: memberships, error: mErr } = await supabase
     .from('memberships')
-    .select('id, member_id, members!memberships_member_id_fkey(full_name)')
+    .select('id, member_id, members!memberships_member_id_fkey(full_name, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'active');
   if (mErr) throw mErr;
@@ -55,7 +55,7 @@ async function resolveUnpaidMembers(groupId) {
 
   return memberships
     .filter((m) => !paidMembershipIds.has(m.id))
-    .map((m) => ({ member_id: m.member_id, full_name: m.members?.full_name ?? null }));
+    .map((m) => ({ member_id: m.member_id, full_name: m.members?.full_name ?? null, avatar_url: m.members?.avatar_url ?? null }));
 }
 
 async function resolveAudienceMemberIds(groupId, audience, excludeMemberId) {

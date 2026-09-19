@@ -47,7 +47,7 @@ export interface LedgerEntry {
   /** The officer who posted this entry (always the approver — see the SQL RPCs). */
   poster: { full_name: string } | null;
   /** Who the entry actually belongs to (the contributor/borrower) — null for group-level entries (e.g. expenses). */
-  membership: { member_id: string; members: { full_name: string } | null } | null;
+  membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
 
 export type ReversalRequestStatus = 'pending_verification' | 'verified' | 'rejected' | 'finalized';

@@ -86,7 +86,7 @@ export default function ComposeReminder() {
           ) : (
             members.map((m, i) => (
               <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: i === members.length - 1 ? 0 : 1, borderColor: semantic.border }}>
-                <Avatar name={m.full_name} size={36} />
+                <Avatar name={m.full_name} uri={m.avatar_url} size={36} />
                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{m.full_name ?? 'Unnamed'}</Text>
               </View>
             ))

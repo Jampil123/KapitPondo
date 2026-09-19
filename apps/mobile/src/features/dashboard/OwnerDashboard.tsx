@@ -839,12 +839,12 @@ function ManageRow({ go }: { go: (r: string) => void }) {
   );
 }
 
-/* ---------------- Recent activity — group-wide, real ledger feed ---------------- */
+/* ---------------- Recent transactions — group-wide, real ledger feed ---------------- */
 function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
   return e.membership?.members?.full_name ?? null;
 }
 
-function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => void }) {
+function RecentTransactions({ groupId, go }: { groupId: string; go: (r: string) => void }) {
   const ledger = useLedger(groupId, { limit: 5 });
   const entries = ledger.data ?? [];
 
@@ -853,7 +853,7 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No recent activity yet.</Text>
+        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No transactions yet.</Text>
       ) : (
         <>
           {entries.map((e, i) => {
@@ -866,8 +866,8 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
                   <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
                 </View>
                 <View style={{ flex: 1, gap: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13 }} numberOfLines={1}>{name ? `${e.entry_type.replace(/_/g, ' ')} · ${name}` : e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                  <Text variant="caption" color="secondary" numberOfLines={1}>{shortDate(e.posted_at)}</Text>
+                  <Text variant="label" style={{ fontSize: 13 }}>{name ? `${e.entry_type.replace(/_/g, ' ')} · ${name}` : e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
+                  <Text variant="caption" color="secondary">{shortDate(e.posted_at)}</Text>
                 </View>
                 <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? intent.success.text : semantic.textPrimary }}>
                   {credit ? '+' : '-'}{formatPeso(e.amount)}
@@ -875,8 +875,8 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
               </View>
             );
           })}
-          <Pressable onPress={() => go('reports/group-ledger')} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
-            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See full audit trail</Text>
+          <Pressable onPress={() => go('reports/my-transactions')} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
+            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See all transactions</Text>
           </Pressable>
         </>
       )}
@@ -900,8 +900,8 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <ManageRow go={go} />
 
-      <SectionHead title="Recent activity" aside="Group-wide" />
-      <RecentActivity groupId={groupId} go={go} />
+      <SectionHead title="Recent transactions" />
+      <RecentTransactions groupId={groupId} go={go} />
     </>
   );
 }

@@ -158,7 +158,7 @@ export default function GroupOverview() {
           ) : (
             officers.data!.officers.map((o, i) => (
               <View key={`${o.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
-                <Avatar name={o.full_name ?? 'Officer'} size={42} />
+                <Avatar name={o.full_name ?? 'Officer'} uri={o.avatar_url} size={42} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{o.full_name ?? 'Unnamed'}</Text>
@@ -229,7 +229,7 @@ export default function GroupOverview() {
             <>
               {shownMembers.map((m, i) => (
                 <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
-                  <Avatar name={m.full_name ?? 'Member'} size={34} />
+                  <Avatar name={m.full_name ?? 'Member'} uri={m.avatar_url} size={34} />
                   <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
                     {m.full_name ?? 'Unnamed'}{m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
                   </Text>

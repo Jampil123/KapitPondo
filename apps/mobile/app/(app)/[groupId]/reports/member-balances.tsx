@@ -230,7 +230,7 @@ export default function MemberBalances() {
               return (
                 <View key={r.m.id} style={{ flexDirection: 'row', gap: 12, padding: 14, borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                   <View style={{ marginTop: 2 }}>
-                    <Avatar name={name(r.m)} size={40} />
+                    <Avatar name={name(r.m)} uri={r.m.members?.avatar_url} size={40} />
                     <View style={{ position: 'absolute', bottom: -2, right: -2, width: 15, height: 15, borderRadius: 8, backgroundColor: unverified ? intent.warning.base : intent.success.base, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: semantic.surface }}>
                       {unverified ? <Text style={{ fontSize: 7.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>!</Text> : <Check size={7.5} color="#fff" strokeWidth={4} />}
                     </View>

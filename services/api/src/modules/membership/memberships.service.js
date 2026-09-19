@@ -14,7 +14,7 @@ async function requestToJoin({ memberId, groupId }) {
 async function listMemberships({ groupId, status }) {
   let q = supabase
     .from('memberships')
-    .select('*, members!member_id(full_name, email, phone)')
+    .select('*, members!member_id(full_name, email, phone, avatar_url)')
     .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });

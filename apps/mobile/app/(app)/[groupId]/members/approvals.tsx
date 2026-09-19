@@ -12,7 +12,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listPendingMembers, approveMember, rejectMember } from '@/api/groups';
 
-type PendingRow = { id: string; name: string; date: string | null; code: string | null; verification: string | null };
+type PendingRow = { id: string; name: string; avatar: string | null; date: string | null; code: string | null; verification: string | null };
 
 function normalize(item: any): PendingRow {
   return {
@@ -20,6 +20,7 @@ function normalize(item: any): PendingRow {
     // membership row's own id — member_id must win here.
     id: item?.member_id ?? item?.members?.id ?? item?.member?.id ?? item?.id,
     name: item?.full_name ?? item?.name ?? item?.members?.full_name ?? item?.member?.full_name ?? 'Member',
+    avatar: item?.avatar_url ?? item?.members?.avatar_url ?? item?.member?.avatar_url ?? null,
     date: item?.created_at ?? item?.joined_at ?? null,
     code: item?.fund_code ?? item?.groups?.fund_code ?? null,
     verification: item?.verification_status ?? item?.members?.verification_status ?? item?.member?.verification_status ?? null,
@@ -114,7 +115,7 @@ export default function MembershipApprovals() {
               return (
                 <View key={r.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
                   <View style={{ flexDirection: 'row', gap: 12 }}>
-                    <Avatar name={r.name} size={46} />
+                    <Avatar name={r.name} uri={r.avatar} size={46} />
                     <View style={{ flex: 1, gap: 2 }}>
                       <Text variant="label" style={{ fontSize: 15 }}>{r.name}</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

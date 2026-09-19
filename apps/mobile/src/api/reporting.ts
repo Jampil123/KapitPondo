@@ -25,6 +25,7 @@ export interface GroupSummary {
 export interface MemberBalance {
   membership_id: string;
   full_name: string | null;
+  avatar_url?: string | null;
   role: string;
   heads: number;
   balance: Money;

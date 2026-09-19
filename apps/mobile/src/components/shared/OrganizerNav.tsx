@@ -1,12 +1,12 @@
 /**
  * components/shared/OrganizerNav.tsx — owner's bottom nav (config over GroupSheetNav).
  * The "+" sheet is the owner's own member actions (officers are members too),
- * same as MemberNav's — admin actions (configure cycle, approve members, loan
- * decisions) live under "More" instead.
+ * same as MemberNav's — admin actions (approve members, loan decisions, group
+ * settings) live under "More" instead; cycle, officers and year-end are on the
+ * dashboard's manage row.
  */
 import {
-  ArrowUpCircle, Coins, Repeat, SlidersHorizontal, UserCheck, Users, CalendarClock,
-  LifeBuoy, Smartphone,
+  ArrowUpCircle, Coins, Repeat, UserCheck, LifeBuoy, Smartphone,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
@@ -24,12 +24,9 @@ export function OrganizerNav() {
         { label: 'Repay a loan', icon: Repeat, route: 'loans/repay' },
       ] }}
       more={{ title: 'More', subtitle: 'Manage & account', items: [
-        { label: 'Configure cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
+        { label: 'Group settings', icon: Smartphone, route: 'group/settings' },
         { label: 'Approve members', icon: UserCheck, route: 'members/approvals' },
         { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
-        { label: 'Manage officers', icon: Users, route: 'members/officers' },
-        { label: 'Group settings', icon: Smartphone, route: 'group/settings' },
-        { label: 'Year-end distribution', icon: CalendarClock, route: 'distribution/year-end' },
         { label: 'Switch group', icon: Repeat, route: '@groups' },
         { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}

@@ -108,7 +108,7 @@ export default function Disburse() {
               return (
                 <View key={l.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14, gap: 10 }, shadowToken.card]}>
                   <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-                    <Avatar name={loanName(l)} size={44} />
+                    <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={44} />
                     <View style={{ flex: 1, gap: 2 }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <Text variant="label" style={{ fontSize: 14.5 }}>{loanName(l)}</Text>

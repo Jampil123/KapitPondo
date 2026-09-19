@@ -35,7 +35,7 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, role, status, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name))')
+    .select('id, role, status, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name, avatar_url))')
     .eq('member_id', memberId)
     .in('status', ['active', 'pending']);
   if (error) throw error;
@@ -241,7 +241,7 @@ async function joinByCode({ memberId, fundCode }) {
 async function listPendingMembers(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, member_id, role, status, created_at, members!memberships_member_id_fkey(id, full_name, email, verification_status)')
+    .select('id, member_id, role, status, created_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'pending')
     .order('created_at', { ascending: true });
@@ -287,7 +287,7 @@ async function rejectMember(groupId, memberId, reason) {
 async function listGroupMembers(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, member_id, role, status, heads, joined_at, members!memberships_member_id_fkey(id, full_name, email, verification_status)')
+    .select('id, member_id, role, status, heads, joined_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('joined_at', { ascending: true, nullsFirst: true });
@@ -302,7 +302,7 @@ async function listGroupMembers(groupId) {
 async function listOfficers(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('role, members!memberships_member_id_fkey(full_name, verification_status)')
+    .select('role, members!memberships_member_id_fkey(full_name, verification_status, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .neq('role', 'member')
@@ -320,7 +320,7 @@ async function listOfficers(groupId) {
     // verified is a plain boolean here, not the raw verification_status —
     // member-safe rows stay minimal (name + role + duty context), same
     // reasoning as leaving out email/phone.
-    officers: data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null, verified: m.members?.verification_status === 'verified' })),
+    officers: data.map((m) => ({ role: m.role, full_name: m.members?.full_name ?? null, avatar_url: m.members?.avatar_url ?? null, verified: m.members?.verification_status === 'verified' })),
     member_count: count ?? 0,
   };
 }
@@ -332,12 +332,12 @@ async function listOfficers(groupId) {
 async function listMemberDirectory(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('member_id, role, heads, members!memberships_member_id_fkey(full_name)')
+    .select('member_id, role, heads, members!memberships_member_id_fkey(full_name, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .order('joined_at', { ascending: true, nullsFirst: true });
   if (error) throw error;
-  return data.map((m) => ({ member_id: m.member_id, role: m.role, heads: m.heads, full_name: m.members?.full_name ?? null }));
+  return data.map((m) => ({ member_id: m.member_id, role: m.role, heads: m.heads, full_name: m.members?.full_name ?? null, avatar_url: m.members?.avatar_url ?? null }));
 }
 
 async function updateMemberRole(groupId, memberId, role) {

@@ -176,7 +176,7 @@ async function checkLatePenaltiesIfDue(groupId) {
 async function listPenalties({ groupId, status, membershipId }) {
   let q = supabase
     .from('penalties')
-    .select('*, membership:memberships!membership_id(member_id, members!member_id(full_name))')
+    .select('*, membership:memberships!membership_id(member_id, members!member_id(full_name, avatar_url))')
     .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
   if (membershipId) q = q.eq('membership_id', membershipId);

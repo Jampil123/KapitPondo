@@ -111,8 +111,12 @@ export default function Reports() {
   const [period, setPeriod] = useState<Period>('cycle');
   const [exporting, setExporting] = useState(false);
 
-  const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
-  const myContribRows = contribs.data ?? [];
+  // Officers get every member's rows back from these endpoints, so scope to my own membership.
+  const contribs = useContributions(groupId!, { ...(cycle?.id ? { cycle_id: cycle.id } : {}), membership_id: membership?.id });
+  const myContribRows = useMemo(
+    () => (contribs.data ?? []).filter((c) => c.membership_id === membership?.id),
+    [contribs.data, membership?.id],
+  );
   const timeline = useMemo(() => (cycle ? buildTimeline(cycle, myContribRows, heads) : []), [cycle, myContribRows, heads]);
   const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
 
@@ -135,14 +139,15 @@ export default function Reports() {
   const capital = period === 'cycle' ? postedTotal : capitalAllTime;
 
   const ledger = useLedger(groupId!, { membership_id: membership?.id });
-  const entriesAll = ledger.data ?? [];
-  const entries = useMemo(
-    () => (period === 'cycle' && cycle ? entriesAll.filter((e) => e.cycle_id === cycle.id) : entriesAll),
-    [entriesAll, period, cycle],
-  );
+  const entries = useMemo(() => {
+    const mine = (ledger.data ?? []).filter((e) => e.membership_id === membership?.id);
+    return period === 'cycle' && cycle ? mine.filter((e) => e.cycle_id === cycle.id) : mine;
+  }, [ledger.data, membership?.id, period, cycle]);
 
   const loans = useLoans(groupId!, {});
-  const outstandingLoan = (loans.data ?? []).filter((l) => l.status === 'active').reduce((s, l) => s + Number(l.outstanding_balance), 0);
+  const outstandingLoan = (loans.data ?? [])
+    .filter((l) => l.membership_id === membership?.id && l.status === 'active')
+    .reduce((s, l) => s + Number(l.outstanding_balance), 0);
 
   const penalties = useMyPenalties(groupId!, 'pending');
   const unsettledPenalty = (penalties.data ?? []).reduce((s, p) => s + Number(p.amount), 0);
@@ -261,13 +266,18 @@ export default function Reports() {
                 })}
               </View>
               <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
-                {timeline.map((p) => (
-                  <View key={p.index} style={{ flex: 1, alignItems: 'center' }}>
-                    <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
-                      {monthInitial(p.periodStart)}
-                    </Text>
-                  </View>
-                ))}
+                {timeline.map((p, i) => {
+                  // Weekly/biweekly cycles have several bars per month — label
+                  // only the first so it reads O, N, D rather than O O O O N N.
+                  const newMonth = i === 0 || p.periodStart.getMonth() !== timeline[i - 1].periodStart.getMonth();
+                  return (
+                    <View key={p.index} style={{ flex: 1, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
+                        {newMonth ? monthInitial(p.periodStart) : ''}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
               <Text variant="caption" color="secondary" style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border, lineHeight: 17 }}>
                 Green periods are posted, blue is under review, red is late or returned.
@@ -312,7 +322,7 @@ export default function Reports() {
         </View>
 
         {/* ---------------- My statement ---------------- */}
-        <SectionHead title="My statement" aside="From my side" />
+        <SectionHead title="My statement"/>
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 10 }} />
         ) : entries.length === 0 ? (

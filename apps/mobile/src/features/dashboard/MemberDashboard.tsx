@@ -257,7 +257,7 @@ function CycleDots({ groupId }: { groupId: string }) {
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
         <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{summary}</Text>
         <Text variant="caption" color="secondary">
-          Contributed so far <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, fontSize: 13 }}>{bal.loading ? '…' : formatPeso(bal.data?.contributions)}</Text>
+           <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, fontSize: 13 }}>{bal.loading ? '…' : formatPeso(bal.data?.contributions)}</Text>
         </Text>
       </View>
     </View>
@@ -302,7 +302,7 @@ function MyPosition({ groupId }: { groupId: string }) {
       <Stat
         label="My capital"
         value={bal.loading ? '…' : formatPeso(bal.data?.contributions)}
-        sub="This cycle's contributions"
+        sub="contributions"
       />
       <Pressable
         onPress={goToHeads}
@@ -351,7 +351,7 @@ function FundComposition({ groupId }: { groupId: string }) {
 
       <View style={{ flexDirection: 'row', height: 9, borderRadius: 5, overflow: 'hidden', marginBottom: 12 }}>
         <View style={{ width: (cashPct + '%') as any, backgroundColor: semantic.brand }} />
-        <View style={{ width: (lentPct + '%') as any, backgroundColor: intent.warning.base }} />
+        <View style={{ width: (lentPct + '%') as any, backgroundColor: '#E4A33C' }} />
       </View>
 
       <View style={{ gap: 5 }}>
@@ -361,7 +361,7 @@ function FundComposition({ groupId }: { groupId: string }) {
           <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: intent.warning.base }} />
+          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#E4A33C' }} />
           <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Out on loan</Text>
           <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
         </View>
@@ -466,7 +466,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
         ))}
       </View>
 
-      <SectionHead title="My activity" aside="From my side" />
+      <SectionHead title="My activity"/>
       <RecentActivity groupId={groupId} onSeeAll={() => go('activity')} />
     </>
   );

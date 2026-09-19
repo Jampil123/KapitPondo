@@ -42,6 +42,7 @@ export function createAnnouncement(groupId: string, input: {
 export interface UnpaidMember {
   member_id: string;
   full_name: string | null;
+  avatar_url?: string | null;
 }
 
 /** GET /api/groups/:groupId/members/unpaid — officer-only; drives the reminder audience. */

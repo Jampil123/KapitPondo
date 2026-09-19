@@ -224,7 +224,7 @@ export default function ConfirmContributions() {
                 return (
                   <View key={c.id} style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
-                      <Avatar name={nameOf(c)} size={48} />
+                      <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={48} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 14.5 }} numberOfLines={1}>{nameOf(c)}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
@@ -296,7 +296,7 @@ export default function ConfirmContributions() {
                     <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                       {needsRecording.map(({ m, entry }) => (
                         <Pressable key={m.id} onPress={() => goToRecordScreen(m)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
-                          <Avatar name={m.members?.full_name ?? 'Member'} size={38} />
+                          <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
@@ -317,7 +317,7 @@ export default function ConfirmContributions() {
                     <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                       {alreadyHandled.map(({ m, entry }) => (
                         <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
-                          <Avatar name={m.members?.full_name ?? 'Member'} size={38} />
+                          <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
@@ -391,7 +391,7 @@ export default function ConfirmContributions() {
                       </View>
                     ) : null}
                     <View style={{ flexDirection: 'row', gap: 12, padding: 13 }}>
-                      <Avatar name={nameOf(c)} size={40} />
+                      <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={40} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{nameOf(c)}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>

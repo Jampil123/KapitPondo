@@ -58,7 +58,7 @@ async function getDistribution(id) {
 async function getAllocations(distributionId, caller = {}) {
   let q = supabase
     .from('distribution_allocations')
-    .select('*, memberships!membership_id(member_id, heads, members!member_id(full_name))')
+    .select('*, memberships!membership_id(member_id, heads, members!member_id(full_name, avatar_url))')
     .eq('distribution_id', distributionId)
     .order('created_at', { ascending: true });
   if (caller.role === 'member') q = q.eq('membership_id', caller.membershipId);

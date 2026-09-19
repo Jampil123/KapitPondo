@@ -55,7 +55,7 @@ async function groupLedger({ groupId, membershipId, entryType, limit = 100 }) {
     // is who the entry actually belongs to (the contributor/borrower) — null
     // for group-level entries like expenses — joined so officer dashboards
     // can show whose transaction this is, not just who approved it.
-    .select('*, poster:members!posted_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name))')
+    .select('*, poster:members!posted_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name, avatar_url))')
     .eq('group_id', groupId)
     .order('posted_at', { ascending: false })
     .limit(limit);
@@ -70,7 +70,7 @@ async function groupLedger({ groupId, membershipId, entryType, limit = 100 }) {
 async function memberBalances(groupId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, heads, role, status, members!member_id(full_name)')
+    .select('id, heads, role, status, members!member_id(full_name, avatar_url)')
     .eq('group_id', groupId)
     .eq('status', 'active');
   if (error) throw error;
@@ -82,6 +82,7 @@ async function memberBalances(groupId) {
     results.push({
       membership_id: m.id,
       full_name: m.members?.full_name,
+      avatar_url: m.members?.avatar_url ?? null,
       role: m.role,
       heads: m.heads,
       balance,

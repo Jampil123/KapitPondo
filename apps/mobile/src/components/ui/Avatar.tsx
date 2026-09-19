@@ -4,6 +4,7 @@
  * Initials avatar with a deterministic background color (mirrors the designer's
  * avatarColor). Reused across member lists.
  */
+import { useState } from 'react';
 import { View, Image } from 'react-native';
 import { Text } from './Text';
 
@@ -23,12 +24,16 @@ function initials(name?: string | null): string {
 export function Avatar({
   name, uri, size = 44, square = false,
 }: { name?: string | null; uri?: string | null; size?: number; square?: boolean }) {
+  const [failedUri, setFailedUri] = useState<string | null>(null);
   const radius = square ? size * 0.3 : size / 2;
-  if (uri) {
+  // A photo that can't load (deleted file, offline) falls back to initials rather than an empty circle.
+  if (uri && uri !== failedUri) {
     return (
       <Image
         source={{ uri }}
         style={{ width: size, height: size, borderRadius: radius }}
+        resizeMode="cover"
+        onError={() => setFailedUri(uri)}
       />
     );
   }

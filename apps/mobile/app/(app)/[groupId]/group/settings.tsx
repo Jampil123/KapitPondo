@@ -154,7 +154,8 @@ export default function GroupSettings() {
   const history = useQuery(() => listGcashHistory(groupId!), [groupId]);
   const fund = useFundSummary(groupId!);
 
-  const treasurerName = officers.data?.officers.find((o) => o.role === 'treasurer')?.full_name ?? 'the Treasurer';
+  const treasurer = officers.data?.officers.find((o) => o.role === 'treasurer');
+  const treasurerName = treasurer?.full_name ?? 'the Treasurer';
   const status = group?.treasurer_gcash_status ?? 'unset';
 
   // Local override so "Propose change" (from 'approved') and "Fix and
@@ -232,7 +233,7 @@ export default function GroupSettings() {
               <View>
                 {role === 'owner' ? (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 11, marginBottom: 13 }}>
-                    <Avatar name={treasurerName} size={32} />
+                    <Avatar name={treasurerName} uri={treasurer?.avatar_url} size={32} />
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>Submitted by {treasurerName}</Text>
                       <Text variant="caption" color="muted" style={{ marginTop: 1 }}>Treasurer · {formatDateTime(group?.treasurer_gcash_submitted_at ?? null)}</Text>
@@ -306,7 +307,7 @@ export default function GroupSettings() {
           ) : (
             officers.data!.officers.map((o, i) => (
               <View key={`${o.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: i < officers.data!.officers.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                <Avatar name={o.full_name} size={36} />
+                <Avatar name={o.full_name} uri={o.avatar_url} size={36} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{o.full_name ?? 'Unnamed'}</Text>
                   <Text variant="caption" color="muted" style={{ marginTop: 1, textTransform: 'capitalize' }}>{o.role}</Text>

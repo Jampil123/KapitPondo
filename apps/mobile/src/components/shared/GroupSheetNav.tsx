@@ -4,7 +4,7 @@ import { router, usePathname, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle, Home, Plus, User, Menu, X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
-import { semantic, shadowToken } from '../../theme/colors';
+import { semantic } from '../../theme/colors';
 
 export type SheetItem = { label: string; icon: any } & (
   | { route: string }
@@ -115,12 +115,14 @@ export function GroupSheetNav({
               </View>
               <Pressable onPress={() => setActive(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
             </View>
-            <View style={{ gap: 8 }}>
+            <View>
               {active?.items.map((it) => (
-                <Pressable key={it.label} onPress={() => handleItem(it)} style={[{ flexDirection: 'row', alignItems: 'center', gap: 13, backgroundColor: semantic.background, borderRadius: 14, padding: 13 }, shadowToken.card]}>
-                  <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <it.icon size={20} color={semantic.brandDark} />
-                  </View>
+                <Pressable
+                  key={it.label}
+                  onPress={() => handleItem(it)}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 14 }}
+                >
+                  <it.icon size={22} color={semantic.brandDark} />
                   <Text variant="label" style={{ flex: 1 }}>{it.label}</Text>
                   {'soon' in it ? <Text variant="caption" color="muted">Soon</Text> : null}
                 </Pressable>

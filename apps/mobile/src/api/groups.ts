@@ -19,7 +19,7 @@ export interface Group {
   fund_code: string;
   description: string | null;
   status: GroupStatus;
-  owner: { full_name: string | null } | null;
+  owner: { full_name: string | null; avatar_url?: string | null } | null;
   /** The LIVE, member-visible GCash number the "pay online" sheet shows — only ever set by an Owner approval (see submitGcashProposal/approveGcashProposal). Null until the first approval. */
   treasurer_gcash_number: string | null;
   treasurer_gcash_name: string | null;
@@ -116,6 +116,7 @@ export async function listGcashHistory(groupId: string) {
 export interface Officer {
   role: GroupRole;
   full_name: string | null;
+  avatar_url?: string | null;
   verified: boolean;
 }
 
@@ -135,6 +136,7 @@ export interface DirectoryEntry {
   role: GroupRole;
   heads: number;
   full_name: string | null;
+  avatar_url?: string | null;
 }
 
 /** GET /api/groups/:groupId/members/directory — every active member (any active role). */
@@ -162,7 +164,7 @@ export interface GroupMember {
   status: MembershipStatus;
   heads: number;
   joined_at: string | null;
-  members: { id: string; full_name: string | null; email: string | null; verification_status: string } | null;
+  members: { id: string; full_name: string | null; avatar_url?: string | null; email: string | null; verification_status: string } | null;
 }
 
 export async function listMembers(groupId: string) {

@@ -123,7 +123,7 @@ export default function LoanDecisions() {
             {list.map((l) => (
               <View key={l.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
                 <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
-                  <Avatar name={loanName(l)} size={44} />
+                  <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={44} />
                   <View style={{ flex: 1, gap: 2 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       <Text variant="label" style={{ fontSize: 14.5 }}>{loanName(l)}</Text>
@@ -185,7 +185,7 @@ export default function LoanDecisions() {
         {(d) => (
           <>
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-              <Avatar name={loanName(d)} size={46} />
+              <Avatar name={loanName(d)} uri={d.membership?.members?.avatar_url} size={46} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text variant="h2" style={{ fontSize: 17 }}>{loanName(d)}</Text>
                 <StatusBadge entity="loan" value={d.status} />

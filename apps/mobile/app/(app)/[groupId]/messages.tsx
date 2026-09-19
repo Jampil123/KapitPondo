@@ -56,11 +56,11 @@ function firstName(full: string | null | undefined): string {
   return parts.length <= 2 ? full.trim() : parts[0];
 }
 
-function AvatarCircle({ name, label, online }: { name: string | null | undefined; label: string; online: boolean }) {
+function AvatarCircle({ name, uri, label, online }: { name: string | null | undefined; uri?: string | null; label: string; online: boolean }) {
   return (
     <View style={{ alignItems: 'center', width: 64 }}>
       <View>
-        <Avatar name={name} size={52} />
+        <Avatar name={name} uri={uri} size={52} />
         {online ? (
           <View style={{
             position: 'absolute', bottom: -1, right: -1, width: 15, height: 15, borderRadius: 8,
@@ -85,9 +85,9 @@ function AvatarStrip({ groupId }: { groupId: string | undefined }) {
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 2, paddingVertical: 4, paddingRight: 8 }}>
-      <AvatarCircle name={member?.full_name} label="You" online />
+      <AvatarCircle name={member?.full_name} uri={member?.avatar_url} label="You" online />
       {others.map((m) => (
-        <AvatarCircle key={m.member_id} name={m.full_name} label={firstName(m.full_name)} online={onlineIds.has(m.member_id)} />
+        <AvatarCircle key={m.member_id} name={m.full_name} uri={m.avatar_url} label={firstName(m.full_name)} online={onlineIds.has(m.member_id)} />
       ))}
     </ScrollView>
   );
@@ -97,8 +97,8 @@ function previewLine(body: string, imageUrl: string | null): string {
   return body || (imageUrl ? '📷 Photo' : '');
 }
 
-function ContactRow({ groupId, myMemberId, memberId, name, roleLabel, onPress }: {
-  groupId: string | undefined; myMemberId: string | undefined; memberId: string; name: string | null;
+function ContactRow({ groupId, myMemberId, memberId, name, avatarUrl, roleLabel, onPress }: {
+  groupId: string | undefined; myMemberId: string | undefined; memberId: string; name: string | null; avatarUrl?: string | null;
   roleLabel?: string; onPress: () => void;
 }) {
   const dm = useQuery(() => listDirectMessages(groupId!, memberId, { limit: 1 }), [groupId, memberId]);
@@ -109,7 +109,7 @@ function ContactRow({ groupId, myMemberId, memberId, name, roleLabel, onPress }:
 
   return (
     <Row
-      left={<Avatar name={name} size={44} />}
+      left={<Avatar name={name} uri={avatarUrl} size={44} />}
       title={name ?? roleLabel ?? 'Unnamed'}
       time={latest ? timeAgo(latest.created_at) : undefined}
       subtitle={roleLabel}
@@ -224,7 +224,7 @@ export default function Messages() {
             </LinearGradient>
           </Pressable>
         ) : (
-          <Avatar name={member?.full_name} size={38} />
+          <Avatar name={member?.full_name} uri={member?.avatar_url} size={38} />
         )}
       />
       <ScrollView
@@ -304,6 +304,7 @@ export default function Messages() {
                   myMemberId={member?.id}
                   memberId={o.member_id}
                   name={o.full_name}
+                  avatarUrl={o.avatar_url}
                   roleLabel={ROLE_LABEL[o.role]}
                   onPress={() => go(`dm/${o.member_id}`)}
                 />
@@ -323,6 +324,7 @@ export default function Messages() {
                   myMemberId={member?.id}
                   memberId={m.member_id}
                   name={m.full_name}
+                  avatarUrl={m.avatar_url}
                   onPress={() => go(`dm/${m.member_id}`)}
                 />
               ))}

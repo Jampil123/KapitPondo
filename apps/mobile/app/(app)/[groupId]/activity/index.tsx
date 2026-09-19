@@ -86,7 +86,8 @@ export default function ActivityFeed() {
                 variant="caption"
                 style={{
                   paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
-                  backgroundColor: active ? semantic.brand : semantic.surfaceAlt,
+                  backgroundColor: active ? semantic.dashCard : semantic.surface,
+                  borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border,
                   color: active ? '#fff' : semantic.textSecondary,
                   fontWeight: active ? '600' : '400',
                   overflow: 'hidden',

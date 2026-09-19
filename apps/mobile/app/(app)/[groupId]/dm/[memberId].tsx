@@ -93,7 +93,7 @@ export default function DirectMessage() {
                 data={messages}
                 inverted
                 keyExtractor={(m) => m.id}
-                renderItem={({ item }) => <MessageBubble message={item} isOwn={item.sender_id === member?.id} />}
+                renderItem={({ item }) => <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 ListFooterComponent={loadingMore ? <LoadingState fullscreen={false} /> : null}

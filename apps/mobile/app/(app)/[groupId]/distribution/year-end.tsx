@@ -251,7 +251,7 @@ export default function YearEnd() {
                   const heads = a.memberships?.heads ?? 0;
                   return (
                     <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < allocations.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                      <Avatar name={name} size={38} />
+                      <Avatar name={name} uri={a.memberships?.members?.avatar_url} size={38} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{name}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>{heads} head{heads === 1 ? '' : 's'}</Text>

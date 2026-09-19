@@ -33,7 +33,7 @@ export interface Contribution {
   /** Who approved this contribution — null until an officer confirms it. */
   approver: { full_name: string } | null;
   /** The payer's membership + name, joined server-side (listContributions only). */
-  memberships: { member_id: string; heads: number; members: { full_name: string | null } | null } | null;
+  memberships: { member_id: string; heads: number; members: { full_name: string | null; avatar_url?: string | null } | null } | null;
   /** Set when a PayMongo webhook posted this automatically (see 0051_paymongo_contributions.sql) — no recorder/approver pair, the gateway's signed confirmation stands in for both. */
   auto_confirmed: boolean;
   gateway_provider: string | null;

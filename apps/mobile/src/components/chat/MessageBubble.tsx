@@ -22,12 +22,12 @@ export interface BubbleMessage {
   created_at: string;
 }
 
-export function MessageBubble({ message, isOwn }: { message: BubbleMessage; isOwn: boolean }) {
+export function MessageBubble({ message, isOwn, avatarUrl }: { message: BubbleMessage; isOwn: boolean; avatarUrl?: string | null }) {
   const time = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   return (
     <View style={{ flexDirection: 'row', justifyContent: isOwn ? 'flex-end' : 'flex-start', gap: 8, maxWidth: '100%' }}>
-      {!isOwn && <Avatar name={message.sender_name} size={32} />}
+      {!isOwn && <Avatar name={message.sender_name} uri={avatarUrl} size={32} />}
       <View style={{ maxWidth: '75%' }}>
         {!isOwn && (
           <Text variant="caption" color="secondary" style={{ marginBottom: 2, marginLeft: 4 }}>
