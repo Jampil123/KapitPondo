@@ -4,7 +4,7 @@ import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Path, G } from '
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { steel } from '../../theme/colors';
 
-const BAND_TOP = '#C4E7FD'; // artwork color at the top edge of the crop, used to cover the iOS overscroll gap
+const BAND_TOP = '#C8DAE2'; // artwork color at the top edge of the crop (steel[100] → steel[400] blend), used to cover the iOS overscroll gap
 const SHELL_PADDING = 20; // DashboardShell's ScrollView padding — the band cancels it to run edge to edge
 
 // dashboard_bg.svg is a 1170x2532 full-screen artwork; the band shows a crop that starts above its wave crests.
@@ -13,8 +13,8 @@ const ART_HEIGHT = 2532;
 const CROP_Y = 420;
 const CROP_HEIGHT = 1500;
 
-// Secondary text drawn directly on the band — the artwork gets darker toward the bottom right, so grey text needs more ink.
-export const onBandText = steel[800];
+// Secondary text drawn directly on the band — the band reaches steel[400] toward the bottom right, so it needs full ink.
+export const onBandText = steel[900];
 
 // Frosted surface for dense detail (lists, stage strips) that sits on the band.
 export const glassPanel = {
@@ -44,9 +44,9 @@ function Backdrop() {
     >
       <Defs>
         <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="0.95">
-          <Stop offset="0%" stopColor="#DDF2FF" />
-          <Stop offset="48%" stopColor="#8ED0FA" />
-          <Stop offset="100%" stopColor="#B9E2FC" />
+          <Stop offset="0%" stopColor={steel[100]} />
+          <Stop offset="48%" stopColor={steel[400]} />
+          <Stop offset="100%" stopColor={steel[200]} />
         </LinearGradient>
         <RadialGradient id="glow" cx="62%" cy="42%" r="62%">
           <Stop offset="0%" stopColor="#FFFFFF" stopOpacity={0.22} />

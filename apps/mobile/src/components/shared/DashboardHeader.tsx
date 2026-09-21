@@ -57,7 +57,7 @@ export function DashboardHeader({
           <View
             style={{
               position: 'absolute', top: 2, right: 1, minWidth: 16, height: 16, borderRadius: 8,
-              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: '#BFE5FD',
+              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: '#CFE0E8',
               alignItems: 'center', justifyContent: 'center',
             }}
           >
