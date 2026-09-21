@@ -37,7 +37,7 @@ function daysBetween(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 86400000);
 }
 
-function CloseHeader({ title, onClose }: { title: string; onClose: () => void }) {
+function CloseHeader({ title, onClose }: { title?: string; onClose: () => void }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 56 }}>
       <Pressable
@@ -49,7 +49,7 @@ function CloseHeader({ title, onClose }: { title: string; onClose: () => void })
       >
         <X size={20} color={semantic.textPrimary} />
       </Pressable>
-      <Text variant="h3" style={{ fontSize: 16 }} numberOfLines={1}>{title}</Text>
+      {title ? <Text variant="h3" style={{ fontSize: 16 }} numberOfLines={1}>{title}</Text> : null}
     </View>
   );
 }
@@ -238,6 +238,69 @@ function PaymentForm({
   );
 }
 
+/** What the member just sent, captured at submit time so the success page doesn't depend on the refetched data. */
+type Receipt = {
+  amount: string;
+  reference: string;
+  submittedAt: Date;
+  cycleName: string;
+  dueDate: Date | null;
+  recipient: string | null;
+  resubmitted: boolean;
+};
+
+function SummaryRow({ label, value, last }: { label: string; value: ReactNode; last?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16, paddingVertical: 13, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <Text variant="caption" color="muted">{label}</Text>
+      {typeof value === 'string' ? (
+        <Text style={{ flexShrink: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'right' }}>{value}</Text>
+      ) : value}
+    </View>
+  );
+}
+
+function SuccessView({ receipt, onClose, onViewAll }: { receipt: Receipt; onClose: () => void; onViewAll: () => void }) {
+  const rows: { label: string; value: ReactNode }[] = [
+    { label: 'Status', value: <Badge tone="info" label="Under review" Icon={Clock3} /> },
+    { label: 'For', value: receipt.dueDate ? `${receipt.cycleName} · due ${shortDate(receipt.dueDate)}` : receipt.cycleName },
+    ...(receipt.recipient ? [{ label: 'Sent to', value: receipt.recipient }] : []),
+    ...(receipt.reference ? [{ label: 'Reference', value: receipt.reference }] : []),
+    { label: 'Submitted', value: `${shortDate(receipt.submittedAt)}, ${receipt.submittedAt.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}` },
+  ];
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
+      <CloseHeader onClose={onClose} />
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
+        <View style={{ alignItems: 'center', paddingTop: 20 }}>
+          <View style={{ width: 76, height: 76, borderRadius: 38, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: intent.success.base, alignItems: 'center', justifyContent: 'center' }}>
+              <Check size={28} color="#fff" strokeWidth={3} />
+            </View>
+          </View>
+          <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 18 }}>
+            {receipt.resubmitted ? 'Payment resubmitted' : 'Payment submitted'}
+          </Text>
+          <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 6 }}>{formatPeso(receipt.amount)}</Text>
+          <Text variant="body" color="secondary" style={{ fontSize: 12.5, textAlign: 'center', marginTop: 8 }}>
+            An officer will confirm it. You&apos;ll be notified once it&apos;s posted.
+          </Text>
+        </View>
+
+        <View style={{ marginTop: 28 }}>
+          {rows.map((r, i) => <SummaryRow key={r.label} label={r.label} value={r.value} last={i === rows.length - 1} />)}
+        </View>
+      </ScrollView>
+
+      <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, gap: 8 }}>
+        <Button label="Done" onPress={onClose} />
+        <Button label="View my contributions" variant="ghost" onPress={onViewAll} />
+      </View>
+    </SafeAreaView>
+  );
+}
+
 export default function Contribute() {
   // `id` opens one specific row from the history list (features/contributions/periods.ts
   // builds these); `due` is passed instead when the list computed a period as
@@ -287,6 +350,7 @@ export default function Contribute() {
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const { scanning, flags, scanMeta, scanProof, reset: resetScan } = useProofScan({
     groupId,
@@ -358,8 +422,15 @@ export default function Contribute() {
         proof_url,
       });
       if (ok !== undefined) {
-        Alert.alert('Submitted', 'Your contribution was submitted for confirmation.');
-        router.back();
+        setReceipt({
+          amount: amt,
+          reference: reference.trim(),
+          submittedAt: new Date(),
+          cycleName: cycle.name,
+          dueDate: due,
+          recipient: state === 'rejected' ? null : [group?.treasurer_gcash_name, group?.treasurer_gcash_number].filter(Boolean).join(' · ') || null,
+          resubmitted: state === 'rejected',
+        });
       } else if (submit.error) {
         Alert.alert('Could not submit', submit.error.message);
       }
@@ -378,6 +449,16 @@ export default function Contribute() {
   };
   const title = TITLES[state];
   const close = () => router.back();
+
+  if (receipt) {
+    return (
+      <SuccessView
+        receipt={receipt}
+        onClose={close}
+        onViewAll={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
+      />
+    );
+  }
 
   // `&& !cycle`, not just `loading` — useQuery's background refetch (e.g. the
   // AppState-triggered one that fires the instant the native image picker
