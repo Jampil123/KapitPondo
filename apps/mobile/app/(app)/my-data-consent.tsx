@@ -57,10 +57,6 @@ export default function MyDataConsent() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="My Data & Consent" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <Text variant="body" color="secondary" style={{ marginBottom: 18 }}>
-          What KapitPondo holds about your account, and the consent behind it.
-        </Text>
-
         <Text variant="overline" color="muted" style={{ marginBottom: 4 }}>Your consent</Text>
         <View style={{ paddingVertical: 10, marginBottom: 12 }}>
           <Text variant="body" color="secondary" style={{ lineHeight: 20 }}>
@@ -119,14 +115,6 @@ export default function MyDataConsent() {
           </View>
         </View>
         <LinkRow label="My Submission" sub="View your submitted ID photo and selfie" onPress={() => router.push('/(app)/my-submission' as any)} />
-
-        <View style={{ borderTopWidth: 1, borderTopColor: semantic.border, marginTop: 8 }}>
-          <LinkRow label="Notification Center" sub={`${member?.notification_preferences ? Object.values(member.notification_preferences).filter(Boolean).length : 0} of 5 categories on`} onPress={() => router.push('/(app)/notification-center' as any)} />
-        </View>
-
-        <Text variant="caption" color="muted" style={{ lineHeight: 17, marginTop: 18 }}>
-          For the full legal text, read the Privacy Policy. For a complete copy of your contribution, loan, and ledger history, use Download my records — both under Profile.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

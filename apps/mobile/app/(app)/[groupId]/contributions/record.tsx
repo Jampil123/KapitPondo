@@ -13,6 +13,7 @@ import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { useQuery } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
+import { useActiveGroup } from '@/context/GroupContext';
 import { listMembers } from '@/api/groups';
 import type { PaymentMethod } from '@/api/contributions';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
@@ -21,32 +22,28 @@ import { buildTimeline, periodLabel } from '@/features/contributions/periods';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
-const METHODS: { key: PaymentMethod; icon: any; tileLabel: string; refLabel: string; ph: string; hint: string; dropTitle: string; dropSub: string; required: boolean; warn: boolean }[] = [
+const METHODS: { key: PaymentMethod; icon: any; tileLabel: string; refLabel: string; ph: string; dropTitle: string; dropSub: string; required: boolean; warn: boolean }[] = [
   {
     key: 'cash', icon: Banknote, tileLabel: 'Cash',
     refLabel: 'Receipt or slip number', ph: 'e.g. slip 041',
-    hint: 'Write the number on the acknowledgment slip you gave, if there is one.',
     dropTitle: 'Photo of the signed slip', dropSub: 'A slip the member signed, or a photo of the handover',
     required: false, warn: true,
   },
   {
     key: 'gcash', icon: Smartphone, tileLabel: 'GCash',
     refLabel: 'Reference number', ph: 'e.g. 8027 4451 9032',
-    hint: 'From the GCash receipt.',
     dropTitle: 'Attach the receipt', dropSub: 'A screenshot showing the amount, reference number and date',
     required: true, warn: false,
   },
   {
     key: 'bank_transfer', icon: Landmark, tileLabel: 'Bank',
     refLabel: 'Transaction reference', ph: 'e.g. TRX-88213004',
-    hint: 'From the deposit slip or transfer confirmation.',
     dropTitle: 'Attach the deposit slip', dropSub: 'A photo or screenshot showing amount, date and reference',
     required: true, warn: false,
   },
   {
     key: 'other', icon: MoreHorizontal, tileLabel: 'Other',
     refLabel: 'Describe how it was received', ph: 'e.g. remittance through a relative',
-    hint: 'There’s no reference number, so the description is the only identifier this entry will carry.',
     dropTitle: 'Attach whatever proof exists', dropSub: 'A photo, screenshot or written acknowledgment',
     required: true, warn: true,
   },
@@ -71,6 +68,9 @@ export default function RecordPayment() {
   const { groupId, membershipId } = useLocalSearchParams<{ groupId: string; membershipId: string }>();
   const router = useRouter();
   const { member } = useAuth();
+  const { role } = useActiveGroup();
+  // Backend rule (migration 0062): a Treasurer's entry must be confirmed by the Owner.
+  const confirmer = role === 'treasurer' ? 'the Owner' : 'another officer';
 
   const { cycle } = useActiveCycle(groupId!);
   const membersQ = useQuery(() => listMembers(groupId!), [groupId]);
@@ -133,7 +133,7 @@ export default function RecordPayment() {
         proof_url,
       });
       if (ok !== undefined) {
-        Alert.alert('Recorded', `${target.members?.full_name ?? 'Member'}'s payment of ${formatPeso(amt)} was submitted — the Auditor needs to confirm it before it posts.`);
+        Alert.alert('Recorded', `${target.members?.full_name ?? 'Member'}'s payment of ${formatPeso(amt)} was submitted for ${confirmer} to confirm.`);
         router.back();
       } else if (submit.error) {
         Alert.alert('Could not record', submit.error.message);
@@ -148,7 +148,7 @@ export default function RecordPayment() {
   const disabled = !amtNum || needsRef || !target || !cycle;
   const barNote = !amtNum ? 'Enter the amount received'
     : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required`
-    : 'Goes to the Auditor for confirmation';
+    : `Goes to ${confirmer} for confirmation`;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
@@ -181,7 +181,7 @@ export default function RecordPayment() {
             </View>
 
             {isSelf ? (
-              <Notice tone="warning" title="You're recording your own payment" body="That's allowed, but you can't be the one who confirms it — a payment you record always waits for the Auditor to approve." />
+              <Notice tone="warning" title="You're recording your own payment" body={`You can't confirm it yourself — ${confirmer} will.`} />
             ) : null}
 
             {/* ---------------- What was paid ---------------- */}
@@ -240,7 +240,6 @@ export default function RecordPayment() {
                     placeholderTextColor={semantic.textMuted}
                     style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, fontFamily: 'Poppins_500Medium', fontSize: 14, color: semantic.textPrimary }}
                   />
-                  <Text variant="caption" color="secondary" style={{ marginTop: 6, lineHeight: 16 }}>{methodCfg.hint}</Text>
                 </View>
 
                 <Pressable onPress={pickProof} style={{ borderWidth: 2, borderStyle: 'dashed', borderColor: semantic.borderStrong, borderRadius: 16, padding: 16, alignItems: 'center' }}>
@@ -258,7 +257,6 @@ export default function RecordPayment() {
             </View>
 
             {/* ---------------- Notices ---------------- */}
-            <Notice tone="info" title="Recorded by you, confirmed by the Auditor" body="A payment you record must be confirmed by the Auditor before it posts to the ledger. Your name stays on the entry permanently." />
             {methodCfg.warn ? (
               <Notice tone="danger" title={method === 'cash' ? 'Cash has no external record' : 'No reference number for this entry'} body="Attach a photo of a signed slip or write down how it was received — without something, this posting rests on your word alone." />
             ) : null}

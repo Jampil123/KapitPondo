@@ -39,10 +39,6 @@ export default function LoginActivity() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="Login Activity" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <Text variant="body" color="secondary" style={{ marginBottom: 18 }}>
-          Devices and times your account has signed in. If something here looks unfamiliar, change your password right away.
-        </Text>
-
         {error ? (
           <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
         ) : entries === null ? (

@@ -65,7 +65,7 @@ export default function Disburse() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Disbursement" subtitle="Treasurer" />
+      <AppBar title="Disbursement" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}>
         <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>

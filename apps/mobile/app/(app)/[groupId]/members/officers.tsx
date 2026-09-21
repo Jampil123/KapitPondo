@@ -274,10 +274,6 @@ export default function MembersOfficers() {
                 })
               )}
             </View>
-
-            <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
-              Officers keep their membership. Being appointed Treasurer or Auditor doesn't change a person's heads or their year-end share.
-            </Text>
           </>
         )}
       </ScrollView>
@@ -290,7 +286,6 @@ export default function MembersOfficers() {
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', padding: 20, paddingBottom: 12 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Appoint {sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'}</Text>
-                <Text variant="caption" color="secondary" style={{ marginTop: 4, lineHeight: 16 }}>Only active, verified members can hold this position.</Text>
               </View>
               <Pressable onPress={() => setSheetRole(null)} hitSlop={8}><X size={20} color={semantic.textSecondary} /></Pressable>
             </View>
@@ -361,10 +356,6 @@ export default function MembersOfficers() {
                     </>
                   );
                 })()}
-
-                <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17 }}>
-                  They'll be notified right away, and the change is written to the audit log. They can step down at any time, or you can revoke the role from their profile.
-                </Text>
               </ScrollView>
             ) : null}
           </Pressable>

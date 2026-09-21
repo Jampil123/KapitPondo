@@ -3,7 +3,7 @@ import { View, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
-import { CheckCircle2, MessageCircle, Bug, Sparkles, MessageSquare, MoreHorizontal } from 'lucide-react-native';
+import { CheckCircle2, Bug, Sparkles, MessageSquare, MoreHorizontal } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -59,10 +59,7 @@ export default function SendFeedback() {
           <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
             <CheckCircle2 size={52} color={semantic.brandDark} />
           </View>
-          <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 8 }}>Thanks for the feedback</Text>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 32 }}>
-            We've received your message. It helps us decide what to fix or build next.
-          </Text>
+          <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 32 }}>Thanks for the feedback</Text>
           <View style={{ alignSelf: 'stretch' }}>
             <Button label="Done" onPress={() => router.back()} />
           </View>
@@ -80,16 +77,6 @@ export default function SendFeedback() {
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
         <AppBar title="Send Feedback" backgroundColor={BAND_TOP} tintColor="#fff" />
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <View style={{ alignItems: 'center', marginBottom: 24 }}>
-            <View style={{ width: 62, height: 62, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-              <MessageCircle size={28} color={semantic.brandDark} />
-            </View>
-            <Text variant="h1" style={{ fontSize: 20, marginBottom: 4 }}>Tell us what's on your mind</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-              A short note goes straight to the team behind KapitPondo.
-            </Text>
-          </View>
-
           <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500', marginBottom: 9 }}>
             What's this about?
           </Text>

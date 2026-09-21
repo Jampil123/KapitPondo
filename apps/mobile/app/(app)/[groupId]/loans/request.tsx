@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Info, Wallet } from 'lucide-react-native';
+import { Wallet } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -30,23 +30,6 @@ function TermRow({ k, v, muted }: { k: string; v: string; muted?: boolean }) {
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
       <Text variant="body" color="secondary">{k}</Text>
       <Text variant="label" style={muted ? { color: semantic.textMuted, fontStyle: 'italic' } : undefined}>{v}</Text>
-    </View>
-  );
-}
-
-function Step({ n, title, sub, last }: { n: number; title: string; sub: string; last?: boolean }) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <View style={{ alignItems: 'center', width: 22 }}>
-        <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{n}</Text>
-        </View>
-        {last ? null : <View style={{ width: 2, flex: 1, minHeight: 20, backgroundColor: semantic.border, marginTop: 2 }} />}
-      </View>
-      <View style={{ flex: 1, paddingBottom: 16 }}>
-        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{title}</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 16 }}>{sub}</Text>
-      </View>
     </View>
   );
 }
@@ -98,7 +81,7 @@ export default function RequestLoan() {
     if (!months) return Alert.alert('Invalid term', 'Enter the number of months.');
     const ok = await apply.run({ principal: amt, term_months: months, purpose: purpose || undefined });
     if (ok !== undefined) {
-      Alert.alert('Request sent', 'Your loan request was submitted. The organizer will decide.');
+      Alert.alert('Request sent', 'Your loan request was submitted. The Owner will decide.');
       router.replace({ pathname: '/(app)/[groupId]', params: { groupId } });
     } else if (apply.error) {
       Alert.alert('Could not submit', apply.error.message);
@@ -109,10 +92,6 @@ export default function RequestLoan() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="Request Loan" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-        <Text variant="body" color="secondary" style={{ lineHeight: 19 }}>
-          Tell us how much you'd like to borrow, what it's for, and how long you'll need to repay it — the Owner reviews every request before it's approved.
-        </Text>
 
         {/* ---------------- Loan details ---------------- */}
         <SectionHead title="Loan details" />
@@ -138,29 +117,10 @@ export default function RequestLoan() {
         {/* ---------------- Loan terms ---------------- */}
         <SectionHead title="Loan terms" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, overflow: 'hidden' }, CARD_SHADOW]}>
-          <TermRow k="Loan amount" v={formatPeso(principal)} />
-          <TermRow k="Term" v={`${months} month${months === 1 ? '' : 's'}`} />
           <TermRow k="Principal / month" v={formatPeso(perMonth)} />
           <TermRow k="Interest rate" v={hasCycleRate ? `${ratePct!.toFixed(2)}% / month` : 'Set by the Owner at approval'} muted={!hasCycleRate} />
           <TermRow k="Est. interest (month 1)" v={amortization ? formatPeso(amortization.firstMonthInterest) : '—'} muted={!amortization} />
           <TermRow k="Est. total repayable" v={amortization ? formatPeso(amortization.totalRepayable) : 'Depends on approved rate'} muted={!amortization} />
-        </View>
-        <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', backgroundColor: intent.info.soft, borderRadius: 12, padding: 12, marginTop: 10 }}>
-          <Info size={16} color={intent.info.text} style={{ marginTop: 1 }} />
-          <Text variant="caption" style={{ flex: 1, color: intent.info.text, lineHeight: 17 }}>
-            {hasCycleRate
-              ? `This estimate applies this cycle's ${ratePct!.toFixed(2)}% monthly rate to your full loan amount each month. The Owner confirms the final rate and schedule when this loan is approved.`
-              : 'The numbers above are principal only. Your interest rate and full repayment schedule are set by the Owner when this loan is approved.'}
-          </Text>
-        </View>
-
-        {/* ---------------- How your request is decided ---------------- */}
-        <SectionHead title="How your request is decided" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-          <Step n={1} title="You submit this request" sub="Amount, purpose, and requested term — sent to the Owner." />
-          <Step n={2} title="The Owner reviews it" sub={hasCycleRate ? `Confirms the rate (this cycle's default is ${ratePct!.toFixed(2)}%), and may approve a smaller amount if fund cash is short.` : 'They set the interest rate, and may approve a smaller amount if fund cash is short.'} />
-          <Step n={3} title="An officer disburses it" sub="The Treasurer or Owner releases the money outside the app, with a reference recorded." />
-          <Step n={4} title="You repay monthly" sub="Submit each repayment with proof — a different officer confirms it." last />
         </View>
 
         <Button label="Submit request" onPress={onSubmit} loading={apply.loading} style={{ marginTop: 18 }} />

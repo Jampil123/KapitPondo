@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Search, Lock, ArrowRight } from 'lucide-react-native';
+import { Search, ArrowRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { PillTabs } from '@/components/ui/PillTabs';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
-import { useActiveGroup } from '@/context/GroupContext';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import type { AuditCategory, AuditLogEntry } from '@/api/auditLog';
 import { formatPeso } from '@/lib/money';
@@ -111,7 +110,6 @@ function describe(e: AuditLogEntry): { title: string; from?: string; to?: string
 
 export default function AuditLog() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { group } = useActiveGroup();
   const [category, setCategory] = useState<FilterKey>('all');
   const [search, setSearch] = useState('');
   const [cursor, setCursor] = useState<string | undefined>(undefined);
@@ -177,24 +175,11 @@ export default function AuditLog() {
           />
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start', backgroundColor: semantic.dashCard, borderRadius: 20, padding: 15, marginTop: 16 }}>
-          <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.13)', alignItems: 'center', justifyContent: 'center' }}>
-            <Lock size={12} color="#fff" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>This log can&apos;t be edited by anyone</Text>
-            <Text style={{ fontSize: 11.5, lineHeight: 16, color: '#9BBAC7', fontFamily: 'Poppins_500Medium', marginTop: 3 }}>
-              Every approval, reversal, status change and role change is written here automatically. Not even the Owner can remove an entry.
-            </Text>
-          </View>
-        </View>
-
         {page.loading && entries.length === 0 ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : entries.length === 0 ? (
-          <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
-            <Text variant="h3" style={{ fontSize: 16 }}>Nothing here yet</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>Actions will show up here as they happen.</Text>
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Text variant="body" color="muted">No entries yet.</Text>
           </View>
         ) : (
           grouped.map(([key, dayEntries]) => (
@@ -247,9 +232,6 @@ export default function AuditLog() {
           </Pressable>
         ) : null}
 
-        <Text variant="caption" color="muted" style={{ lineHeight: 16, paddingHorizontal: 2, marginTop: 12 }}>
-          Entries are written automatically when an action happens — {group?.name ?? 'this group'}&apos;s full history, not a summary.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

@@ -52,10 +52,6 @@ export default function MyUpdateRequests() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="My Update Requests" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <Text variant="body" color="secondary" style={{ marginBottom: 18 }}>
-          Every change you've requested to your locked profile information, and its review status.
-        </Text>
-
         {error ? (
           <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
         ) : requests === null ? (

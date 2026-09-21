@@ -3,7 +3,7 @@ import { View, ScrollView, Alert, TextInput, Modal, Platform, KeyboardAvoidingVi
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
-import { User, Phone, Lock, ShieldCheck, Mail, Calendar, Info, ChevronLeft } from 'lucide-react-native';
+import { User, Phone, Lock, Mail, Calendar, ChevronLeft } from 'lucide-react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
@@ -57,15 +57,6 @@ function BirthdayField({
   const [show, setShow] = useState(false);
   const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
 
-  const note = (
-    <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start' }}>
-      <Info size={14} color={semantic.brandDark} style={{ marginTop: 1 }} />
-      <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-        You must be at least {MIN_SIGNUP_AGE} years old to create an account.
-      </Text>
-    </View>
-  );
-
   if (Platform.OS === 'web') {
     return (
       <View style={{ gap: 7, marginBottom: 15 }}>
@@ -88,7 +79,6 @@ function BirthdayField({
         {error ? (
           <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
         ) : null}
-        {note}
       </View>
     );
   }
@@ -119,7 +109,6 @@ function BirthdayField({
       {error ? (
         <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
       ) : null}
-      {note}
 
       {show && Platform.OS === 'android' ? (
         <DateTimePicker
@@ -246,9 +235,8 @@ export default function SignUp() {
           contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 32, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={{ gap: 3, marginTop: 10, marginBottom: 22 }}>
+          <View style={{ marginTop: 10, marginBottom: 22 }}>
             <Text variant="h1" style={{ fontSize: 23 }}>Create your account</Text>
-            <Text variant="body" color="secondary">Join your community sinking fund in minutes.</Text>
           </View>
 
           <Field
@@ -285,13 +273,6 @@ export default function SignUp() {
             leading={<Mail size={18} color={semantic.textMuted} />}
           />
 
-          <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginTop: -10, marginBottom: 14 }}>
-            <Info size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
-            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-              Email is optional — you can add or update it later during identity verification.
-            </Text>
-          </View>
-
           <Field
             label="Phone Number"
             placeholder="+63 900 000 0000"
@@ -307,13 +288,6 @@ export default function SignUp() {
             onChangeText={setPassword}
             leading={<Lock size={18} color={semantic.textMuted} />}
           />
-
-          <View style={{ flexDirection: 'row', gap: 9, alignItems: 'flex-start', marginBottom: 18 }}>
-            <ShieldCheck size={18} color={semantic.brandDark} style={{ marginTop: 1 }} />
-            <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-              Your details are encrypted and never shared.
-            </Text>
-          </View>
 
           <View style={{ marginBottom: 18 }}>
             <Checkbox

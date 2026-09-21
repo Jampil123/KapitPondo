@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Users, Info, Plus, Clock } from 'lucide-react-native';
+import { Plus, Clock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
@@ -46,7 +46,7 @@ export default function JoinGroup() {
           </View>
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 8 }}>Request Sent</Text>
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 32 }}>
-            Your request to join was sent to the group owner. You'll get access once it's approved — the group shows as <Text variant="label" color="secondary">Pending</Text> until then.
+            The group owner will review your request.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
             <Button label="Back to Home" onPress={() => router.replace('/(app)/groups')} />
@@ -62,17 +62,7 @@ export default function JoinGroup() {
         <AppBar title="Join a Group" backgroundColor={BAND_TOP} tintColor="#fff" />
 
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 20, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-          <View style={{ alignItems: 'center', marginTop: 24, marginBottom: 32 }}>
-            <View style={{ width: 80, height: 80, borderRadius: 24, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 16 }}>
-              <Users size={40} color={semantic.textPrimary} />
-            </View>
-            <Text variant="h1" style={{ fontSize: 24, marginBottom: 8, textAlign: 'center' }}>Secure Your Spot</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-              Enter the unique code provided by your group officer to start saving together.
-            </Text>
-          </View>
-
-          <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 24, padding: 20, gap: 16 }}>
+          <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 24, padding: 20, gap: 16, marginTop: 24 }}>
             <Text variant="overline" color="secondary">Fund Code</Text>
             <TextInput
               value={code}
@@ -84,13 +74,6 @@ export default function JoinGroup() {
               style={[typography.h2, { backgroundColor: semantic.background, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 16, color: semantic.textPrimary, textAlign: 'center', letterSpacing: 4 }]}
             />
 
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: '#ffffff66', padding: 12, borderRadius: 12 }}>
-              <Info size={20} color={semantic.textPrimary} />
-              <Text variant="bodySmall" style={{ flex: 1 }}>
-                Fund codes are unique to each savings circle. If you don't have one, contact your cooperative's treasurer.
-              </Text>
-            </View>
-
             {error ? <Text variant="bodySmall" style={{ color: '#C25C5E' }}>{error}</Text> : null}
 
             <Button label="Join Group" onPress={handleJoin} loading={loading} disabled={code.trim().length < 4} />
@@ -100,7 +83,6 @@ export default function JoinGroup() {
             <Pressable onPress={() => router.replace('/(app)/groups/create')} style={{ backgroundColor: semantic.surface, borderWidth: 1, borderColor: semantic.borderStrong, padding: 16, borderRadius: 24 }}>
               <Plus size={28} color={semantic.textPrimary} style={{ marginBottom: 4 }} />
               <Text variant="label">Need a new group?</Text>
-              <Text variant="bodySmall" color="secondary">Start your own KapitPondo savings circle and invite others.</Text>
             </Pressable>
           </View>
         </ScrollView>

@@ -78,28 +78,11 @@ export default function Announcements() {
           <View style={{ alignItems: 'center', paddingVertical: 50, gap: 10 }}>
             <Megaphone size={36} color={semantic.textMuted} />
             <Text variant="h3" style={{ fontSize: 15 }}>No announcements yet</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-              {isOwner ? 'Post one with the + button above.' : "The Owner hasn't posted anything here yet."}
-            </Text>
           </View>
         ) : (
           items.map((a) => <AnnouncementCard key={a.id} a={a} />)
         )}
-
-        {items.length > 0 ? (
-          <Text variant="caption" color="muted" style={{ textAlign: 'center', marginTop: 4 }}>
-            Announcements can't be replied to.
-          </Text>
-        ) : null}
       </ScrollView>
-
-      {!isOwner ? (
-        <View style={{ padding: 14, borderTopWidth: 1, borderColor: semantic.border, backgroundColor: semantic.surfaceAlt }}>
-          <Text variant="caption" color="secondary" style={{ textAlign: 'center', lineHeight: 16 }}>
-            Only the Owner posts here. Message an officer directly if you need something.
-          </Text>
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }

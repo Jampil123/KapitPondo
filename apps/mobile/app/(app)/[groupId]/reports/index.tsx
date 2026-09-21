@@ -279,9 +279,6 @@ export default function Reports() {
                   );
                 })}
               </View>
-              <Text variant="caption" color="secondary" style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border, lineHeight: 17 }}>
-                Green periods are posted, blue is under review, red is late or returned.
-              </Text>
             </View>
           </>
         ) : null}
@@ -308,15 +305,12 @@ export default function Reports() {
                   <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{formatPeso(unsettledPenalty)}</Text>
                 </View>
               ) : null}
-              <Text variant="caption" color="muted" style={{ lineHeight: 16 }}>
-                These aren't subtracted above — a year-end share and your other balances with the group are separate.
-              </Text>
             </View>
           ) : null}
 
           <View style={{ marginTop: 12, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
             <Text variant="caption" style={{ color: intent.warning.text, lineHeight: 17 }}>
-              This is an estimate based on the fund's cash on hand right now, split by heads — the same math the Owner runs at year-end. It moves as the fund does, and isn't final until the Owner distributes.
+              Estimate only — it moves with the fund and isn't final until the Owner distributes.
             </Text>
           </View>
         </View>
@@ -355,10 +349,6 @@ export default function Reports() {
             <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{period === 'cycle' ? 'This cycle' : 'All time'} · {entries.length} entr{entries.length === 1 ? 'y' : 'ies'}, ready to open in Excel or Sheets</Text>
           </View>
         </Pressable>
-
-        <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
-          These figures come from postings an officer has verified. Anything still under review is marked separately and isn't counted as capital yet.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

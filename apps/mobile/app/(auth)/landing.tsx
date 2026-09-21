@@ -141,8 +141,7 @@ export default function LandingScreen() {
             variant="caption"
             style={{ textAlign: 'center', marginTop: 4, paddingHorizontal: 12, lineHeight: 18, color: '#7FA6B870' }}
           >
-            KapitPondo helps cooperatives record and manage shared funds transparently.
-            {'\n'}By continuing, you agree to our Terms of Service and Privacy Policy.
+            By continuing, you agree to our Terms of Service and Privacy Policy.
           </Text>
         </View>
 

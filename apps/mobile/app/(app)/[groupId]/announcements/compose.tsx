@@ -77,8 +77,6 @@ export default function ComposeAnnouncement() {
     }
   }
 
-  const preview = body.trim().slice(0, 160) + (body.trim().length > 160 ? '…' : '');
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="New announcement" subtitle={group?.name} />
@@ -139,26 +137,11 @@ export default function ComposeAnnouncement() {
             );
           })}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderTopWidth: 1, borderColor: semantic.border }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Send a push notification</Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Otherwise they'll see it next time they open the app</Text>
-            </View>
+            <Text style={{ flex: 1, fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Send a push notification</Text>
             <Switch value={sendPush} onValueChange={setSendPush} trackColor={{ false: semantic.surfaceAlt, true: intent.success.base }} thumbColor="#fff" />
           </View>
         </View>
 
-        <View style={{ backgroundColor: semantic.dashCard, borderRadius: 16, padding: 15, marginTop: 20 }}>
-          <Text variant="overline" style={{ color: '#88A9B6' }}>How it will look</Text>
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginTop: 8, borderLeftWidth: 3, borderLeftColor: intent.warning.base }}>
-            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#E0B872', textTransform: 'uppercase' }}>
-              {TYPES.find((t) => t.key === type)?.label}
-            </Text>
-            <Text style={{ fontSize: 12.5, lineHeight: 18, color: '#E4EEF2', marginTop: 5 }}>{preview || 'Your message…'}</Text>
-          </View>
-          <Text style={{ fontSize: 11, color: '#7E9CAA', fontWeight: '600', marginTop: 11 }}>
-            sending to {recipientCount || '—'} member{recipientCount === 1 ? '' : 's'}
-          </Text>
-        </View>
       </ScrollView>
 
       <View style={{ padding: 16, paddingBottom: 20, backgroundColor: semantic.background }}>

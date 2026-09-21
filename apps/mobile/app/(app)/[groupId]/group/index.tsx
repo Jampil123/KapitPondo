@@ -144,9 +144,6 @@ export default function GroupOverview() {
             </View>
           </View>
         </View>
-          <Text variant="caption" color="muted" style={{ paddingTop: 11,lineHeight: 16, textAlign: 'justify' }}>
-            Money lent to members is still part of the fund. It comes back with interest as loans are repaid.
-          </Text>
 
         {/* ---------------- Officers ---------------- */}
         <SectionHead title="Officers" aside={`${officers.data?.officers.length ?? 0} appointed`} />
@@ -176,22 +173,6 @@ export default function GroupOverview() {
               </View>
             ))
           )}
-
-          <View style={{ padding: 14, backgroundColor: semantic.surfaceAlt, gap: 6 }}>
-            <Text variant="overline" color="muted">How your payment is handled</Text>
-            {[
-              'You send the money and upload proof',
-              'An officer other than you confirms it',
-              'Only then does it post to the ledger',
-            ].map((line, i) => (
-              <View key={line} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9 }}>
-                <View style={{ width: 18, height: 18, borderRadius: 6, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                  <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>{i + 1}</Text>
-                </View>
-                <Text variant="caption" color="secondary" style={{ flex: 1, lineHeight: 16 }}>{line}</Text>
-              </View>
-            ))}
-          </View>
 
           <Pressable onPress={() => go('chat/general')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderTopWidth: 1, borderColor: semantic.border }}>
             <MessageCircle size={16} color={semantic.brandDark} />
@@ -289,10 +270,6 @@ export default function GroupOverview() {
             {membership?.role !== 'owner' ? <ChevronRight size={16} color={semantic.textMuted} /> : null}
           </Pressable>
         </View>
-
-        <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
-          Every member can see the fund total and each member's heads. Individual payment records stay private to that member and the officers.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

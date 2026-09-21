@@ -443,9 +443,6 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
 
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
-      <Text variant="caption" color="muted" style={{lineHeight: 16, textAlign: 'justify' }}>
-        Money lent to members is still part of the fund. It returns with interest as loans are repaid.
-      </Text>
 
       <SectionHead title="Shortcuts" aside="View all" onAsidePress={() => go('more')} />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>

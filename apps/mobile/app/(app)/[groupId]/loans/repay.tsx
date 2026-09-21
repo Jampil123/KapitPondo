@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 're
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Hash, Clock, Coins } from 'lucide-react-native';
+import { Camera, Hash, Coins } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -88,7 +88,7 @@ export default function Repay() {
   if (!loans.loading && !activeLoan) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Payment" subtitle="Member" />
+        <AppBar title="Repay loan" />
         <View style={[{ margin: 16, backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center', gap: 10 }, shadowToken.card]}>
           <Coins size={26} color={semantic.textMuted} />
           <Text variant="body" color="muted" style={{ textAlign: 'center' }}>You don't have an active loan to repay right now.</Text>
@@ -99,7 +99,7 @@ export default function Repay() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Payment" subtitle="Member" />
+      <AppBar title="Repay loan" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
         <View style={{ borderRadius: 20, padding: 18, backgroundColor: semantic.brand, marginBottom: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <View style={{ gap: 3 }}>
@@ -120,12 +120,11 @@ export default function Repay() {
               onPress={() => setGcashSheetOpen(true)}
             />
             <Button label="I already paid — record it" variant="ghost" onPress={() => setRoute('manual')} style={{ marginTop: 10 }} />
-            <Text variant="caption" color="muted" style={{ marginTop: 12, lineHeight: 16 }}>
-              {suggestedAmount < outstanding
-                ? `${formatPeso(suggestedAmount)} is this month's expected payment, not the full ${formatPeso(outstanding)} balance — pay more anytime to settle it faster. `
-                : ''}
-              Scan the treasurer's QR to send the money, then upload your receipt — a different officer still confirms it before it posts.
-            </Text>
+            {suggestedAmount < outstanding ? (
+              <Text variant="caption" color="muted" style={{ marginTop: 12, lineHeight: 16 }}>
+                {`${formatPeso(suggestedAmount)} is this month's expected payment, not the full ${formatPeso(outstanding)} balance.`}
+              </Text>
+            ) : null}
           </>
         ) : (
           <>
@@ -142,16 +141,7 @@ export default function Repay() {
             </Pressable>
 
             <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-            <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 14, marginLeft: 2 }}>
-              Paying less than the full balance is fine — it goes to interest first, then principal.
-            </Text>
-
             <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
-
-            <View style={{ flexDirection: 'row', gap: 9, alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12, marginVertical: 14 }}>
-              <Clock size={18} color={semantic.brandDark} />
-              <Text variant="caption" color="secondary" style={{ flex: 1 }}>A different officer will confirm your repayment before it posts.</Text>
-            </View>
 
             <Button label="Submit repayment" onPress={onSubmit} loading={submit.loading || uploading} disabled={!activeLoan || !proofUri} />
             {hasTreasurerGcash ? (

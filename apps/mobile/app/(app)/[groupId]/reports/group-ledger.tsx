@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight, Receipt, Users } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownRight, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent } from '@/theme/colors';
@@ -216,22 +216,6 @@ export default function GroupLedger() {
             </View>
           ) : null}
         </View>
-        <Text variant="caption" color="muted" style={{ lineHeight: 16, textAlign: 'justify'  }}>
-          Every entry below was confirmed by an officer before it posted
-        </Text>
-
-        {/* ---------------- Transparency banner ---------------- */}
-        <View style={{ marginTop: 15, backgroundColor: intent.info.soft, borderRadius: 18, padding: 14, flexDirection: 'row', gap: 11, alignItems: 'flex-start' }}>
-          <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: 'rgba(44,110,155,0.14)', alignItems: 'center', justifyContent: 'center' }}>
-            <Users size={14} color={intent.info.text} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>Everyone in the group can see this</Text>
-            <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-              Amounts and dates are open to every active member. Receipt images aren't shown here — reach one through Contributions, Loans, or Proofs.
-            </Text>
-          </View>
-        </View>
 
         {/* ---------------- Filters ---------------- */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 18 }} contentContainerStyle={{ gap: 7 }}>
@@ -271,10 +255,6 @@ export default function GroupLedger() {
             </View>
           ))
         )}
-
-        <Text variant="caption" color="secondary" style={{ marginTop: 18, lineHeight: 17, paddingHorizontal: 2 }}>
-          Entries are permanent. A mistake is corrected with a reversing entry that stays linked to the original, so nothing is ever quietly deleted.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

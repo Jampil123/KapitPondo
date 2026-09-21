@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Phone, Lock, Shield } from 'lucide-react-native';
+import { Phone, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -42,11 +42,8 @@ export default function Forgot() {
           <View style={{ width: 62, height: 62, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
             <Lock size={30} color={semantic.brandDark} />
           </View>
-          <View style={{ alignItems: 'center', gap: 6, marginTop: 4 }}>
+          <View style={{ alignItems: 'center', marginTop: 4 }}>
             <Text variant="h1" style={{ fontSize: 21 }}>Reset Password</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center', maxWidth: 280 }}>
-              Enter your registered mobile number to receive a verification code.
-            </Text>
           </View>
         </View>
 
@@ -60,14 +57,6 @@ export default function Forgot() {
         />
         <View style={{ height: 6 }} />
         <Button label="Send Code" onPress={onSend} loading={loading} disabled={!phone.trim()} />
-
-        <View style={{ flex: 1 }} />
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 7 }}>
-          <Shield size={15} color={semantic.textMuted} />
-          <Text variant="caption" color="secondary" style={{ textAlign: 'center' }}>
-            Your information is protected using secure encryption.
-          </Text>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

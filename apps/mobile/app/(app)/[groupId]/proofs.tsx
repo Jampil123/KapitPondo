@@ -276,7 +276,6 @@ export default function MyProofs() {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>{rejectedCount} proof{rejectedCount === 1 ? ' was' : 's were'} returned</Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>Open it from Contributions or Loans to see what to fix and upload a clearer one.</Text>
             </View>
           </Pressable>
         ) : null}
@@ -308,10 +307,6 @@ export default function MyProofs() {
             </View>
           </>
         )}
-
-        <Text variant="caption" color="secondary" style={{ marginTop: 18, lineHeight: 17, paddingHorizontal: 2 }}>
-          Your receipts stay in the app for as long as you're in the group, and are kept with the cycle after it closes.
-        </Text>
       </ScrollView>
 
       <Lightbox item={opened} onClose={() => setOpened(null)} />

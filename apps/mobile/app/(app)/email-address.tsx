@@ -273,16 +273,6 @@ export default function EmailAddress() {
         }
       />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <View style={{ alignItems: 'center', marginBottom: 24 }}>
-          <View style={{ width: 62, height: 62, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-            <Mail size={28} color={semantic.brandDark} />
-          </View>
-          <Text variant="h1" style={{ fontSize: 20, marginBottom: 4 }}>Your email address</Text>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-            Used to help recover your account and receive important updates.
-          </Text>
-        </View>
-
         <View style={{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 12 }}>
           <View style={{ gap: 8 }}>
             <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Current email</Text>

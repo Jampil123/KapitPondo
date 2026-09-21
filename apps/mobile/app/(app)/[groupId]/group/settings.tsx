@@ -186,17 +186,6 @@ export default function GroupSettings() {
       <AppBar title="Group settings" subtitle={group?.name ?? ''} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
-        {role === 'treasurer' ? (
-          <View style={{ flexDirection: 'row', gap: 10, backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13 }}>
-            <View style={{ width: 24, height: 24, borderRadius: 8, backgroundColor: semantic.dashCard, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
-            </View>
-            <Text variant="caption" color="secondary" style={{ flex: 1, lineHeight: 16 }}>
-              As <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>Treasurer</Text>, you propose the group's GCash number. The <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>Owner</Text> reviews and approves it before members see it on the contribution page.
-            </Text>
-          </View>
-        ) : null}
-
         <SectionHead title="Payment channel" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderBottomWidth: 1, borderColor: semantic.border }}>
@@ -427,12 +416,6 @@ function ProposeForm({
 
   return (
     <View>
-      <Text variant="body" color="secondary" style={{ lineHeight: 19, marginBottom: 14 }}>
-        {initialNumber
-          ? 'Fix the details below and resubmit for the Owner\'s approval.'
-          : "No GCash number is set for this group yet. Fill in the details below and submit for the Owner's approval."}
-      </Text>
-
       <Field
         label="GCash number"
         placeholder="09XX XXX XXXX"
@@ -441,7 +424,6 @@ function ProposeForm({
         keyboardType="phone-pad"
         leading={<Smartphone size={18} color={semantic.textMuted} />}
       />
-      <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 4 }}>11-digit Philippine mobile number registered to GCash.</Text>
 
       <Field
         label="Account name"
@@ -450,7 +432,6 @@ function ProposeForm({
         onChangeText={setName}
         leading={<User2 size={18} color={semantic.textMuted} />}
       />
-      <Text variant="caption" color="muted" style={{ marginTop: -10, marginBottom: 4 }}>Must match the GCash account holder.</Text>
 
       <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500', marginBottom: 7 }}>Your GCash QR (optional)</Text>
       <Pressable onPress={pickQr} style={{ alignItems: 'center', gap: 6, borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 14, paddingVertical: 16, backgroundColor: semantic.surfaceAlt, marginBottom: 6 }}>
@@ -464,7 +445,7 @@ function ProposeForm({
         )}
       </Pressable>
       <Text variant="caption" color="muted" style={{ marginBottom: 15, lineHeight: 15 }}>
-        In your GCash app: Profile → QR → save/screenshot your own "Receive Money" QR, then attach it here. Members will see this exact image — never a generated one, so it always scans correctly. Optional — the number above always works even without it.
+        In GCash: Profile → QR → save your "Receive Money" QR.
       </Text>
 
       <Field

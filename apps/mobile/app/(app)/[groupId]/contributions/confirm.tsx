@@ -163,7 +163,7 @@ export default function ConfirmContributions() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Contributions" subtitle="Treasurer" />
+      <AppBar title="Contributions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Collection summary ---------------- */}
@@ -267,9 +267,6 @@ export default function ConfirmContributions() {
                   </View>
                 );
               })}
-              <Text variant="caption" color="muted" style={{ lineHeight: 16, paddingHorizontal: 2 }}>
-                Confirming posts it straight to the ledger — a different officer than whoever recorded it must confirm.
-              </Text>
             </View>
           )
         )}
@@ -277,15 +274,6 @@ export default function ConfirmContributions() {
         {/* ================= RECORD NEW ================= */}
         {tab === 'record' && (
           <View style={{ marginTop: 16, gap: 16 }}>
-            <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start', backgroundColor: intent.info.soft, borderRadius: 16, padding: 13 }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: intent.info.base, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
-              </View>
-              <Text variant="caption" style={{ flex: 1, color: intent.info.text, lineHeight: 16 }}>
-                For payments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. Another officer still confirms it before it posts — the Owner, if you're the Treasurer.
-              </Text>
-            </View>
-
             {!cycle ? (
               <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No active cycle to record against.</Text>
             ) : (
@@ -363,9 +351,6 @@ export default function ConfirmContributions() {
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>{formatPeso(c.amount)}</Text>
                   </View>
                 ))}
-                <Text variant="caption" style={{ padding: 13, paddingTop: 10, color: intent.info.text, opacity: 0.8, lineHeight: 16 }}>
-                  A Treasurer-recorded contribution needs the Owner to confirm it; anything else just needs another officer. Members still see their own as under review.
-                </Text>
               </View>
             )}
           </View>

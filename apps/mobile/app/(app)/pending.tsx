@@ -40,22 +40,14 @@ export default function Pending() {
         <View style={{ alignItems: 'center', marginTop: 18 }}>
           <Spinner />
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center' }}>Verification in Progress</Text>
-          <Text variant="bodySmall" color="secondary" style={{ textAlign: 'center', marginTop: 10, maxWidth: 300 }}>
-            We're currently reviewing your submitted information to ensure the security of the KapitPondo community.
-          </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#F8EFDA', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 16, marginTop: 18 }}>
-            <Clock size={16} color="#A87C2C" />
-            <Text variant="caption" style={{ color: '#A87C2C', fontWeight: '600' }}>Usually completed within 24 hours</Text>
-          </View>
         </View>
 
         <View style={[{ flexDirection: 'row', gap: 12, backgroundColor: semantic.surface, borderRadius: 18, padding: 15, marginTop: 24 }, shadowToken.card]}>
           <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
             <Mail size={22} color={semantic.brandDark} />
           </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text variant="label">We'll notify you</Text>
-            <Text variant="caption" color="secondary">By email and in-app notification once your account has been verified.</Text>
+          <View style={{ flex: 1, justifyContent: 'center' }}>
+            <Text variant="label">We'll notify you once you're verified</Text>
           </View>
         </View>
 

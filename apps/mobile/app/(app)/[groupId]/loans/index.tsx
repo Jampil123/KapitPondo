@@ -299,12 +299,6 @@ export default function LoansOverview() {
               );
             })() : null}
 
-            <View style={{ marginTop: 15, backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13 }}>
-              <Text variant="caption" color="secondary" style={{ lineHeight: 17 }}>
-                Pay any amount, any time — each repayment goes to interest first, then principal. Submit one with proof for an officer to confirm, or pay an officer directly and they'll record it.
-              </Text>
-            </View>
-
             <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay', { suggested: String(Math.min(expectedMonthlyTotal, outstanding)) })} style={{ marginTop: 14 }} />
 
             <SectionHead title="Repayment history" aside={`${payments.length} made`} />
@@ -344,14 +338,8 @@ export default function LoansOverview() {
               ]} />
             </View>
 
-            <SectionHead title="What you asked for" />
-            <Split items={[
-              { k: 'Amount', v: formatPeso(pendingLoan.principal) },
-              { k: 'Term', v: `${pendingLoan.term_months} mo` },
-            ]} />
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, marginTop: 15 }, CARD_SHADOW]}>
               <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 18 }}>
-                {pendingLoan.purpose ? `Purpose: ${pendingLoan.purpose}. ` : ''}
                 Estimated principal per month: <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(Number(pendingLoan.principal) / pendingLoan.term_months)}</Text>
                 {hasCycleRate
                   ? <> — interest estimated at this cycle's <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{cycleRatePct!.toFixed(2)}%</Text> monthly rate, confirmed by the Owner at approval.</>
@@ -391,10 +379,6 @@ export default function LoansOverview() {
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
               ]} />
             </View>
-
-            <Text variant="caption" color="secondary" style={{ marginTop: 4, lineHeight: 17 }}>
-              Money is sent outside the app. If nothing arrives within a couple of days, contact an officer.
-            </Text>
           </>
         )}
 
@@ -412,19 +396,11 @@ export default function LoansOverview() {
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>Limited by the fund's cash on hand today</Text>
             </View>
 
-            <SectionHead title="You meet every requirement" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, paddingHorizontal: 16, paddingTop: 4 }, CARD_SHADOW]}>
-              {ELIGIBILITY_CHECKS.map((c) => <ChecklistRow key={c.key} pass title={c.passTitle} sub={c.sub} />)}
-            </View>
-
-            <SectionHead title="Before you request" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, CARD_SHADOW]}>
-              <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 19 }}>
-                {hasCycleRate
-                  ? `This cycle's loans use a default interest rate of ${cycleRatePct!.toFixed(2)}% per month, set when the cycle was configured. The Owner confirms it at approval — approval isn't automatic, and the amount may be reduced if the fund needs to keep cash for other members.`
-                  : "The Owner makes the final decision and sets the interest rate when approving — approval isn't automatic, and the amount may be reduced if the fund needs to keep cash for other members."}
-              </Text>
-            </View>
+            <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
+              {hasCycleRate
+                ? `Interest: ${cycleRatePct!.toFixed(2)}% per month. The Owner makes the final decision and may reduce the amount.`
+                : 'The Owner sets the interest rate, makes the final decision and may reduce the amount.'}
+            </Text>
 
             <Button label="Request a loan" leading={<Coins size={18} color="#fff" />} onPress={() => go('loans/request')} style={{ marginTop: 18 }} />
           </>
@@ -452,15 +428,6 @@ export default function LoansOverview() {
               })}
             </View>
 
-            <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17 }}>
-              These rules protect everyone's money, including yours. Once every item clears, the request button unlocks on its own.
-            </Text>
-
-            <Button
-              label={`Request a loan — ${eligibility.data?.reasons.length ?? 0} item${(eligibility.data?.reasons.length ?? 0) === 1 ? '' : 's'} to clear`}
-              disabled
-              style={{ marginTop: 18 }}
-            />
           </>
         )}
 

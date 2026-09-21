@@ -61,34 +61,24 @@ export default function Heads() {
             <Text variant="caption" style={{ color: '#fff', opacity: 0.85 }}>Heads held</Text>
           </View>
           <Text style={{ fontSize: 32, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>{heads}</Text>
-          <Text variant="caption" style={{ color: '#fff', opacity: 0.75, marginTop: 4 }}>
-            Each head is a full share in the fund — it scales what you owe each cycle and what you're paid at year-end.
-          </Text>
         </View>
 
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, shadowToken.card]}>
           <Text variant="h3" style={{ fontSize: 15, marginBottom: 4 }}>What this affects</Text>
           <InfoRow label="Per-head contribution" value={cycle ? formatPeso(cycle.contribution_amount) : '—'} />
           <InfoRow label="Your expected contribution" value={expected !== null ? formatPeso(expected) : '—'} />
-          <Text variant="caption" color="muted" style={{ marginTop: 6 }}>
-            Year-end net income is split proportionally by heads across the group — see Reports for the breakdown.
-          </Text>
         </View>
 
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 12 }, shadowToken.card]}>
           <Text variant="h3" style={{ fontSize: 15 }}>Change your heads</Text>
-          {editable ? (
-            <Text variant="caption" color="muted">
-              Adjust how many heads you hold. This is self-service — you can only change your own, not another member's.
-            </Text>
-          ) : (
+          {!editable ? (
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
               <Lock size={15} color={intent.warning.text} style={{ marginTop: 1 }} />
               <Text variant="caption" style={{ flex: 1, color: intent.warning.text, lineHeight: 16 }}>
                 Heads can only be changed in the week before a due date. Check back closer to your next one.
               </Text>
             </View>
-          )}
+          ) : null}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, opacity: editable ? 1 : 0.5 }}>
             <Pressable
               onPress={() => editable && setDraft((d) => Math.max(1, d - 1))}

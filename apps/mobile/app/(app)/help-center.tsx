@@ -16,10 +16,6 @@ export default function HelpCenter() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="Help Center" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <Text variant="body" color="secondary" style={{ marginBottom: 18 }}>
-          Answers to common questions about how KapitPondo works. Tap a question to expand it.
-        </Text>
-
         {HELP_SECTIONS.map((section) => (
           <View key={section.heading} style={{ marginBottom: 22 }}>
             <Text variant="overline" color="muted" style={{ marginBottom: 4 }}>{section.heading}</Text>

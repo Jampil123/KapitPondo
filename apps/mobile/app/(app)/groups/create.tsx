@@ -99,12 +99,8 @@ export default function CreateGroup() {
         <AppBar title="Create a Group" backgroundColor={BAND_TOP} tintColor="#fff" />
 
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <View style={{ marginTop: 8, marginBottom: 24 }}>
-            <Text variant="body" color="secondary">Fill in the details to create your communal savings group.</Text>
-          </View>
-
           {!verified && (
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 10, marginBottom: 20, borderWidth: 1, borderColor: vtone.soft }, shadowToken.card]}>
+            <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, padding: 14, gap: 10, marginTop: 8, marginBottom: 20, borderWidth: 1, borderColor: vtone.soft }, shadowToken.card]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: vtone.soft, alignItems: 'center', justifyContent: 'center' }}>
                   <vmeta.icon size={16} color={vtone.text} strokeWidth={2.4} />
@@ -122,6 +118,7 @@ export default function CreateGroup() {
             </View>
           )}
 
+          <View style={{ height: verified ? 8 : 0 }} />
           <Label>Group Name</Label>
           <TextInput
             value={name}
@@ -133,7 +130,7 @@ export default function CreateGroup() {
           />
 
           <Label>Fund Code (optional)</Label>
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 6 }}>
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
             <TextInput
               value={fundCode}
               onChangeText={(t) => setFundCode(t.toUpperCase())}
@@ -151,10 +148,6 @@ export default function CreateGroup() {
               <RefreshCw size={22} color={semantic.textPrimary} />
             </Pressable>
           </View>
-          <Text variant="bodySmall" color="secondary" style={{ marginBottom: 20, marginLeft: 4 }}>
-            Members use this code to join. Leave blank to auto-generate.
-          </Text>
-
           <Label>Description</Label>
           <TextInput
             value={description}

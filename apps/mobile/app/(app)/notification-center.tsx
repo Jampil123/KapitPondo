@@ -53,10 +53,6 @@ export default function NotificationCenter() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="Notification Center" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <Text variant="body" color="secondary" style={{ marginBottom: 18 }}>
-          Choose what you get notified about. This won't affect what's already in your Notifications inbox — just what happens next.
-        </Text>
-
         {error ? (
           <Text variant="caption" style={{ color: intent.danger.text, marginBottom: 12 }}>{error}</Text>
         ) : null}

@@ -109,7 +109,7 @@ export default function RecordRepayment() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Loan repayments" subtitle="Treasurer" />
+      <AppBar title="Loan repayments" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
@@ -123,15 +123,9 @@ export default function RecordRepayment() {
           <Text variant="body" color="secondary" style={{ marginTop: 6, fontSize: 12.5 }}>
             {activeLoans.length} active loan{activeLoans.length === 1 ? '' : 's'} · {postedCount} repayment{postedCount === 1 ? '' : 's'} posted
           </Text>
-          <View style={{ flexDirection: 'row', marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border }}>
-            <View style={{ flex: 1 }}>
-              <Text variant="caption" color="muted" style={{ fontSize: 10.5 }}>Principal left</Text>
-              <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }}>{formatPeso(totalOutstanding)}</Text>
-            </View>
-            <View style={{ flex: 1, paddingLeft: 13, borderLeftWidth: 1, borderColor: semantic.border }}>
-              <Text variant="caption" color="muted" style={{ fontSize: 10.5 }}>Interest earned</Text>
-              <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: intent.success.text, marginTop: 3 }}>{formatPeso(totalInterestEarned)}</Text>
-            </View>
+          <View style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border }}>
+            <Text variant="caption" color="muted" style={{ fontSize: 10.5 }}>Interest earned</Text>
+            <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: intent.success.text, marginTop: 3 }}>{formatPeso(totalInterestEarned)}</Text>
           </View>
         </View>
 
@@ -216,9 +210,6 @@ export default function RecordRepayment() {
                   </View>
                 );
               })}
-              <Text variant="caption" color="muted" style={{ lineHeight: 16, paddingHorizontal: 2 }}>
-                Confirming posts it straight to the ledger — a different officer than whoever submitted it must confirm.
-              </Text>
             </View>
           )
         )}
@@ -226,15 +217,6 @@ export default function RecordRepayment() {
         {/* ================= RECORD NEW ================= */}
         {tab === 'record' && (
           <View style={{ marginTop: 16, gap: 16 }}>
-            <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start', backgroundColor: intent.info.soft, borderRadius: 16, padding: 13 }}>
-              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: intent.info.base, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
-              </View>
-              <Text variant="caption" style={{ flex: 1, color: intent.info.text, lineHeight: 16 }}>
-                For repayments that didn&apos;t come through the app — cash handed to you, or a transfer the member never uploaded. Another officer still confirms it before it posts — the Owner, if you're the Treasurer.
-              </Text>
-            </View>
-
             {loans.loading ? <ActivityIndicator color={semantic.brand} /> : activeLoans.length === 0 ? (
               <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No active loans right now.</Text>
             ) : (
@@ -320,9 +302,6 @@ export default function RecordRepayment() {
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>{formatPeso(p.amount)}</Text>
                   </View>
                 ))}
-                <Text variant="caption" style={{ padding: 13, paddingTop: 10, color: intent.info.text, opacity: 0.8, lineHeight: 16 }}>
-                  A Treasurer-recorded repayment needs the Owner to confirm it; anything else just needs another officer. Members still see the amount outstanding as before.
-                </Text>
               </View>
             )}
           </View>

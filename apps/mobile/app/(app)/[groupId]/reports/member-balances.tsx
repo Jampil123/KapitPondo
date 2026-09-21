@@ -287,8 +287,7 @@ export default function MemberBalances() {
                       ) : (
                         <>
                           <Text variant="caption" color="secondary" style={{ flex: 1 }}>
-                            Capital <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(r.capital)}</Text>
-                            {r.reviewCount > 0 ? ` · ${r.reviewCount} under review` : ''}
+                            Capital{r.reviewCount > 0 ? ` · ${r.reviewCount} under review` : ''}
                           </Text>
                           <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.capital)}</Text>
                         </>
@@ -300,10 +299,6 @@ export default function MemberBalances() {
             })}
           </View>
         )}
-
-        <Text variant="caption" color="secondary" style={{ marginTop: 18, lineHeight: 17, paddingHorizontal: 2 }}>
-          Capital shown is what each member has posted so far. It's returned to them when the cycle closes, less any loan still outstanding and any penalty the group upholds.
-        </Text>
 
         <Pressable
           onPress={onExport}

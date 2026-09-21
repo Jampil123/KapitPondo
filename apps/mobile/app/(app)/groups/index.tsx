@@ -93,10 +93,7 @@ export default function GroupsDashboard() {
               <Users size={56} color={semantic.textMuted} />
             </View>
           </Pressable>
-          <Text variant="h1" style={{ fontSize: 20, marginBottom: 10, textAlign: 'center' }}>No groups yet</Text>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-            Create or join a savings group to start managing your finances together.
-          </Text>
+          <Text variant="h1" style={{ fontSize: 20, textAlign: 'center' }}>No groups yet</Text>
         </View>
       ) : (
         <ScrollView

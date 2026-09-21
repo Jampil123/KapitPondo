@@ -121,12 +121,11 @@ function BlockedState({ icon: Icon, tone, title, body }: { icon: any; tone: Inte
 }
 
 function PaymentForm({
-  amount, setAmount, reference, setReference, proofUri, pickProof, amountHint, scanning, flags, scanMeta, dueAmountLabel,
+  amount, setAmount, reference, setReference, proofUri, pickProof, scanning, flags, scanMeta, dueAmountLabel,
 }: {
   amount: string; setAmount: (v: string) => void;
   reference: string; setReference: (v: string) => void;
   proofUri: string | null; pickProof: () => void;
-  amountHint: string;
   scanning?: boolean;
   flags?: ProofFlags | null;
   scanMeta?: { confidence: string; notes: string | null } | null;
@@ -169,10 +168,7 @@ function PaymentForm({
 
       <SectionHead title="Payment details" />
       <View style={{ gap: 14 }}>
-        <View>
-          <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
-          <Text variant="caption" color="muted" style={{ marginTop: 6 }}>{amountHint}</Text>
-        </View>
+        <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
         <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
       </View>
     </>
@@ -447,9 +443,6 @@ export default function Contribute() {
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>
                 A {cycle.penalty_type === 'percent' ? `${cycle.penalty_amount}%` : formatPeso(cycle.penalty_amount)} late penalty may be added
               </Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                Penalties are reviewed by the Owner before they're applied, and can be waived. Paying now stops it from growing.
-              </Text>
             </View>
           </View>
         ) : null}
@@ -460,9 +453,6 @@ export default function Contribute() {
             <SectionHead title="How would you like to pay" />
             <Button label={`Pay ${formatPeso(payAmount)} with GCash`} onPress={() => setPaySheetOpen(true)} />
             <Button label="I already paid — record it" variant="ghost" onPress={() => setRoute('manual')} style={{ marginTop: 10 }} />
-            <Text variant="caption" color="muted" style={{ marginTop: 12, lineHeight: 16 }}>
-              Scan a QR to send the money straight to the treasurer, then upload your receipt — it's read automatically, and a different officer still confirms it before it posts.
-            </Text>
           </>
         )}
 
@@ -474,13 +464,7 @@ export default function Contribute() {
               reference={reference} setReference={setReference}
               proofUri={proofUri} pickProof={pickProof} scanning={scanning}
               flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
-              amountHint="Paying more than expected? That's fine — extra counts as advance credit for future cycles."
             />
-            <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
-              {state === 'overdue'
-                ? "If you're having trouble paying this month, message an officer before the next due date. Late periods can often be worked out."
-                : "Your payment isn't counted yet. An officer will confirm it before it's posted to the ledger."}
-            </Text>
             <Button
               label={state === 'overdue' ? 'Submit payment now' : 'Submit for review'}
               onPress={onSubmit}
@@ -497,7 +481,7 @@ export default function Contribute() {
         {/* ---------------- Under review: read-only tracker ---------------- */}
         {state === 'review' && current && (
           <>
-            <SectionHead title="Progress" aside="Step 2 of 3" />
+            <SectionHead title="Progress" />
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, gap: 4 }, CARD_SHADOW]}>
               {[
                 { done: true, now: false, title: 'You submitted your proof', sub: shortDate(current.created_at) },
@@ -533,10 +517,6 @@ export default function Contribute() {
               </View>
             )}
 
-            <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
-              Most submissions are reviewed within a couple of days. You'll get a notification the moment it's posted — or if something needs fixing.
-            </Text>
-
             <Button
               label="View all my contributions"
               variant="ghost"
@@ -557,25 +537,6 @@ export default function Contribute() {
               <Text style={{ fontSize: 13, lineHeight: 19, color: '#8E3227', fontWeight: '600' }}>
                 {current.rejection_reason ?? 'No reason was given — ask an officer for details.'}
               </Text>
-              <Text variant="caption" style={{ color: '#A85A4C', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderColor: 'rgba(192,57,43,0.15)', lineHeight: 16 }}>
-                Your money hasn't been lost. Nothing was posted, so this period is still recorded as unpaid until a new proof is accepted.
-              </Text>
-            </View>
-
-            <SectionHead title="What to fix" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14, gap: 4 }, CARD_SHADOW]}>
-              {[
-                'Capture the whole receipt, including the amount at the bottom',
-                'Check the reference number matches your receipt exactly',
-                "Make sure the text isn't blurred or cropped",
-              ].map((tip, i) => (
-                <View key={tip} style={{ flexDirection: 'row', gap: 10, paddingVertical: 6 }}>
-                  <View style={{ width: 18, height: 18, borderRadius: 5, backgroundColor: intent.warning.soft, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-                    <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>{i + 1}</Text>
-                  </View>
-                  <Text variant="body" color="secondary" style={{ flex: 1, fontSize: 12.5, lineHeight: 18 }}>{tip}</Text>
-                </View>
-              ))}
             </View>
 
             {current.proof_url ? (
@@ -590,11 +551,7 @@ export default function Contribute() {
               reference={reference} setReference={setReference}
               proofUri={proofUri} pickProof={pickProof} scanning={scanning}
               flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
-              amountHint="Change this only if you actually sent a different amount."
             />
-            <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
-              Submitting again creates a new record for this period — it won't count as a second payment.
-            </Text>
             <Button
               label="Resubmit for review"
               leading={<RotateCcw size={16} color="#fff" />}

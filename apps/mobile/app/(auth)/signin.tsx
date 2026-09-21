@@ -55,7 +55,6 @@ export default function SignIn() {
             <LogoMark size={32} />
             <Wordmark fontSize={20} />
           </View>
-          <Text variant="body" color="secondary">Sign in to manage your group funds.</Text>
         </View>
 
         <Field

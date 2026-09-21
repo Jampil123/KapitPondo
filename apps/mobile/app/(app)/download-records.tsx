@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { FileText } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
@@ -47,16 +46,6 @@ export default function DownloadRecords() {
     <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
       <AppBar title="Download My Records" backgroundColor={BAND_TOP} tintColor="#fff" />
       <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }}>
-        <View style={{ alignItems: 'center', marginBottom: 22 }}>
-          <View style={{ width: 62, height: 62, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-            <FileText size={28} color={semantic.brandDark} />
-          </View>
-          <Text variant="h1" style={{ fontSize: 20, marginBottom: 4 }}>Your complete record</Text>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-            A single document with your contributions, loans, repayments, and ledger summary across every group.
-          </Text>
-        </View>
-
         {loadError ? (
           <Text variant="caption" style={{ color: intent.danger.text, textAlign: 'center' }}>{loadError}</Text>
         ) : data === null ? (
@@ -65,7 +54,7 @@ export default function DownloadRecords() {
           </View>
         ) : data.groups.length === 0 ? (
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 8 }}>
-            You're not part of any group yet — join one to start building records.
+            No group records yet.
           </Text>
         ) : (
           <View style={{ marginBottom: 8 }}>
@@ -90,10 +79,6 @@ export default function DownloadRecords() {
             <Button label="Download Records" onPress={onDownload} loading={downloading} />
           </View>
         ) : null}
-
-        <Text variant="caption" color="muted" style={{ lineHeight: 17, marginTop: 18 }}>
-          The file is generated on your device and handed to your phone's share sheet — save it, or send it wherever you need to.
-        </Text>
       </ScrollView>
     </SafeAreaView>
   );

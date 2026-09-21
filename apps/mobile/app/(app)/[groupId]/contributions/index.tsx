@@ -43,15 +43,6 @@ function daysBetween(a: Date, b: Date) {
 
 type Filter = 'all' | 'action' | 'posted';
 
-function LegendDot({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-      <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
-      <Text style={{ fontSize: 10.5 }} variant="caption" color="secondary">{label}</Text>
-    </View>
-  );
-}
-
 /** Underline tabs — this page's own filter bar, not the shared pill-style Segmented control. */
 function TabBar<T extends string>({
   options, value, onChange,
@@ -181,10 +172,7 @@ function UpcomingRow({ entry, frequency, onPress }: { entry: PeriodEntry; freque
 function PenaltyNotice({ amount, type }: { amount: number | string; type: string | null }) {
   return (
     <View style={{ paddingVertical: 11, paddingHorizontal: 16, paddingLeft: 66, backgroundColor: intent.warning.soft, borderBottomWidth: 1, borderColor: semantic.border, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>Late penalty may apply</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2, fontSize: 10.5 }}>The Owner reviews this before it applies</Text>
-      </View>
+      <Text style={{ flex: 1, fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>Late penalty may apply</Text>
       <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>
         {type === 'percent' ? `${amount}%` : formatPeso(amount)}
       </Text>
@@ -275,13 +263,6 @@ export default function ContributionsOverview() {
             </View>
           ) : null}
 
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 12, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-            <LegendDot color={intent.success.base} label="Posted" />
-            <LegendDot color={intent.info.base} label="Under review" />
-            <LegendDot color={intent.danger.base} label="Overdue" />
-            <LegendDot color={semantic.brand} label="Due" />
-            <LegendDot color={semantic.surfaceAlt} label="Upcoming" />
-          </View>
         </View>
 
         {/* ---------------- Filters ---------------- */}
@@ -353,10 +334,6 @@ export default function ContributionsOverview() {
                 <Text variant="body" color="muted">No contributions yet.</Text>
               </View>
             ) : null}
-
-            <Text variant="caption" color="secondary" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
-              Every period you pay is returned to you as capital at the end of the cycle. Profit is shared separately, by heads.
-            </Text>
           </>
         )}
       </ScrollView>

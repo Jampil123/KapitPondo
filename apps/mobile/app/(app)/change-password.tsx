@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { CheckCircle2, KeyRound } from 'lucide-react-native';
+import { CheckCircle2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { PasswordField } from '@/components/ui/Field';
@@ -69,10 +69,7 @@ export default function ChangePassword() {
           <View style={{ width: 96, height: 96, borderRadius: 48, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
             <CheckCircle2 size={52} color={semantic.brandDark} />
           </View>
-          <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 8 }}>Password Updated</Text>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 32 }}>
-            Your password has been changed. Use your new password the next time you sign in with a password.
-          </Text>
+          <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 32 }}>Password Updated</Text>
           <View style={{ alignSelf: 'stretch' }}>
             <Button label="Done" onPress={() => router.back()} />
           </View>
@@ -90,16 +87,6 @@ export default function ChangePassword() {
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
         <AppBar title="Change Password" backgroundColor={BAND_TOP} tintColor="#fff" />
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <View style={{ alignItems: 'center', marginBottom: 24 }}>
-            <View style={{ width: 62, height: 62, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
-              <KeyRound size={28} color={semantic.brandDark} />
-            </View>
-            <Text variant="h1" style={{ fontSize: 20, marginBottom: 4 }}>Update your password</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-              Enter your current password, then choose a new one.
-            </Text>
-          </View>
-
           <PasswordField
             label="Current Password"
             placeholder="Your current password"

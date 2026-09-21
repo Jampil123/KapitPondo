@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Check, AlertTriangle, CalendarClock } from 'lucide-react-native';
+import { Check, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +10,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { formatPeso } from '@/lib/money';
+import { useActiveGroup } from '@/context/GroupContext';
 import { useSummary } from '@/features/reporting/reporting.hooks';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import {
@@ -62,6 +63,7 @@ function Gate({ state, label, sub }: { state: 'done' | 'now' | 'wait'; label: st
 
 export default function YearEnd() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { role } = useActiveGroup();
   const summary = useSummary(groupId!);
   const distributions = useDistributions(groupId!);
   const pendingPenalties = usePenalties(groupId!, 'pending');
@@ -136,7 +138,7 @@ export default function YearEnd() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Year-End Distribution" subtitle="Organizer" />
+      <AppBar title="Year-End Distribution" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 130, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
@@ -185,12 +187,12 @@ export default function YearEnd() {
               <Gate
                 state={verified || finalized ? 'done' : 'now'}
                 label="Auditor verifies the figures"
-                sub={verified || finalized ? `Verified ${shortDate(current.verified_at)}` : 'Checks the totals independently before you finalize'}
+                sub={verified || finalized ? `Verified ${shortDate(current.verified_at)}` : undefined}
               />
               <Gate
                 state={finalized ? 'done' : verified ? 'now' : 'wait'}
-                label="You finalize"
-                sub={finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : 'Payouts are posted and this distribution locks permanently'}
+                label="Owner finalizes"
+                sub={finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined}
               />
             </View>
 
@@ -213,23 +215,7 @@ export default function YearEnd() {
                 <AlertTriangle size={18} color={intent.warning.text} />
                 <View style={{ flex: 1 }}>
                   <Text variant="label" style={{ color: intent.warning.text, fontSize: 12.5 }}>
-                    {pendingPenaltyCount} penalt{pendingPenaltyCount === 1 ? 'y' : 'ies'} still need{pendingPenaltyCount === 1 ? 's' : ''} your review
-                  </Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                    Worth settling before you lock the cycle for good.
-                  </Text>
-                </View>
-              </View>
-            ) : null}
-
-            {/* ---------------- Locked banner ---------------- */}
-            {finalized ? (
-              <View style={{ flexDirection: 'row', gap: 11, alignItems: 'flex-start', backgroundColor: semantic.surfaceAlt, borderRadius: 16, padding: 14, marginTop: 14 }}>
-                <CalendarClock size={18} color={semantic.brandDark} />
-                <View style={{ flex: 1 }}>
-                  <Text variant="label" style={{ color: semantic.brandDark, fontSize: 12.5 }}>Finalized {shortDateTime(current.finalized_at)}</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                    These figures are permanent. Members have been notified.
+                    {pendingPenaltyCount} penalt{pendingPenaltyCount === 1 ? 'y' : 'ies'} still need{pendingPenaltyCount === 1 ? 's' : ''} review
                   </Text>
                 </View>
               </View>
@@ -262,32 +248,22 @@ export default function YearEnd() {
                 })
               )}
             </View>
-
-            <Text variant="caption" color="muted" style={{ marginTop: 16, lineHeight: 17, paddingHorizontal: 2 }}>
-              {finalized
-                ? 'This distribution is permanent. Members can see their own payout.'
-                : 'Members can\'t see these figures until you finalize. Split proportionally by heads: available cash ÷ total heads × each member\'s heads.'}
-            </Text>
           </>
         ) : null}
       </ScrollView>
 
-      {current && !finalized ? (
+      {current && !finalized && (role === 'owner' || (role === 'auditor' && previewed)) ? (
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 10, backgroundColor: semantic.background, borderTopWidth: 1, borderColor: semantic.border, gap: 10 }}>
-          {previewed ? (
+          {role === 'auditor' ? (
+            <Button label="Verify preview" onPress={onVerify} loading={verify.loading} />
+          ) : (
             <Button
-              label="Verify preview (Auditor)"
-              variant="ghost"
-              onPress={onVerify}
-              loading={verify.loading}
+              label={verified ? 'Finalize distribution' : 'Waiting on Auditor verification'}
+              onPress={onFinalize}
+              disabled={!verified || fundChanged}
+              loading={finalize.loading}
             />
-          ) : null}
-          <Button
-            label={verified ? 'Finalize distribution' : 'Waiting on Auditor verification'}
-            onPress={onFinalize}
-            disabled={!verified || fundChanged}
-            loading={finalize.loading}
-          />
+          )}
         </View>
       ) : null}
     </SafeAreaView>

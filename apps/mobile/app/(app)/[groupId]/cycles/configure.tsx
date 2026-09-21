@@ -12,7 +12,6 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { toAmountString, formatPeso } from '@/lib/money';
 import { useQuery } from '@/hooks/useApi';
-import { listOfficers } from '@/api/groups';
 import { listDistributions } from '@/api/distribution';
 import { selectActiveCycle } from '@/api/cycles';
 import { useCycles, useCycleProgress, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
@@ -143,7 +142,6 @@ export default function ConfigureCycle() {
   const create = useCreateCycle(groupId!);
   const activate = useActivateCycle(groupId!);
   const close = useCloseCycle(groupId!);
-  const officers = useQuery(() => listOfficers(groupId!), [groupId]);
   const fund = useFundSummary(groupId!);
   const distributions = useQuery(() => listDistributions(groupId!), [groupId]);
 
@@ -153,7 +151,6 @@ export default function ConfigureCycle() {
   const latestCycle = allCycles[0] ?? null; // listCycles returns newest first
   const progress = useCycleProgress(groupId!, primaryCycle?.id);
   const heads = Number(fund.data?.total_heads ?? 0);
-  const memberCount = officers.data?.member_count ?? 0;
   const cycleDistribution = primaryCycle
     ? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id) ?? null
     : null;
@@ -170,7 +167,6 @@ export default function ConfigureCycle() {
   const [copied, setCopied] = useState(false);
 
   const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
-  const penNum = toAmountString(penalty) ? Number(toAmountString(penalty)) : 0;
   const perPeriod = amtNum * heads;
   const periods = start.trim() && end.trim() ? countMonthlyPeriods(start, end) : 0;
   const cycleTotal = periods > 0 ? perPeriod * periods : 0;
@@ -382,9 +378,6 @@ export default function ConfigureCycle() {
               <View>
                 <Label>Amount per head</Label>
                 <TextInput value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="₱1,000" placeholderTextColor={semantic.textMuted} style={inputStyle} />
-                <Text variant="caption" color="secondary" style={{ marginTop: 6, lineHeight: 16 }}>
-                  Each head is one share. A member with 3 heads pays three times this and receives three shares of the profit.
-                </Text>
               </View>
               <View>
                 <Label>Due day</Label>
@@ -393,9 +386,6 @@ export default function ConfigureCycle() {
               <View>
                 <Label>Late penalty (₱, flat per contribution)</Label>
                 <TextInput value={penalty} onChangeText={setPenalty} keyboardType="numeric" placeholder="e.g. 150" placeholderTextColor={semantic.textMuted} style={inputStyle} />
-                <Text variant="caption" color="secondary" style={{ marginTop: 6, lineHeight: 16 }}>
-                  You review every penalty before it&apos;s applied, and you can waive any of them.
-                </Text>
               </View>
             </View>
           </View>
@@ -413,9 +403,6 @@ export default function ConfigureCycle() {
                 <View style={{ flex: 1 }}><Label>Interest % / month</Label><TextInput value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" placeholder="e.g. 2" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
                 <View style={{ flex: 1 }}><Label>Minimum loan</Label><TextInput value={minLoan} onChangeText={setMinLoan} keyboardType="numeric" placeholder="₱1,000" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
               </View>
-              <Text variant="caption" color="secondary" style={{ lineHeight: 16 }}>
-                A starting rate only — the organizer can still set a different rate on each loan when approving it. Loan term limit, grace period, and number of cycles aren&apos;t stored yet.
-              </Text>
             </View>
           </View>
 
@@ -430,9 +417,6 @@ export default function ConfigureCycle() {
             <View style={[cardStyle, { padding: 13 }]}>
               <Label>Early-termination penalty (₱)</Label>
               <TextInput value={earlyTermPenalty} onChangeText={setEarlyTermPenalty} keyboardType="numeric" placeholder="e.g. 500" placeholderTextColor={semantic.textMuted} style={inputStyle} />
-              <Text variant="caption" color="secondary" style={{ marginTop: 6, lineHeight: 16 }}>
-                Deducted from a member&apos;s capital if they withdraw before the cycle closes.
-              </Text>
             </View>
           </View>
 
@@ -446,20 +430,6 @@ export default function ConfigureCycle() {
                 ? `${periods} monthly contribution${periods === 1 ? '' : 's'}, start to end date`
                 : 'Add an end date to project the cycle total'}
             </Text>
-
-            <View style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.09)', gap: 8 }}>
-              <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#9BBAC7' }}>
-                A member with <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>3 heads</Text> pays{' '}
-                <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{amtNum ? formatPeso(amtNum * 3) : '—'}</Text> per period.
-              </Text>
-              <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#9BBAC7' }}>
-                Missing one contribution costs them{' '}
-                <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{penNum ? formatPeso(penNum) : '—'}</Text> in penalty.
-              </Text>
-              <Text style={{ fontSize: 11.5, lineHeight: 17, color: '#9BBAC7' }}>
-                Based on today&apos;s <Text style={{ color: '#fff', fontFamily: 'Poppins_700Bold' }}>{memberCount} member{memberCount === 1 ? '' : 's'} · {heads} head{heads === 1 ? '' : 's'}</Text> — these are targets, not guarantees. Members who miss or partially pay will collect less.
-              </Text>
-            </View>
           </View>
         </View>
       </ScrollView>

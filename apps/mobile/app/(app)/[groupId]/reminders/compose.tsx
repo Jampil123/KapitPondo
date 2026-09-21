@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { Info } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
-import { semantic, intent, shadowToken } from '@/theme/colors';
+import { semantic, shadowToken } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useUnpaidMembers, useSendReminder } from '@/features/announcements/announcements.hooks';
 
@@ -55,13 +54,6 @@ export default function ComposeReminder() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="Send a reminder" subtitle={group?.name} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13 }}>
-          <Info size={16} color={semantic.brandDark} style={{ marginTop: 1 }} />
-          <Text variant="caption" color="secondary" style={{ flex: 1, lineHeight: 17 }}>
-            Each reminder is sent privately. Nobody else sees who is behind, and nothing is posted to the group chat.
-          </Text>
-        </View>
-
         <SectionHead title="Message" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14 }, shadowToken.card]}>
           <TextInput
@@ -91,14 +83,6 @@ export default function ComposeReminder() {
               </View>
             ))
           )}
-        </View>
-
-        <View style={{ backgroundColor: semantic.dashCard, borderRadius: 16, padding: 15, marginTop: 20 }}>
-          <Text variant="overline" style={{ color: '#88A9B6' }}>How it will look</Text>
-          <View style={{ backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 12, padding: 12, marginTop: 8, borderLeftWidth: 3, borderLeftColor: intent.warning.base }}>
-            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#E0B872', textTransform: 'uppercase' }}>Payment reminder</Text>
-            <Text style={{ fontSize: 12.5, lineHeight: 18, color: '#E4EEF2', marginTop: 5 }}>{body.trim() || 'Your message…'}</Text>
-          </View>
         </View>
       </ScrollView>
 
