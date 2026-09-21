@@ -12,7 +12,6 @@ import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useFundSummary } from '@/features/reporting/reporting.hooks';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listOfficers, listMemberDirectory, leaveGroup } from '@/api/groups';
 
@@ -58,7 +57,6 @@ export default function GroupOverview() {
   const { member } = useAuth();
   const { group, membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
-  const fund = useFundSummary(groupId!);
   const officers = useQuery(() => listOfficers(groupId!), [groupId]);
   const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
   const leave = useAction(() => leaveGroup(groupId!));
@@ -68,10 +66,8 @@ export default function GroupOverview() {
   const members = directory.data ?? [];
   const shownMembers = showAllMembers ? members : members.slice(0, 4);
 
-  const cash = Number(fund.data?.available_cash ?? 0);
-  const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
-  const totalFund = cash + onLoan;
-  const cashPct = totalFund > 0 ? (cash / totalFund) * 100 : 100;
+  const totalHeads = members.reduce((sum, m) => sum + m.heads, 0);
+  const ready = !directory.loading || members.length > 0;
 
   function go(route: string) {
     router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
@@ -109,40 +105,49 @@ export default function GroupOverview() {
       <BandHeader title="Group & Officers" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
-        {/* ---------------- Fund composition ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Total fund value</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: intent.success.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
-              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: intent.success.base }} />
-              <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>{cycle?.status === 'active' ? 'Active' : cycle?.status === 'draft' ? 'Draft' : 'No cycle'}</Text>
-            </View>
+        {/* ---------------- Members + heads summary ---------------- */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 6 }}>
+          <View style={{ flex: 1 }}>
+            <Text variant="overline" color="muted">Members</Text>
+            <Text style={{ fontSize: 30, lineHeight: 38, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{ready ? members.length : '—'}</Text>
           </View>
-          {fund.loading ? (
-            <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
-          ) : (
-            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(totalFund)}</Text>
-          )}
-          <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-            {officers.data?.member_count ?? '—'} members · <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{fund.data?.total_heads ?? '—'} heads</Text> across the group
-          </Text>
+          <View style={{ width: 1, alignSelf: 'stretch', backgroundColor: semantic.border, marginHorizontal: 18 }} />
+          <View style={{ flex: 1 }}>
+            <Text variant="overline" color="muted">Heads</Text>
+            <Text style={{ fontSize: 30, lineHeight: 38, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{ready ? totalHeads : '—'}</Text>
+          </View>
+        </View>
 
-          <View style={{ flexDirection: 'row', height: 9, borderRadius: 5, overflow: 'hidden', marginTop: 14, marginBottom: 12 }}>
-            <View style={{ width: `${cashPct}%`, backgroundColor: semantic.brand }} />
-            <View style={{ width: `${100 - cashPct}%`, backgroundColor: intent.warning.base }} />
-          </View>
-          <View style={{ gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: semantic.brand }} />
-              <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Cash on hand</Text>
-              <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: intent.warning.base }} />
-              <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Out on loan</Text>
-              <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
-            </View>
-          </View>
+        {/* ---------------- Members ---------------- */}
+        <SectionHead title="Members" />
+        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+          {directory.loading ? (
+            <ActivityIndicator color={semantic.brand} style={{ margin: 20 }} />
+          ) : members.length === 0 ? (
+            <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No members yet.</Text>
+          ) : (
+            <>
+              {shownMembers.map((m, i) => (
+                <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+                  <Avatar name={m.full_name ?? 'Member'} uri={m.avatar_url} size={34} />
+                  <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
+                    {m.full_name ?? 'Unnamed'}{m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
+                  </Text>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
+                  {totalHeads > 0 ? (
+                    <Text style={{ width: 34, textAlign: 'right', fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{Math.round((m.heads / totalHeads) * 100)}%</Text>
+                  ) : null}
+                </View>
+              ))}
+              {members.length > 4 ? (
+                <Pressable onPress={() => setShowAllMembers((s) => !s)} style={{ paddingVertical: 13, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>
+                    {showAllMembers ? 'Show fewer' : `See all ${members.length} members`}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </View>
 
         {/* ---------------- Officers ---------------- */}
@@ -196,35 +201,6 @@ export default function GroupOverview() {
             </>
           ) : (
             <Text variant="body" color="muted">No active cycle right now.</Text>
-          )}
-        </View>
-
-        {/* ---------------- Members ---------------- */}
-        <SectionHead title="Members" aside={`${officers.data?.member_count ?? members.length} members · ${fund.data?.total_heads ?? '—'} heads`} />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-          {directory.loading ? (
-            <ActivityIndicator color={semantic.brand} style={{ margin: 20 }} />
-          ) : members.length === 0 ? (
-            <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No members yet.</Text>
-          ) : (
-            <>
-              {shownMembers.map((m, i) => (
-                <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
-                  <Avatar name={m.full_name ?? 'Member'} uri={m.avatar_url} size={34} />
-                  <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
-                    {m.full_name ?? 'Unnamed'}{m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
-                  </Text>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
-                </View>
-              ))}
-              {members.length > 4 ? (
-                <Pressable onPress={() => setShowAllMembers((s) => !s)} style={{ paddingVertical: 13, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>
-                    {showAllMembers ? 'Show fewer' : `See all ${members.length} members`}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </>
           )}
         </View>
 
