@@ -214,14 +214,13 @@ const DOT_TONE: Record<string, string> = {
   review: intent.info.base,
   late: intent.danger.base,
   due: semantic.brand,
-  upcoming: semantic.surfaceAlt,
+  upcoming: semantic.borderStrong,
 };
 
 /** Per-period dots for the active cycle — no bar with an invisible denominator. */
 function CycleDots({ groupId }: { groupId: string }) {
   const { membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId);
-  const bal = useMyBalance(groupId);
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
   const rows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
 
@@ -238,11 +237,17 @@ function CycleDots({ groupId }: { groupId: string }) {
     counts.due ? `${counts.due} due` : null,
     counts.late ? `${counts.late} late` : null,
   ].filter(Boolean).join(' · ') || 'No periods recorded yet';
+  const progress = cycleProgressLabel(cycle);
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, CARD_SHADOW]}>
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+        <Text variant="overline" color="secondary">This cycle</Text>
+        {progress ? <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{progress}</Text> : null}
+      </View>
+
       {slots ? (
-        <View style={{ flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 14 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 9 }}>
           {kinds.map((k, i) => (
             <View key={i} style={{ flex: 1, height: 9, minWidth: 0, borderRadius: 5, backgroundColor: DOT_TONE[k] }} />
           ))}
@@ -253,15 +258,10 @@ function CycleDots({ groupId }: { groupId: string }) {
         <LegendDot color={intent.success.base} label="Posted" />
         <LegendDot color={intent.info.base} label="Under review" />
         <LegendDot color={semantic.brand} label="Due" />
-        <LegendDot color={semantic.surfaceAlt} label="Upcoming" />
+        <LegendDot color={semantic.borderStrong} label="Upcoming" />
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-        <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{summary}</Text>
-        <Text variant="caption" color="secondary">
-           <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, fontSize: 13 }}>{bal.loading ? '…' : formatPeso(bal.data?.contributions)}</Text>
-        </Text>
-      </View>
+      <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold', marginTop: 8 }}>{summary}</Text>
     </View>
   );
 }
@@ -314,7 +314,16 @@ function PositionPanel({ groupId }: { groupId: string }) {
   }
 
   return (
-    <View style={[glassPanel, { flexDirection: 'row' }]}>
+    <View style={glassPanel}>
+      {cycle ? (
+        <>
+          <View style={{ padding: 12 }}>
+            <CycleDots groupId={groupId} />
+          </View>
+          <View style={{ height: 1, backgroundColor: semantic.border }} />
+        </>
+      ) : null}
+      <View style={{ flexDirection: 'row' }}>
       <View style={{ flex: 1, padding: 12 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Wallet size={13} color={semantic.brandDark} />
@@ -337,6 +346,7 @@ function PositionPanel({ groupId }: { groupId: string }) {
           {cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}
         </Text>
       </Pressable>
+      </View>
     </View>
   );
 }
@@ -445,7 +455,6 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
 
 export function MemberDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const { cycle } = useActiveCycle(groupId);
   const [positionOpen, setPositionOpen] = useState(false);
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
 
@@ -455,9 +464,6 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
         <StandingCard groupId={groupId} />
         {positionOpen ? <PositionPanel groupId={groupId} /> : null}
       </DashboardBand>
-
-      <SectionHead title="This cycle" aside={cycleProgressLabel(cycle)} />
-      <CycleDots groupId={groupId} />
 
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
