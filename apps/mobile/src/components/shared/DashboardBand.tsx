@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Path, G } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { steel, semantic } from '../../theme/colors';
@@ -29,21 +29,31 @@ export const glassPanel = {
 
 export const DashboardHeaderContext = createContext<ReactNode>(null);
 
+// Spacing between the children of a band.
+export const BAND_GAP = 8;
+
+/** Provided by a DashboardShell whose band folds on scroll: the pinned top (header) stays put while the band's body slides under it. The body's backdrop continues the top's artwork from `headerHeight`, and whatever folds reports its height through `reportFoldHeight`. */
+export const DashboardFoldContext = createContext<{ headerHeight: number; reportFoldHeight: (height: number) => void } | null>(null);
+
 const FINE_WAVES = Array.from({ length: 15 }, (_, i) =>
   `M -70 ${1575 + 25 * i} C ${190 + 5 * i} ${1455 + 25 * i}, ${320 + 5 * i} ${1250 + 25 * i}, ${540 + 5 * i} ${1030 + 25 * i} C ${750 + 5 * i} ${820 + 25 * i}, ${905 + 5 * i} ${705 + 25 * i}, ${1145 + 5 * i} ${800 + 25 * i}`);
 
 const CROSSING_WAVES = Array.from({ length: 9 }, (_, i) =>
   `M ${560 - 20 * i} ${1180 + 30 * i} C ${760 - 10 * i} ${1090 + 25 * i}, 900 ${1010 + 25 * i}, ${1210 + 5 * i} ${820 + 25 * i}`);
 
-function Backdrop() {
+// Fixed size, anchored to the top and clipped by whatever holds it: it never resizes while a card folds, so the artwork
+// isn't redrawn on every scroll frame. Width x this ratio shows exactly the crop, at the same scale as before.
+function Backdrop({ top = 0 }: { top?: number }) {
+  const { width } = useWindowDimensions();
+  const height = (width * CROP_HEIGHT) / ART_WIDTH;
+
   return (
+    <View pointerEvents="none" renderToHardwareTextureAndroid shouldRasterizeIOS style={{ position: 'absolute', top, left: 0, width, height }}>
     <Svg
-      width="100%"
-      height="100%"
+      width={width}
+      height={height}
       viewBox={`0 ${CROP_Y} ${ART_WIDTH} ${CROP_HEIGHT}`}
       preserveAspectRatio="xMinYMin slice"
-      style={StyleSheet.absoluteFill}
-      pointerEvents="none"
     >
       <Defs>
         <LinearGradient id="bg" x1="0" y1="0" x2="1" y2="0.95">
@@ -89,19 +99,33 @@ function Backdrop() {
         fill="none" stroke="#FFFFFF" strokeOpacity={0.12} strokeWidth={12}
       />
     </Svg>
+    </View>
+  );
+}
+
+/** The pinned top of a folding band: backdrop, status-bar inset and the dashboard header. Reports its height so the body below can continue the same artwork. */
+export function BandTop({ children, onHeight }: { children: ReactNode; onHeight: (height: number) => void }) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View onLayout={(e) => onHeight(e.nativeEvent.layout.height)} style={{ overflow: 'hidden', backgroundColor: steel[200] }}>
+      <Backdrop />
+      <View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, gap: BAND_GAP }}>{children}</View>
+    </View>
   );
 }
 
 export function DashboardBand({ children, tab }: { children: ReactNode; tab?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const header = useContext(DashboardHeaderContext);
+  const fold = useContext(DashboardFoldContext);
 
   return (
     <View style={{ zIndex: 2, marginBottom: tab ? BAND_TAB_SIZE / 2 + 6 : 10 }}>
-      <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
-        <Backdrop />
-        <View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: 8 }}>
-          {header}
+      <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', backgroundColor: steel[200] }}>
+        <Backdrop top={fold ? -fold.headerHeight : 0} />
+        <View style={{ paddingTop: fold ? BAND_GAP : insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: BAND_GAP }}>
+          {fold ? null : header}
           {children}
         </View>
       </View>
@@ -119,7 +143,7 @@ export function BandHeader({ title, subtitle, right }: { title: string; subtitle
   const insets = useSafeAreaInsets();
 
   return (
-    <View style={{ overflow: 'hidden' }}>
+    <View style={{ overflow: 'hidden', backgroundColor: steel[200] }}>
       <Backdrop />
       <View style={{ paddingTop: insets.top, paddingBottom: 6 }}>
         <AppBar title={title} subtitle={subtitle} right={right} backgroundColor="transparent" tintColor={semantic.textPrimary} />

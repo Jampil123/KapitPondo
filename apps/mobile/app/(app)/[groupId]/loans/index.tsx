@@ -170,7 +170,12 @@ export default function LoansOverview() {
     approvedLoan ? 'release' :
     eligibility.data?.eligible ? 'can' : 'blocked';
 
-  const loading = allLoans.loading || (!!currentLoan && detail.loading) || (!currentLoan && eligibility.loading);
+  // "Never loaded yet", not `.loading`: a background or realtime refetch keeps the previous data, and swapping the
+  // whole page for the spinner (with a different header) on every one of those made the title flicker.
+  const loading =
+    (allLoans.data === null && !allLoans.error) ||
+    (!!currentLoan && detail.data === null && !detail.error) ||
+    (!currentLoan && eligibility.data === null && !eligibility.error);
 
   const go = (route: string, extraParams?: Record<string, string>) =>
     router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...extraParams } });
@@ -199,7 +204,7 @@ export default function LoansOverview() {
   if (loading) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
-        <BandHeader title="Loans" />
+        <BandHeader title="" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={semantic.brand} /></View>
       </SafeAreaView>
     );
@@ -238,7 +243,7 @@ export default function LoansOverview() {
         {/* ---------------- Active loan ---------------- */}
         {state === 'active' && activeLoan && (
           <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Still to repay</Text>
                 <Badge tone="primary" label="Active" Icon={Repeat} />
@@ -310,7 +315,7 @@ export default function LoansOverview() {
         {/* ---------------- Awaiting decision ---------------- */}
         {state === 'pending' && pendingLoan && (
           <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Requested</Text>
                 <Badge tone="info" label="With the Owner" Icon={Clock3} />
@@ -351,7 +356,7 @@ export default function LoansOverview() {
         {/* ---------------- Awaiting release ---------------- */}
         {state === 'release' && approvedLoan && (
           <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Approved</Text>
                 <Badge tone="neutral" label="Awaiting release" Icon={Check} />
@@ -378,7 +383,7 @@ export default function LoansOverview() {
         {/* ---------------- Can request ---------------- */}
         {state === 'can' && (
           <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Available to you</Text>
                 <Badge tone="success" label="Eligible" Icon={Check} />
@@ -402,7 +407,7 @@ export default function LoansOverview() {
         {/* ---------------- Not eligible ---------------- */}
         {state === 'blocked' && (
           <>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Loan requests</Text>
                 <Badge tone="warning" label="Locked" Icon={AlertTriangle} />

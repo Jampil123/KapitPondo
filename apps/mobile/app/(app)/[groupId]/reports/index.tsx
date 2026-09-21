@@ -199,7 +199,6 @@ export default function Reports() {
               : [{ k: 'My heads', v: String(heads) }]
           } />
         </View>
-        <Text variant="caption" color="muted" style={{paddingTop: 11,lineHeight: 16, textAlign: 'justify'}}>Capital you've put in — returned to you when the cycle closes</Text>
 
         {/* ---------------- Period toggle ---------------- */}
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>

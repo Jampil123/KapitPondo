@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
@@ -8,7 +8,7 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, DashboardFoldContext, BAND_GAP, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -296,7 +296,6 @@ function PositionToggle({ open, progress, onPress }: { open: boolean; progress: 
   );
 }
 
-const BAND_CHILD_GAP = 8; // DashboardBand spaces its children by this much
 const POSITION_ANIM_MS = 260;
 
 /** Animates its content's measured height and opacity with `progress` (0 closed, 1 open); stays mounted so it can animate. */
@@ -312,7 +311,7 @@ function Collapsible({ open, progress, children }: { open: boolean; progress: An
         overflow: 'hidden',
         opacity: progress,
         height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, height] }),
-        marginTop: progress.interpolate({ inputRange: [0, 1], outputRange: [-BAND_CHILD_GAP, 0] }),
+        marginTop: progress.interpolate({ inputRange: [0, 1], outputRange: [-BAND_GAP, 0] }),
       }}
     >
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
@@ -320,6 +319,12 @@ function Collapsible({ open, progress, children }: { open: boolean; progress: An
       </View>
     </Animated.View>
   );
+}
+
+/** Tells the dashboard shell how tall the card that folds away on scroll is; the shell does the folding (see DashboardShell). */
+function FoldTarget({ children }: { children: ReactNode }) {
+  const fold = useContext(DashboardFoldContext);
+  return <View onLayout={(e) => fold?.reportFoldHeight(e.nativeEvent.layout.height)}>{children}</View>;
 }
 
 /** Capital + heads details revealed by PositionToggle; both are already-fetched real values. */
@@ -458,9 +463,9 @@ const ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Reports', icon: BarChart3, route: 'reports' },
 ];
 
-function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () => void }) {
+function RecentActivity({ groupId, onSeeAll, onOpen }: { groupId: string; onSeeAll: () => void; onOpen: (entryId: string) => void }) {
   const { membership } = useActiveGroup();
-  const ledger = useLedger(groupId, { limit: 3, membership_id: membership?.id });
+  const ledger = useLedger(groupId, { limit: 5, membership_id: membership?.id });
   const entries = ledger.data ?? [];
 
   return (
@@ -475,7 +480,7 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
             const credit = e.direction === 'credit';
             const Icon = credit ? ArrowDownRight : ArrowUpRight;
             return (
-              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 8, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+              <Pressable key={e.id} onPress={() => onOpen(e.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 8, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                 <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
                 </View>
@@ -491,7 +496,7 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
                 <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 14, color: credit ? intent.success.text : semantic.textPrimary }}>
                   {credit ? '+' : '-'}{formatPeso(e.amount)}
                 </Text>
-              </View>
+              </Pressable>
             );
           })}
           <Pressable onPress={onSeeAll} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
@@ -520,7 +525,9 @@ export function MemberHero({ groupId }: { groupId: string }) {
 
   return (
     <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
-      <StandingCard groupId={groupId} />
+      <FoldTarget>
+        <StandingCard groupId={groupId} />
+      </FoldTarget>
       <Collapsible open={positionOpen} progress={progress}>
         <PositionPanel groupId={groupId} />
       </Collapsible>
@@ -552,7 +559,11 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
       </View>
 
       <SectionHead title="My activity"/>
-      <RecentActivity groupId={groupId} onSeeAll={() => go('activity')} />
+      <RecentActivity
+        groupId={groupId}
+        onSeeAll={() => go('activity')}
+        onOpen={(entryId) => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId } })}
+      />
     </>
   );
 }

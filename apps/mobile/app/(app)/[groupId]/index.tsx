@@ -175,6 +175,7 @@ export default function GroupDashboard() {
         </>
       }
       hero={<Hero key={refreshKey} groupId={groupId!} />}
+      foldHero={Hero === MemberHero}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >

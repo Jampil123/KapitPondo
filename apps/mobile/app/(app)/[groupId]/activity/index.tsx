@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
@@ -9,6 +9,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLedger } from '@/features/reporting/reporting.hooks';
+import { ACTION_COPY } from '@/features/activity/entryCopy';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
 type Filter = 'all' | 'contribution' | 'loan' | 'penalty';
@@ -19,15 +20,6 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'loan', label: 'Loans' },
   { key: 'penalty', label: 'Penalties' },
 ];
-
-const ACTION_COPY: Partial<Record<LedgerEntryType, string>> = {
-  contribution: 'Your contribution was approved',
-  loan_disbursement: 'Your loan was approved & disbursed',
-  loan_repayment: 'Your repayment was recorded',
-  penalty: 'A penalty was applied',
-  distribution: 'Your year-end share was paid out',
-  expense: 'A group expense was posted',
-};
 
 function matchesFilter(f: Filter, type: LedgerEntryType) {
   if (f === 'all') return true;
@@ -40,12 +32,12 @@ function shortDate(iso: string) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function ActivityRow({ e }: { e: LedgerEntry }) {
+function ActivityRow({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
   const credit = e.direction === 'credit';
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
   const copy = ACTION_COPY[e.entry_type] ?? (e.description ?? e.entry_type.replace(/_/g, ' '));
   return (
-    <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 10 }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 10 }}>
       <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={18} color={credit ? '#3E8E66' : '#C25C5E'} />
       </View>
@@ -58,12 +50,13 @@ function ActivityRow({ e }: { e: LedgerEntry }) {
       <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13.5, color: credit ? '#3E8E66' : '#C25C5E' }}>
         {credit ? '+' : '-'}{formatPeso(e.amount)}
       </Text>
-    </View>
+    </Pressable>
   );
 }
 
 export default function ActivityFeed() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const router = useRouter();
   const { membership } = useActiveGroup();
   const [filter, setFilter] = useState<Filter>('all');
   // Officer callers must pass membership_id explicitly, or the ledger route
@@ -110,7 +103,7 @@ export default function ActivityFeed() {
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 6 }, shadowToken.card]}>
               {filtered.map((e, i) => (
                 <View key={e.id} style={{ borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                  <ActivityRow e={e} />
+                  <ActivityRow e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id } })} />
                 </View>
               ))}
             </View>
