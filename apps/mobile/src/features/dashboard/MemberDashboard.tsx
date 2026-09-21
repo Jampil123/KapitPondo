@@ -545,7 +545,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
             onPress={() => go(a.route)}
             style={[{ width: '23%', borderRadius: 18, backgroundColor: CARD_BG, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, CARD_SHADOW]}
           >
-            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
+            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 10, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
           </Pressable>
         ))}
