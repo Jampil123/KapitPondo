@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -7,7 +7,7 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText, useDashboardScroll } from '@/components/shared/DashboardBand';
+import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -382,9 +382,9 @@ function FundLegend({ color, label, amount, pct }: { color: string; label: strin
         <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
         <Text variant="overline" color="secondary">{label}</Text>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
-        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
-        <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{pct}%</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, marginTop: 4 }}>
+        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(amount)}</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold' }}>{pct}%</Text>
       </View>
     </View>
   );
@@ -481,23 +481,22 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
 }
 
 export function MemberHero({ groupId }: { groupId: string }) {
-  const { scrollEpoch } = useDashboardScroll();
-  // Remember which scroll epoch the panel was opened in; scrolling bumps the epoch, which closes it.
-  const [openedAt, setOpenedAt] = useState<number | null>(null);
+  const [positionOpen, setPositionOpen] = useState(false);
   const [progress] = useState(() => new Animated.Value(0));
-  const positionOpen = openedAt === scrollEpoch;
 
-  useEffect(() => {
+  function togglePosition() {
+    const next = !positionOpen;
+    setPositionOpen(next);
     Animated.timing(progress, {
-      toValue: positionOpen ? 1 : 0,
+      toValue: next ? 1 : 0,
       duration: POSITION_ANIM_MS,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }, [positionOpen, progress]);
+  }
 
   return (
-    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={() => setOpenedAt(positionOpen ? null : scrollEpoch)} />}>
+    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
       <StandingCard groupId={groupId} />
       <Collapsible open={positionOpen} progress={progress}>
         <PositionPanel groupId={groupId} />

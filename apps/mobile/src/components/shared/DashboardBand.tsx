@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, type ReactNode } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { View, StyleSheet, Animated, Easing } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Path, G } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { steel } from '../../theme/colors';
@@ -28,23 +28,13 @@ export const glassPanel = {
 
 export const DashboardHeaderContext = createContext<ReactNode>(null);
 
-type DashboardScroll = {
-  /** 0 = hero card shown, 1 = collapsed away so only the header and role switch remain. */
-  collapse: Animated.Value;
-  collapsed: boolean;
-  /** Bumps each time the page starts scrolling away from the top; hero popovers use it to close themselves. */
-  scrollEpoch: number;
-  /** The band reports its collapsible height so the shell only collapses when the page has room to keep scrolling. */
-  reportCollapseHeight: (height: number) => void;
-};
+/** Set by DashboardShell from the scroll offset: `collapsed` folds the band's card away, leaving the header and role switch. */
+export const DashboardScrollContext = createContext<{ collapsed: boolean; reportHeroHeight: (height: number) => void }>({
+  collapsed: false,
+  reportHeroHeight: () => {},
+});
 
-const IDLE_SCROLL: DashboardScroll = { collapse: new Animated.Value(0), collapsed: false, scrollEpoch: 0, reportCollapseHeight: () => {} };
-
-export const DashboardScrollContext = createContext<DashboardScroll>(IDLE_SCROLL);
-
-export function useDashboardScroll() {
-  return useContext(DashboardScrollContext);
-}
+const COLLAPSE_MS = 240;
 
 const FINE_WAVES = Array.from({ length: 15 }, (_, i) =>
   `M -70 ${1575 + 25 * i} C ${190 + 5 * i} ${1455 + 25 * i}, ${320 + 5 * i} ${1250 + 25 * i}, ${540 + 5 * i} ${1030 + 25 * i} C ${750 + 5 * i} ${820 + 25 * i}, ${905 + 5 * i} ${705 + 25 * i}, ${1145 + 5 * i} ${800 + 25 * i}`);
@@ -112,41 +102,56 @@ function Backdrop() {
 export function DashboardBand({ children, tab }: { children: ReactNode; tab?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const header = useContext(DashboardHeaderContext);
-  const { collapse, collapsed, reportCollapseHeight } = useDashboardScroll();
-  const [bodyHeight, setBodyHeight] = useState<number | null>(null);
-  const range = (from: number, to: number) => collapse.interpolate({ inputRange: [0, 1], outputRange: [from, to] });
+  const { collapsed, reportHeroHeight } = useContext(DashboardScrollContext);
+  const [progress] = useState(() => new Animated.Value(0));
+  const [heroHeight, setHeroHeight] = useState<number | null>(null);
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      toValue: collapsed ? 1 : 0,
+      duration: COLLAPSE_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [collapsed, progress]);
+
+  const fade = progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
 
   return (
-    <Animated.View style={{ zIndex: 2, marginBottom: range(tab ? BAND_TAB_SIZE / 2 + 6 : 10, 10) }}>
+    <Animated.View
+      style={{
+        zIndex: 2,
+        marginBottom: tab ? progress.interpolate({ inputRange: [0, 1], outputRange: [BAND_TAB_SIZE / 2 + 6, 10] }) : 10,
+      }}
+    >
       <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
         <Backdrop />
-        <Animated.View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: range(20, 10), gap: 8 }}>
+        <View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: 8 }}>
           {header}
           <Animated.View
             pointerEvents={collapsed ? 'none' : 'auto'}
             style={{
               overflow: 'hidden',
-              marginTop: range(0, -8),
-              opacity: collapse.interpolate({ inputRange: [0, 0.6, 1], outputRange: [1, 0, 0] }),
-              height: bodyHeight === null ? undefined : range(bodyHeight, 0),
+              opacity: fade,
+              height: heroHeight === null ? undefined : progress.interpolate({ inputRange: [0, 1], outputRange: [heroHeight, 0] }),
             }}
           >
             <View
               onLayout={(e) => {
-                const h = e.nativeEvent.layout.height;
-                reportCollapseHeight(h);
-                setBodyHeight(h);
+                const height = e.nativeEvent.layout.height;
+                setHeroHeight(height);
+                reportHeroHeight(height);
               }}
             >
               {children}
             </View>
           </Animated.View>
-        </Animated.View>
+        </View>
       </View>
       {tab ? (
         <Animated.View
           pointerEvents={collapsed ? 'none' : 'box-none'}
-          style={{ position: 'absolute', right: BAND_PADDING, bottom: -BAND_TAB_SIZE / 2, opacity: range(1, 0) }}
+          style={{ position: 'absolute', right: BAND_PADDING, bottom: -BAND_TAB_SIZE / 2, opacity: fade }}
         >
           {tab}
         </Animated.View>
