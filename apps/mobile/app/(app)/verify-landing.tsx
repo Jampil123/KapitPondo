@@ -80,13 +80,13 @@ export default function VerifyLanding() {
           </Text>
         </View>
 
-        <Button label="Start verification" onPress={() => router.push('/(app)/verify-start' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
+        <Button label="Start verification" onPress={() => router.push('/(app)/identity' as any)} leading={<ShieldCheck size={18} color="#fff" />} />
         <View style={{ alignItems: 'center', marginTop: 16 }}>
           <Button
             label="Do it later"
             variant="ghost"
             bordered={false}
-            onPress={() => router.replace('/(app)/groups' as any)}
+            onPress={() => (router.canGoBack() ? router.back() : router.replace('/(app)/groups' as any))}
           />
         </View>
       </ScrollView>

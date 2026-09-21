@@ -28,6 +28,6 @@ export const VERIFY_META: Record<VerificationStatus, {
 // Pending already has a submission in review — its button reviews that
 // instead of restarting the capture flow. Every other actionable status
 // (unverified, rejected) goes to the capture flow's own start screen.
-export function verifyDestination(status: VerificationStatus): '/(app)/my-submission' | '/(app)/verify-start' {
-  return status === 'pending' ? '/(app)/my-submission' : '/(app)/verify-start';
+export function verifyDestination(status: VerificationStatus): '/(app)/my-submission' | '/(app)/verify-landing' {
+  return status === 'pending' ? '/(app)/my-submission' : '/(app)/verify-landing';
 }

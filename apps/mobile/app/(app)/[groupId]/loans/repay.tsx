@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -45,7 +45,7 @@ export default function Repay() {
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
   const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
   const [gcashSheetOpen, setGcashSheetOpen] = useState(false);
-  const [amount, setAmount] = useState('');
+  const [amountEdit, setAmountEdit] = useState<string | null>(null);
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -53,11 +53,8 @@ export default function Repay() {
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
   const suggestedAmount = expectedMonthlyDue(activeLoan);
 
-  // The loan loads asynchronously, so prefill once its expected payment is known.
-  useEffect(() => {
-    if (suggestedAmount > 0 && !amount) setAmount(suggestedAmount.toFixed(2));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [suggestedAmount]);
+  // The loan loads asynchronously, so show its expected payment until the user types their own amount.
+  const amount = amountEdit ?? (suggestedAmount > 0 ? suggestedAmount.toFixed(2) : '');
 
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -143,7 +140,7 @@ export default function Repay() {
               )}
             </Pressable>
 
-            <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+            <Field label="Amount" prefix="₱" value={amount} onChangeText={setAmountEdit} keyboardType="numeric" />
             <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
 
             <Button label="Submit repayment" onPress={onSubmit} loading={submit.loading || uploading} disabled={!activeLoan || !proofUri} />

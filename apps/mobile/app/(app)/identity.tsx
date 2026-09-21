@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, TextInput
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Mail, ChevronDown, ShieldCheck, Phone, Calendar } from 'lucide-react-native';
+import { Mail, ChevronDown, Phone, Calendar } from 'lucide-react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
@@ -598,12 +598,6 @@ export default function Identity() {
 
         {step === 4 && (
           <>
-            <View style={{ marginBottom: 18 }}>
-              <Text variant="body" color="secondary">
-                Confirm your details below before submitting for review.
-              </Text>
-            </View>
-
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18, gap: 14 }, shadowToken.card]}>
               <View>
                 <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 4 }}>ID Type</Text>
@@ -672,10 +666,6 @@ export default function Identity() {
               </View>
             </View>
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-              <ShieldCheck size={18} color={semantic.brandDark} />
-              <Text variant="label" style={{ fontSize: 13 }}>Privacy</Text>
-            </View>
             <View style={{ marginBottom: 22 }}>
               <Checkbox
                 checked={agreed}

@@ -90,7 +90,7 @@ export default function RequestLoan() {
         <AppBar title="Request Loan" />
         <View style={{ padding: 16, gap: 14 }}>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
-            <Text variant="label">You can't request a loan yet</Text>
+            <Text variant="label">You can&apos;t request a loan yet</Text>
           </View>
           <Button label="See what's blocking you" onPress={() => router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } })} />
         </View>

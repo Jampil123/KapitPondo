@@ -18,7 +18,6 @@ const DRAFT_KEY = 'identity_draft_v1';
 const CARD_ASPECT_RATIO = 1.586; // standard ID card ratio (CR80), width:height
 const FRAME_WIDTH_RATIO = 0.82; // frame's width as a fraction of the preview box
 const DEFAULT_ID_TYPE = 'philsys'; // PhilSys National ID — recommended default, matches the prototype
-const ALIGN_SETTLE_MS = 1200; // how long the camera must be ready before we call the shot "ready"
 
 const GUIDES = [
   'ID must be fully visible inside the frame',
@@ -36,13 +35,13 @@ async function mergeIntoDraft(patch: Record<string, unknown>) {
   }
 }
 
-function CornerBracket({ position, active }: { position: 'tl' | 'tr' | 'bl' | 'br'; active?: boolean }) {
+function CornerBracket({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
   const size = 26;
   const base = {
     position: 'absolute' as const,
     width: size,
     height: size,
-    borderColor: active ? '#4ADE80' : semantic.brand,
+    borderColor: semantic.brand,
   };
   const styles = {
     tl: { top: 14, left: 14, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 10 },
@@ -65,19 +64,7 @@ export default function IdentityCapture() {
   const [idPickerOpen, setIdPickerOpen] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [aligned, setAligned] = useState(false);
   const [previewSize, setPreviewSize] = useState<{ width: number; height: number } | null>(null);
-
-  // Once the camera reports ready, treat the frame as settled/aligned after a
-  // short beat — flips the "Hold steady" pill to "Ready to capture".
-  useEffect(() => {
-    if (!cameraReady) {
-      setAligned(false);
-      return;
-    }
-    const t = setTimeout(() => setAligned(true), ALIGN_SETTLE_MS);
-    return () => clearTimeout(t);
-  }, [cameraReady]);
 
   // Prefill from a photo/ID type already picked in a prior visit to this screen.
   useEffect(() => {
@@ -200,12 +187,6 @@ export default function IdentityCapture() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
       <VerificationStepHeader title="Capture your ID" step={1} totalSteps={4} onBack={goBack} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 32 }}>
-        <View style={{ marginBottom: 18 }}>
-          <Text variant="body" color="secondary">
-            Choose an ID to submit, then align its front inside the frame in good lighting.
-          </Text>
-        </View>
-
         <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Selected ID</Text>
         <Pressable
           onPress={() => setIdPickerOpen(true)}
@@ -256,28 +237,24 @@ export default function IdentityCapture() {
               <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
                 <View style={{
                   width: `${FRAME_WIDTH_RATIO * 100}%`, aspectRatio: CARD_ASPECT_RATIO,
-                  borderWidth: 2, borderStyle: aligned ? 'solid' : 'dashed',
-                  borderColor: aligned ? '#4ADE80' : 'rgba(255,255,255,0.6)',
+                  borderWidth: 2, borderStyle: 'dashed',
+                  borderColor: 'rgba(255,255,255,0.6)',
                   borderRadius: 14,
                 }} />
               </View>
-              <CornerBracket position="tl" active={aligned} />
-              <CornerBracket position="tr" active={aligned} />
-              <CornerBracket position="bl" active={aligned} />
-              <CornerBracket position="br" active={aligned} />
+              <CornerBracket position="tl" />
+              <CornerBracket position="tr" />
+              <CornerBracket position="bl" />
+              <CornerBracket position="br" />
               <View style={{
                 position: 'absolute', bottom: 16, alignSelf: 'center',
                 flexDirection: 'row', alignItems: 'center', gap: 6,
-                backgroundColor: aligned ? 'rgba(62,142,102,0.85)' : 'rgba(20,24,26,0.55)',
+                backgroundColor: 'rgba(20,24,26,0.55)',
                 borderRadius: 20, paddingVertical: 7, paddingHorizontal: 13,
               }}>
-                {aligned ? (
-                  <Check size={12} color="#fff" strokeWidth={3} />
-                ) : (
-                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.brand }} />
-                )}
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.brand }} />
                 <Text variant="caption" color="inherit" style={{ color: '#fff', fontWeight: '600' }}>
-                  {aligned ? 'Ready to capture' : 'Hold steady'}
+                  {cameraReady ? 'Fit the ID inside the frame' : 'Starting camera…'}
                 </Text>
               </View>
               {scanning && (
@@ -328,7 +305,7 @@ export default function IdentityCapture() {
           </View>
         </View>
 
-        <Button label="Continue" onPress={goNext} disabled={!uri || scanning} />
+        {uri ? <Button label="Continue" onPress={goNext} disabled={scanning} /> : null}
       </ScrollView>
 
       <PickerSheet

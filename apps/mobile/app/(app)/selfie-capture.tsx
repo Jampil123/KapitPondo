@@ -136,12 +136,6 @@ export default function SelfieCapture() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
       <VerificationStepHeader title="Take a Selfie" step={2} totalSteps={4} onBack={goBack} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 8, paddingBottom: 32 }}>
-        <View style={{ marginBottom: 18 }}>
-          <Text variant="body" color="secondary">
-            We'll match this selfie against your ID photo to confirm it's really you.
-          </Text>
-        </View>
-
         {!permission ? (
           <View style={{ height: 320, alignItems: 'center', justifyContent: 'center' }}>
             <ActivityIndicator color={semantic.brand} />
@@ -220,7 +214,7 @@ export default function SelfieCapture() {
           </View>
         </View>
 
-        <Button label="Continue" onPress={goNext} disabled={!selfieUri || scanning} />
+        {selfieUri ? <Button label="Continue" onPress={goNext} disabled={scanning} /> : null}
       </ScrollView>
     </SafeAreaView>
   );
