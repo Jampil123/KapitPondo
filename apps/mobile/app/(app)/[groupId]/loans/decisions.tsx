@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Wallet, Banknote, Eye, CheckCircle2, AlertTriangle, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { TabBar } from '@/components/ui/TabBar';
@@ -14,7 +14,7 @@ import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useLoans, useLiquidity, useApproveLoan, useDisburseLoan, useRejectLoan, useLoanEligibility } from '@/features/lending/lending.hooks';
+import { useLoans, useLiquidity, useApproveLoan, useRejectLoan, useLoanEligibility } from '@/features/lending/lending.hooks';
 import type { Loan, LoanStatus } from '@/api/lending';
 
 function loanName(l: Loan): string {
@@ -28,6 +28,7 @@ function shortDate(iso: string | null): string {
 
 export default function LoanDecisions() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const router = useRouter();
   const [tab, setTab] = useState<LoanStatus>('pending');
 
   const { membership } = useActiveGroup();
@@ -37,7 +38,6 @@ export default function LoanDecisions() {
   const pendingList = useLoans(groupId!, { status: 'pending' });
   const tabList = useLoans(groupId!, { status: tab });
   const approve = useApproveLoan(groupId!);
-  const disburse = useDisburseLoan(groupId!);
   const reject = useRejectLoan(groupId!);
 
   const [detailsTarget, setDetailsTarget] = useState<Loan | null>(null); // loan being viewed before a decision
@@ -74,12 +74,6 @@ export default function LoanDecisions() {
     const ok = await approve.run(loanId, rate, String(amount));
     if (ok !== undefined) { pendingList.refetch(); tabList.refetch(); liquidity.refetch(); }
     else if (approve.error) Alert.alert('Could not approve', approve.error.message);
-  }
-
-  async function confirmDisburse(l: Loan) {
-    const ok = await disburse.run(l.id);
-    if (ok !== undefined) { tabList.refetch(); liquidity.refetch(); }
-    else if (disburse.error) Alert.alert('Could not disburse', disburse.error.message);
   }
 
   async function onRejectConfirm(reason: string) {
@@ -157,12 +151,11 @@ export default function LoanDecisions() {
                     </Text>
                     {canDisburse ? (
                       <Pressable
-                        onPress={() => confirmDisburse(l)}
-                        disabled={disburse.loading}
-                        style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11, opacity: disburse.loading ? 0.6 : 1 }}
+                        onPress={() => router.push({ pathname: '/(app)/[groupId]/loans/disburse' as any, params: { groupId } })}
+                        style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11 }}
                       >
-                        {disburse.loading ? <ActivityIndicator size="small" color="#3E8E66" /> : <Banknote size={16} color="#3E8E66" strokeWidth={2.4} />}
-                        <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Disburse</Text>
+                        <Banknote size={16} color="#3E8E66" strokeWidth={2.4} />
+                        <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Go to disbursement</Text>
                       </Pressable>
                     ) : (
                       // The Owner decides (approves); the Treasurer releases the

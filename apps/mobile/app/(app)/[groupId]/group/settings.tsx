@@ -183,7 +183,7 @@ export default function GroupSettings() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Group settings" subtitle={group?.name ?? ''} />
+      <AppBar title="Payment channel" subtitle={group?.name ?? ''} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
         <SectionHead title="Payment channel" />
@@ -285,25 +285,6 @@ export default function GroupSettings() {
               </View>
             )}
           </View>
-        </View>
-
-        <SectionHead title="Group officers" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-          {officers.loading ? (
-            <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>Loading…</Text>
-          ) : (officers.data?.officers.length ?? 0) === 0 ? (
-            <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No officers assigned yet.</Text>
-          ) : (
-            officers.data!.officers.map((o, i) => (
-              <View key={`${o.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: i < officers.data!.officers.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                <Avatar name={o.full_name} uri={o.avatar_url} size={36} />
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{o.full_name ?? 'Unnamed'}</Text>
-                  <Text variant="caption" color="muted" style={{ marginTop: 1, textTransform: 'capitalize' }}>{o.role}</Text>
-                </View>
-              </View>
-            ))
-          )}
         </View>
 
         <SectionHead title="Change history" />

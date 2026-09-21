@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -14,6 +14,7 @@ import { uploadImage } from '@/lib/upload';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLoans, useSubmitRepayment } from '@/features/lending/lending.hooks';
 import { PayLoanGcashSheet } from '@/features/lending/PayLoanGcashSheet';
+import { expectedMonthlyDue } from '@/features/lending/expectedMonthlyDue';
 
 /** Same 'choose' vs 'manual' split as contributions/contribute.tsx — pick a
  * way to pay first, then either hand off to GCash or record it yourself. */
@@ -28,11 +29,7 @@ function SectionHead({ title }: { title: string }) {
 }
 
 export default function Repay() {
-  // `suggested` comes from the "My loan" page's own expected-monthly-payment
-  // math (loans/index.tsx) — without it, defaulting to the full outstanding
-  // balance made "Make a repayment" suggest paying off the whole loan in one
-  // go instead of this month's actual due amount.
-  const { groupId, suggested } = useLocalSearchParams<{ groupId: string; suggested?: string }>();
+  const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
   const { group, membership } = useActiveGroup();
   const loans = useLoans(groupId!, { status: 'active' });
@@ -48,13 +45,19 @@ export default function Repay() {
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
   const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
   const [gcashSheetOpen, setGcashSheetOpen] = useState(false);
-  const [amount, setAmount] = useState(() => (suggested && Number(suggested) > 0 ? suggested : ''));
+  const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
-  const suggestedAmount = suggested && Number(suggested) > 0 ? Number(suggested) : outstanding;
+  const suggestedAmount = expectedMonthlyDue(activeLoan);
+
+  // The loan loads asynchronously, so prefill once its expected payment is known.
+  useEffect(() => {
+    if (suggestedAmount > 0 && !amount) setAmount(suggestedAmount.toFixed(2));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestedAmount]);
 
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();

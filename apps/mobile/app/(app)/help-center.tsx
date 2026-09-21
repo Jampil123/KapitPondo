@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ChevronDown } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { ChevronDown, ChevronRight, MessageCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic } from '@/theme/colors';
@@ -10,6 +11,7 @@ import { HELP_SECTIONS } from '@/content/helpCenter';
 const BAND_TOP = '#4C7C90';
 
 export default function HelpCenter() {
+  const router = useRouter();
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
@@ -42,6 +44,17 @@ export default function HelpCenter() {
             })}
           </View>
         ))}
+
+        <Pressable
+          onPress={() => router.push('/(app)/send-feedback' as any)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderTopWidth: 1, borderTopColor: semantic.border }}
+        >
+          <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+            <MessageCircle size={16} color={semantic.brandDark} />
+          </View>
+          <Text variant="label" style={{ fontSize: 13.5, flex: 1 }}>Send feedback</Text>
+          <ChevronRight size={18} color={semantic.textMuted} />
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

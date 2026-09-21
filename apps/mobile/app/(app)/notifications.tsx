@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { BellOff, CheckCircle2, XCircle, Bell } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { BellOff, CheckCircle2, XCircle, Bell, Settings } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
@@ -50,6 +50,7 @@ function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
 
 export default function Notifications() {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
+  const router = useRouter();
   const { notifications: allNotifications, loading, error, markRead, markAllRead } = useNotifications();
 
   const notifications = useMemo(
@@ -77,11 +78,16 @@ export default function Notifications() {
         title="Notifications"
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
         right={
-          unreadCount > 0 ? (
-            <Pressable onPress={onMarkAllRead} hitSlop={8} style={{ paddingHorizontal: 8 }}>
-              <Text variant="label" color="brand" style={{ fontSize: 13 }}>Mark all read</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            {unreadCount > 0 ? (
+              <Pressable onPress={onMarkAllRead} hitSlop={8} style={{ paddingHorizontal: 8 }}>
+                <Text variant="label" color="brand" style={{ fontSize: 13 }}>Mark all read</Text>
+              </Pressable>
+            ) : null}
+            <Pressable onPress={() => router.push('/(app)/notification-center' as any)} hitSlop={8} style={{ padding: 6 }}>
+              <Settings size={19} color={semantic.textSecondary} />
             </Pressable>
-          ) : undefined
+          </View>
         }
       />
 

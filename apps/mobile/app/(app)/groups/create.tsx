@@ -118,51 +118,50 @@ export default function CreateGroup() {
             </View>
           )}
 
-          <View style={{ height: verified ? 8 : 0 }} />
-          <Label>Group Name</Label>
-          <TextInput
-            value={name}
-            onChangeText={setName}
-            editable={verified}
-            placeholder="e.g. Barangay Unity Fund"
-            placeholderTextColor={semantic.textMuted}
-            style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }, !verified && { opacity: 0.5 }]}
-          />
+          {verified ? (
+            <View style={{ marginTop: 8 }}>
+              <Label>Group Name</Label>
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="e.g. Barangay Unity Fund"
+                placeholderTextColor={semantic.textMuted}
+                style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }]}
+              />
 
-          <Label>Fund Code (optional)</Label>
-          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
-            <TextInput
-              value={fundCode}
-              onChangeText={(t) => setFundCode(t.toUpperCase())}
-              editable={verified}
-              placeholder="ABC-123-XYZ"
-              placeholderTextColor={semantic.textMuted}
-              autoCapitalize="characters"
-              style={[inputStyle, typography.body, { flex: 1, height: 56 }, !verified && { opacity: 0.5 }]}
-            />
-            <Pressable
-              onPress={() => setFundCode(generateCode())}
-              disabled={!verified}
-              style={{ height: 56, paddingHorizontal: 20, backgroundColor: semantic.surfaceAlt, borderRadius: 12, alignItems: 'center', justifyContent: 'center', opacity: verified ? 1 : 0.5 }}
-            >
-              <RefreshCw size={22} color={semantic.textPrimary} />
-            </Pressable>
-          </View>
-          <Label>Description</Label>
-          <TextInput
-            value={description}
-            onChangeText={setDescription}
-            editable={verified}
-            placeholder="Group goals, contribution schedule, rules..."
-            placeholderTextColor={semantic.textMuted}
-            multiline
-            textAlignVertical="top"
-            style={[inputStyle, typography.body, { height: 112, paddingVertical: 14, marginBottom: 20 }, !verified && { opacity: 0.5 }]}
-          />
+              <Label>Fund Code (optional)</Label>
+              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
+                <TextInput
+                  value={fundCode}
+                  onChangeText={(t) => setFundCode(t.toUpperCase())}
+                  placeholder="ABC-123-XYZ"
+                  placeholderTextColor={semantic.textMuted}
+                  autoCapitalize="characters"
+                  style={[inputStyle, typography.body, { flex: 1, height: 56 }]}
+                />
+                <Pressable
+                  onPress={() => setFundCode(generateCode())}
+                  style={{ height: 56, paddingHorizontal: 20, backgroundColor: semantic.surfaceAlt, borderRadius: 12, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <RefreshCw size={22} color={semantic.textPrimary} />
+                </Pressable>
+              </View>
+              <Label>Description</Label>
+              <TextInput
+                value={description}
+                onChangeText={setDescription}
+                placeholder="Group goals, contribution schedule, rules..."
+                placeholderTextColor={semantic.textMuted}
+                multiline
+                textAlignVertical="top"
+                style={[inputStyle, typography.body, { height: 112, paddingVertical: 14, marginBottom: 20 }]}
+              />
 
-          {error ? <Text variant="bodySmall" style={{ color: '#C25C5E', marginBottom: 12 }}>{error}</Text> : null}
+              {error ? <Text variant="bodySmall" style={{ color: '#C25C5E', marginBottom: 12 }}>{error}</Text> : null}
 
-          <Button label="Create Group" onPress={handleCreate} loading={loading} disabled={!name.trim() || !verified} />
+              <Button label="Create Group" onPress={handleCreate} loading={loading} disabled={!name.trim()} />
+            </View>
+          ) : null}
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>

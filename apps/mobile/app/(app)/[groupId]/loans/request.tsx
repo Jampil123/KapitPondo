@@ -38,10 +38,6 @@ export default function RequestLoan() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
   const apply = useApplyLoan(groupId!);
-  // Eligibility itself is handled on the loans overview page (the "Request a
-  // loan" button there only appears once every requirement is met) — this
-  // screen just needs available_cash from the same member-safe endpoint for
-  // fund-capacity context, not a second copy of the eligibility checklist.
   const eligibility = useMemberLoanEligibility(groupId!);
   const { cycle } = useActiveCycle(groupId!);
 
@@ -81,11 +77,25 @@ export default function RequestLoan() {
     if (!months) return Alert.alert('Invalid term', 'Enter the number of months.');
     const ok = await apply.run({ principal: amt, term_months: months, purpose: purpose || undefined });
     if (ok !== undefined) {
-      Alert.alert('Request sent', 'Your loan request was submitted. The Owner will decide.');
-      router.replace({ pathname: '/(app)/[groupId]', params: { groupId } });
+      router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } });
     } else if (apply.error) {
       Alert.alert('Could not submit', apply.error.message);
     }
+  }
+
+  // The "+" sheet reaches this form directly, so it enforces the same eligibility gate as the loans overview.
+  if (eligibility.data && !eligibility.data.eligible) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
+        <AppBar title="Request Loan" />
+        <View style={{ padding: 16, gap: 14 }}>
+          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
+            <Text variant="label">You can't request a loan yet</Text>
+          </View>
+          <Button label="See what's blocking you" onPress={() => router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } })} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (

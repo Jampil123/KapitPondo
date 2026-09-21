@@ -230,13 +230,6 @@ export default function LoansOverview() {
     .filter((p) => p.status === 'approved' || p.status === 'paid')
     .reduce((s, p) => s + Number(p.interest_portion), 0);
 
-  // Same flat-rate convention as the request page and the card below —
-  // "Make a repayment" should suggest what's actually due this month, not
-  // the whole remaining balance.
-  const expectedMonthlyTotal = activeLoan?.term_months && activeLoan?.interest_rate
-    ? principal / activeLoan.term_months + principal * Number(activeLoan.interest_rate)
-    : outstanding;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title={TITLES[state]} />
@@ -299,7 +292,7 @@ export default function LoansOverview() {
               );
             })() : null}
 
-            <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay', { suggested: String(Math.min(expectedMonthlyTotal, outstanding)) })} style={{ marginTop: 14 }} />
+            <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} style={{ marginTop: 14 }} />
 
             <SectionHead title="Repayment history" aside={`${payments.length} made`} />
             {payments.length === 0 ? (

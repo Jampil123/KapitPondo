@@ -115,6 +115,9 @@ export default function MyDataConsent() {
           </View>
         </View>
         <LinkRow label="My Submission" sub="View your submitted ID photo and selfie" onPress={() => router.push('/(app)/my-submission' as any)} />
+        <View style={{ borderTopWidth: 1, borderTopColor: semantic.border }}>
+          <LinkRow label="Privacy Policy" sub="How your information is collected and used" onPress={() => router.push('/(app)/privacy-policy' as any)} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

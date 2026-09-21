@@ -6,17 +6,14 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, HelpCircle, Lock, ChevronRight, LogOut,
-  Users, Plus, Mail, Smartphone, KeyRound,
-  Download, History, MessageCircle, Info, ScrollText,
+  Mail, KeyRound, Download, History,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { semantic, shadowToken, intent, type IntentName } from '@/theme/colors';
-import { getStatusMeta } from '@/theme/status';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
-import { useGroups } from '@/context/GroupContext';
 import { updateProfile } from '@/api/members';
 import { uploadAvatar } from '@/lib/upload';
 import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
@@ -46,7 +43,6 @@ function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: stri
 export function ProfileBody() {
   const router = useRouter();
   const { member, signOut, refreshMember } = useAuth();
-  const { groups, loading: groupsLoading } = useGroups();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [bandHeight, setBandHeight] = useState(150);
 
@@ -180,54 +176,10 @@ export function ProfileBody() {
           ) : null}
         </View>
 
-        {/* My groups — roles live per membership, not on the person */}
-        <View>
-          <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>My groups</Text>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            {groupsLoading ? (
-              <ActivityIndicator color={semantic.brand} style={{ margin: 16 }} />
-            ) : groups.length === 0 ? (
-              <Text variant="body" color="muted" style={{ textAlign: 'center', padding: 20 }}>You haven't joined a group yet.</Text>
-            ) : (
-              groups.map((m) => {
-                const roleMeta = getStatusMeta('role', m.role);
-                const tone = intent[roleMeta.intent];
-                return (
-                  <Pressable
-                    key={m.id}
-                    onPress={() => router.push({ pathname: '/(app)/[groupId]' as any, params: { groupId: m.groups.id } })}
-                    style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}
-                  >
-                    <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                      <Users size={16} color={semantic.brandDark} />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{m.groups.name}</Text>
-                      <View style={{ flexDirection: 'row', gap: 5, marginTop: 5 }}>
-                        <View style={{ backgroundColor: tone.soft, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 20 }}>
-                          <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: tone.text }}>{roleMeta.label}</Text>
-                        </View>
-                        {m.status === 'pending' ? (
-                          <View style={{ backgroundColor: intent.warning.soft, paddingHorizontal: 8, paddingVertical: 2.5, borderRadius: 20 }}>
-                            <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>Pending approval</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                    </View>
-                    <ChevronRight size={18} color={semantic.textMuted} />
-                  </Pressable>
-                );
-              })
-            )}
-            <Row icon={Plus} label="Join a group by code" onPress={() => router.push('/(app)/groups/join' as any)} />
-          </View>
-        </View>
-
         {/* Account */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Account</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={Smartphone} label="Mobile number" sub={member?.phone ? formatPH(member.phone) : undefined} pill={{ text: 'Confirmed', tone: 'success' }} />
             <Row
               icon={Mail}
               label="Email address"
@@ -236,18 +188,7 @@ export function ProfileBody() {
               onPress={() => router.push('/(app)/email-address' as any)}
             />
             <Row icon={KeyRound} label="Change password" onPress={() => router.push('/(app)/change-password' as any)} />
-          </View>
-        </View>
-
-        {/* Notifications — Notification Center is account-wide PREFERENCES
-            (what you get notified about), not the in-group feed/inbox
-            (/(app)/notifications) — the Settings half of the Inbox/Settings
-            split, which is why it lives here under Profile rather than
-            inside any one group's screens. */}
-        <View>
-          <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Notifications</Text>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-            <Row icon={Bell} label="Notification Center" sub="Choose what you get notified about" onPress={() => router.push('/(app)/notification-center' as any)} />
+            <Row icon={Bell} label="Notifications" onPress={() => router.push('/(app)/notification-center' as any)} />
           </View>
         </View>
 
@@ -256,7 +197,6 @@ export function ProfileBody() {
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Privacy &amp; security</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
             <Row icon={History} label="Login activity" sub="Devices and times your account signed in" onPress={() => router.push('/(app)/login-activity' as any)} />
-            <Row icon={ScrollText} label="Privacy Policy" onPress={() => router.push('/(app)/privacy-policy' as any)} />
             <Row icon={Lock} label="My data & consent" sub="Review what we collect and why" onPress={() => router.push('/(app)/my-data-consent' as any)} />
             <Row icon={Download} label="Download my records" sub="Contributions, loans and payouts" onPress={() => router.push('/(app)/download-records' as any)} />
           </View>
@@ -264,11 +204,9 @@ export function ProfileBody() {
 
         {/* Support */}
         <View>
-          <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Support</Text>
+          <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Help</Text>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
             <Row icon={HelpCircle} label="Help Center" onPress={() => router.push('/(app)/help-center' as any)} />
-            <Row icon={MessageCircle} label="Send feedback" onPress={() => router.push('/(app)/send-feedback' as any)} />
-            <Row icon={Info} label="About KapitPondo" sub={`Version ${Constants.expoConfig?.version ?? '—'}`} onPress={() => router.push('/(app)/about' as any)} />
           </View>
         </View>
 
@@ -280,8 +218,8 @@ export function ProfileBody() {
           <Text variant="label" style={{ color: intent.danger.text }}>Sign Out</Text>
         </Pressable>
 
-        <Text variant="caption" color="muted" style={{ textAlign: 'center', lineHeight: 17 }}>
-          KapitPondo records money that moves outside the app.{'\n'}It never holds or transfers your funds.
+        <Text variant="caption" color="muted" style={{ textAlign: 'center' }}>
+          KapitPondo v{Constants.expoConfig?.version ?? '—'}
         </Text>
         </View>
       </ScrollView>

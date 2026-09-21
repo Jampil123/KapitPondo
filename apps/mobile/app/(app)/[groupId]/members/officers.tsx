@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Modal, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ChevronRight, Check, AlertTriangle, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -16,7 +16,7 @@ const CARD_SHADOW = {
   boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
 } as const;
 
-type Tab = 'all' | 'officers' | 'members' | 'pending';
+type Tab = 'all' | 'officers' | 'members';
 type AppointRole = 'treasurer' | 'auditor';
 
 const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
@@ -74,7 +74,6 @@ function Pill({ tone, children }: { tone: 'role' | 'heads' | 'warn' | 'pend'; ch
 
 export default function MembersOfficers() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const router = useRouter();
   const [tab, setTab] = useState<Tab>('all');
   const [sheetRole, setSheetRole] = useState<AppointRole | null>(null);
 
@@ -132,7 +131,6 @@ export default function MembersOfficers() {
   }
 
   const filteredPeople = useMemo(() => {
-    if (tab === 'pending') return [];
     return roster.filter((m) => tab === 'all' ? true : tab === 'officers' ? m.role !== 'member' : m.role === 'member');
   }, [roster, tab]);
 
@@ -149,7 +147,6 @@ export default function MembersOfficers() {
             { key: 'all', label: 'All' },
             { key: 'officers', label: 'Officers' },
             { key: 'members', label: 'Members' },
-            { key: 'pending', label: `Pending${pendingRows.length ? ` · ${pendingRows.length}` : ''}` },
           ] as { key: Tab; label: string }[]).map((t) => {
             const active = tab === t.key;
             return (
@@ -162,7 +159,7 @@ export default function MembersOfficers() {
 
         {loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} /> : (
           <>
-            {tab !== 'pending' && tab !== 'members' ? (
+            {tab !== 'members' ? (
               <>
                 <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>Officer slots</Text>
                 <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
@@ -223,31 +220,9 @@ export default function MembersOfficers() {
               </>
             ) : null}
 
-            {/* ---------------- People / Pending ---------------- */}
-            <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{tab === 'pending' ? 'Pending join requests' : 'People'}</Text>
+            <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>People</Text>
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-              {tab === 'pending' ? (
-                pendingRows.length === 0 ? (
-                  <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No pending requests.</Text>
-                ) : (
-                  pendingRows.map((r, i) => (
-                    <Pressable
-                      key={r.member_id}
-                      onPress={() => router.push({ pathname: '/(app)/[groupId]/members/approvals' as any, params: { groupId } })}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < pendingRows.length - 1 ? 1 : 0, borderColor: semantic.border }}
-                    >
-                      <Avatar name={r.members?.full_name ?? 'Member'} uri={r.members?.avatar_url} size={42} />
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.members?.full_name ?? 'Unnamed'}</Text>
-                        <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
-                          <Pill tone="pend">Pending approval</Pill>
-                        </View>
-                      </View>
-                      <ChevronRight size={16} color={semantic.textMuted} />
-                    </Pressable>
-                  ))
-                )
-              ) : filteredPeople.length === 0 ? (
+              {filteredPeople.length === 0 ? (
                 <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No one matches this filter.</Text>
               ) : (
                 filteredPeople.map((m, i) => {
