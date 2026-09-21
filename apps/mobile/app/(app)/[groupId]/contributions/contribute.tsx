@@ -80,7 +80,7 @@ function AmountBlock({ label, amount, badge, meta, note, copied, onCopy }: {
     <View style={{ alignItems: 'center', paddingTop: 8 }}>
       <Text variant="overline" color="muted">{label}</Text>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
-        <Text style={{ fontSize: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1.2 }}>{formatPeso(amount)}</Text>
+        <Text style={{ fontSize: 30, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(amount)}</Text>
         {onCopy ? (
           <Pressable onPress={onCopy} hitSlop={10} accessibilityRole="button" accessibilityLabel="Copy amount">
             {copied ? <Check size={18} color={intent.success.text} /> : <Copy size={18} color={semantic.textMuted} />}

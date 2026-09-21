@@ -18,7 +18,9 @@ export default function GroupLayout() {
               contentStyle: { backgroundColor: semantic.background },
               animation: 'slide_from_right',
             }}
-          />
+          >
+            <Stack.Screen name="contributions/contribute" options={{ animation: 'slide_from_bottom' }} />
+          </Stack>
         </View>
         {showNav ? <GroupNav /> : null}
       </View>
