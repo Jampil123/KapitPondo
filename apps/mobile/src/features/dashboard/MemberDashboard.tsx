@@ -8,7 +8,7 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
-import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
+import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -270,25 +270,21 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Half-circle tab hanging off the bottom centre of the band; toggles the capital + heads details. */
+// Same clear blue the bottom nav uses for its active marker.
+const TAB_ARROW = '#2FA8FF';
+
+/** Bare arrow hanging off the bottom centre of the band; toggles the capital + heads details. */
 function PositionTab({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={8}
+      hitSlop={12}
       accessibilityRole="button"
       accessibilityLabel={open ? 'Hide capital and heads' : 'Show capital and heads'}
-      style={[
-        {
-          width: BAND_TAB_HEIGHT * 2, height: BAND_TAB_HEIGHT,
-          borderBottomLeftRadius: BAND_TAB_HEIGHT, borderBottomRightRadius: BAND_TAB_HEIGHT,
-          backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center', paddingBottom: 2,
-        },
-        shadowToken.card,
-      ]}
+      style={{ width: BAND_TAB_HEIGHT * 2, height: BAND_TAB_HEIGHT, alignItems: 'center', justifyContent: 'center' }}
     >
       <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
-        <ChevronDown size={17} color="#fff" strokeWidth={2.2} />
+        <ChevronDown size={26} color={TAB_ARROW} strokeWidth={3} />
       </Animated.View>
     </Pressable>
   );
@@ -372,6 +368,20 @@ function PositionPanel({ groupId }: { groupId: string }) {
 }
 
 /** Group fund shown as composition (cash + on loan) so it never looks like money went missing. */
+function FundLegend({ color, label, amount, pct }: { color: string; label: string; amount: number; pct: number }) {
+  return (
+    <View style={{ flex: 1 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
+        <Text variant="overline" color="secondary">{label}</Text>
+      </View>
+      <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(amount)}</Text>
+      <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>{pct}% of fund</Text>
+    </View>
+  );
+}
+
+/** Group fund shown as composition (cash + on loan) so it never looks like money went missing. */
 function FundComposition({ groupId }: { groupId: string }) {
   const fund = useFundSummary(groupId);
 
@@ -386,38 +396,26 @@ function FundComposition({ groupId }: { groupId: string }) {
   const cash = Number(fund.data?.available_cash ?? 0);
   const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
   const total = cash + onLoan;
-  const cashPct = total > 0 ? (cash / total) * 100 : 100;
-  const lentPct = 100 - cashPct;
+  const cashPct = total > 0 ? Math.round((cash / total) * 100) : 0;
+  const lentPct = total > 0 ? 100 - cashPct : 0;
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17 }, CARD_SHADOW]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 13 }}>
-        <Text variant="label">Total Group Fund</Text>
-        <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(total)}</Text>
+    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+      <Text variant="overline" color="muted">Total group fund</Text>
+      <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 4 }}>{formatPeso(total)}</Text>
+
+      <View style={{ flexDirection: 'row', height: 10, gap: 2, borderRadius: 5, overflow: 'hidden', backgroundColor: semantic.surfaceAlt, marginVertical: 14 }}>
+        <View style={{ flex: cash, backgroundColor: semantic.brand }} />
+        <View style={{ flex: onLoan, backgroundColor: '#E4A33C' }} />
       </View>
 
-      <View style={{ flexDirection: 'row', height: 9, borderRadius: 5, overflow: 'hidden', marginBottom: 12 }}>
-        <View style={{ width: (cashPct + '%') as any, backgroundColor: semantic.brand }} />
-        <View style={{ width: (lentPct + '%') as any, backgroundColor: '#E4A33C' }} />
+      <View style={{ flexDirection: 'row', gap: 14 }}>
+        <FundLegend color={semantic.brand} label="Cash on hand" amount={cash} pct={cashPct} />
+        <View style={{ width: 1, backgroundColor: semantic.border }} />
+        <FundLegend color="#E4A33C" label="Out on loan" amount={onLoan} pct={lentPct} />
       </View>
-
-      <View style={{ gap: 5 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: semantic.brand }} />
-          <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Cash on hand</Text>
-          <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#E4A33C' }} />
-          <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>Out on loan</Text>
-          <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
-        </View>
-      </View>
-      
     </View>
-    
   );
-  
 }
 
 
