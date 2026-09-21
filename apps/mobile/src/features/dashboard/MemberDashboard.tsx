@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
-  Wallet, Layers, ChevronUp,
+  Wallet, Layers, ChevronUp, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
@@ -279,7 +279,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 
 /** Half-circle tab hanging off the bottom centre of the band; toggles the capital + heads details. */
 function PositionTab({ open, onPress }: { open: boolean; onPress: () => void }) {
-  const Icon = open ? ChevronUp : Wallet;
+  const Icon = open ? ChevronUp : ChevronDown;
   return (
     <Pressable
       onPress={onPress}
