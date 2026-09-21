@@ -10,12 +10,18 @@ import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
 import { DashboardShell } from '@/features/dashboard/DashboardShell';
 import { DashboardHeader } from '@/components/shared/DashboardHeader';
-import { OwnerDashboard } from '@/features/dashboard/OwnerDashboard';
-import { TreasurerDashboard } from '@/features/dashboard/TreasurerDashboard';
-import { AuditorDashboard } from '@/features/dashboard/AuditorDashboard';
-import { MemberDashboard } from '@/features/dashboard/MemberDashboard';
+import { OwnerDashboard, OwnerHero } from '@/features/dashboard/OwnerDashboard';
+import { TreasurerDashboard, TreasurerHero } from '@/features/dashboard/TreasurerDashboard';
+import { AuditorDashboard, AuditorHero } from '@/features/dashboard/AuditorDashboard';
+import { MemberDashboard, MemberHero } from '@/features/dashboard/MemberDashboard';
 import { semantic } from '@/theme/colors';
 import { onBandText } from '@/components/shared/DashboardBand';
+
+const OFFICER_VIEWS = {
+  owner: { Hero: OwnerHero, Body: OwnerDashboard },
+  treasurer: { Hero: TreasurerHero, Body: TreasurerDashboard },
+  auditor: { Hero: AuditorHero, Body: AuditorDashboard },
+} as const;
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
@@ -139,6 +145,11 @@ export default function GroupDashboard() {
     );
   }
 
+  const officerView = role === 'owner' ? ownerView : role === 'treasurer' ? treasurerView : role === 'auditor' ? auditorView : 'member';
+  const { Hero, Body } = officerView === 'officer' && role !== 'member'
+    ? OFFICER_VIEWS[role]
+    : { Hero: MemberHero, Body: MemberDashboard };
+
   return (
     <DashboardShell
       group={group}
@@ -163,25 +174,11 @@ export default function GroupDashboard() {
           )}
         </>
       }
+      hero={<Hero key={refreshKey} groupId={groupId!} />}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      {role === 'owner' && (
-        ownerView === 'officer'
-          ? <OwnerDashboard key={refreshKey} groupId={groupId!} />
-          : <MemberDashboard key={refreshKey} groupId={groupId!} />
-      )}
-      {role === 'treasurer' && (
-        treasurerView === 'officer'
-          ? <TreasurerDashboard key={refreshKey} groupId={groupId!} />
-          : <MemberDashboard key={refreshKey} groupId={groupId!} />
-      )}
-      {role === 'auditor' && (
-        auditorView === 'officer'
-          ? <AuditorDashboard key={refreshKey} groupId={groupId!} />
-          : <MemberDashboard key={refreshKey} groupId={groupId!} />
-      )}
-      {role === 'member' && <MemberDashboard key={refreshKey} groupId={groupId!} />}
+      <Body key={refreshKey} groupId={groupId!} />
     </DashboardShell>
   );
 }

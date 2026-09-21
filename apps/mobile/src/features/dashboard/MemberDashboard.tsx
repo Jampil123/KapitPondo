@@ -446,18 +446,23 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
   );
 }
 
+export function MemberHero({ groupId }: { groupId: string }) {
+  const [positionOpen, setPositionOpen] = useState(false);
+
+  return (
+    <DashboardBand tab={<PositionTab open={positionOpen} onPress={() => setPositionOpen((o) => !o)} />}>
+      <StandingCard groupId={groupId} />
+      {positionOpen ? <PositionPanel groupId={groupId} /> : null}
+    </DashboardBand>
+  );
+}
+
 export function MemberDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const [positionOpen, setPositionOpen] = useState(false);
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
 
   return (
     <>
-      <DashboardBand tab={<PositionTab open={positionOpen} onPress={() => setPositionOpen((o) => !o)} />}>
-        <StandingCard groupId={groupId} />
-        {positionOpen ? <PositionPanel groupId={groupId} /> : null}
-      </DashboardBand>
-
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
 

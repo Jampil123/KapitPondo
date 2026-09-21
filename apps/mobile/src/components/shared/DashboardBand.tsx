@@ -1,11 +1,10 @@
-import { type ReactNode } from 'react';
+import { createContext, useContext, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Path, G } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { steel } from '../../theme/colors';
 
-const BAND_TOP = '#C8DAE2'; // artwork color at the top edge of the crop (steel[100] → steel[400] blend), used to cover the iOS overscroll gap
-const SHELL_PADDING = 20; // DashboardShell's ScrollView padding — the band cancels it to run edge to edge
+const BAND_PADDING = 20;
 
 // dashboard_bg.svg is a 1170x2532 full-screen artwork; the band shows a crop that starts above its wave crests.
 const ART_WIDTH = 1170;
@@ -26,6 +25,8 @@ export const glassPanel = {
   borderWidth: 1,
   borderColor: 'rgba(255,255,255,0.75)',
 } as const;
+
+export const DashboardHeaderContext = createContext<ReactNode>(null);
 
 const FINE_WAVES = Array.from({ length: 15 }, (_, i) =>
   `M -70 ${1575 + 25 * i} C ${190 + 5 * i} ${1455 + 25 * i}, ${320 + 5 * i} ${1250 + 25 * i}, ${540 + 5 * i} ${1030 + 25 * i} C ${750 + 5 * i} ${820 + 25 * i}, ${905 + 5 * i} ${705 + 25 * i}, ${1145 + 5 * i} ${800 + 25 * i}`);
@@ -90,26 +91,16 @@ function Backdrop() {
   );
 }
 
-// Dashboard header pinned above the scrolling content; it draws the same artwork as the band beneath so the two read as one surface.
-export function PinnedBandHeader({ children }: { children: ReactNode }) {
-  const insets = useSafeAreaInsets();
-
-  return (
-    <View style={{ overflow: 'hidden' }}>
-      <Backdrop />
-      <View style={{ paddingTop: insets.top, paddingHorizontal: SHELL_PADDING, paddingBottom: 6 }}>{children}</View>
-    </View>
-  );
-}
-
 export function DashboardBand({ children, tab }: { children: ReactNode; tab?: ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const header = useContext(DashboardHeaderContext);
+
   return (
-    <View style={{ marginHorizontal: -SHELL_PADDING, marginBottom: tab ? BAND_TAB_HEIGHT + 4 : 10 }}>
-      {/* Covers the iOS overscroll gap between the pinned header and the band. */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: -800, left: 0, right: 0, height: 800, backgroundColor: BAND_TOP }} />
+    <View style={{ zIndex: 2, marginBottom: tab ? BAND_TAB_HEIGHT + 4 : 10 }}>
       <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
         <Backdrop />
-        <View style={{ paddingTop: 8, paddingHorizontal: SHELL_PADDING, paddingBottom: 20, gap: 8 }}>
+        <View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: 8 }}>
+          {header}
           {children}
         </View>
       </View>

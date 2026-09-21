@@ -785,16 +785,20 @@ const LOOKUP_ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Proofs', icon: Receipt, route: 'audit/proofs' },
 ];
 
+export function AuditorHero({ groupId }: { groupId: string }) {
+  return (
+    <DashboardBand>
+      <VerificationHero groupId={groupId} />
+    </DashboardBand>
+  );
+}
+
 export function AuditorDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
 
   return (
     <>
-      <DashboardBand>
-        <VerificationHero groupId={groupId} />
-      </DashboardBand>
-
       <YearEndVerification groupId={groupId} go={go} />
 
       <VerificationQueue groupId={groupId} />

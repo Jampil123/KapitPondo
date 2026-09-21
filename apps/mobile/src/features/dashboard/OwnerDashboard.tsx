@@ -880,16 +880,20 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (r: string) 
   );
 }
 
+export function OwnerHero({ groupId }: { groupId: string }) {
+  return (
+    <DashboardBand>
+      <FundCard groupId={groupId} />
+    </DashboardBand>
+  );
+}
+
 export function OwnerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (sub: string) => router.push({ pathname: `/(app)/[groupId]/${sub}` as any, params: { groupId } });
 
   return (
     <>
-      <DashboardBand>
-        <FundCard groupId={groupId} />
-      </DashboardBand>
-
       <FinalizeCard groupId={groupId} go={go} />
 
       <DecisionQueue groupId={groupId} go={go} />

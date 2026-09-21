@@ -445,6 +445,14 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
   );
 }
 
+export function TreasurerHero({ groupId }: { groupId: string }) {
+  return (
+    <DashboardBand>
+      <CashCard groupId={groupId} />
+    </DashboardBand>
+  );
+}
+
 export function TreasurerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (route: string, extraParams?: Record<string, string>) =>
@@ -452,10 +460,6 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <DashboardBand>
-        <CashCard groupId={groupId} />
-      </DashboardBand>
-
       <OwnerLoanToDecide groupId={groupId} go={go} />
 
       <ProofsToReview groupId={groupId} go={go} />
