@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
+import Svg, { Circle } from 'react-native-svg';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
@@ -372,12 +373,11 @@ function PositionPanel({ groupId }: { groupId: string }) {
   );
 }
 
-/** Group fund shown as composition (cash + on loan) so it never looks like money went missing. */
 const LOAN_COLOR = intent.warning.base;
 
 function FundLegend({ color, label, amount, pct }: { color: string; label: string; amount: number; pct: number }) {
   return (
-    <View style={{ flex: 1 }}>
+    <View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
         <Text variant="overline" color="secondary">{label}</Text>
@@ -385,6 +385,34 @@ function FundLegend({ color, label, amount, pct }: { color: string; label: strin
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
         <Text style={{ flexShrink: 1, fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
         <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{pct}%</Text>
+      </View>
+    </View>
+  );
+}
+
+const RING_SIZE = 96;
+const RING_STROKE = 12;
+
+/** Donut of the fund's cash / on-loan split with the cash share in the middle; segments start at 12 o'clock, cash first. */
+function FundRing({ cash, onLoan, cashPct }: { cash: number; onLoan: number; cashPct: number }) {
+  const total = cash + onLoan;
+  const radius = (RING_SIZE - RING_STROKE) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const cashLen = total > 0 ? (circumference * cash) / total : 0;
+  const loanLen = total > 0 ? (circumference * onLoan) / total : 0;
+  const gap = cashLen > 0 && loanLen > 0 ? 3 : 0;
+  const arc = { cx: RING_SIZE / 2, cy: RING_SIZE / 2, r: radius, fill: 'none', strokeWidth: RING_STROKE } as const;
+
+  return (
+    <View style={{ width: RING_SIZE, height: RING_SIZE }}>
+      <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
+        <Circle {...arc} stroke={semantic.surfaceAlt} />
+        {cashLen > 0 ? <Circle {...arc} stroke={semantic.brand} strokeDasharray={`${Math.max(cashLen - gap, 0)} ${circumference}`} /> : null}
+        {loanLen > 0 ? <Circle {...arc} stroke={LOAN_COLOR} strokeDasharray={`${Math.max(loanLen - gap, 0)} ${circumference}`} strokeDashoffset={-cashLen} /> : null}
+      </Svg>
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4 }}>{total > 0 ? `${cashPct}%` : '—'}</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 10, marginTop: -2 }}>in cash</Text>
       </View>
     </View>
   );
@@ -409,19 +437,17 @@ function FundComposition({ groupId }: { groupId: string }) {
   const lentPct = total > 0 ? 100 - cashPct : 0;
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
-      <Text variant="overline" color="muted">Total group fund</Text>
-      <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 4 }}>{formatPeso(total)}</Text>
+    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 18 }, CARD_SHADOW]}>
+      <FundRing cash={cash} onLoan={onLoan} cashPct={cashPct} />
 
-      <View style={{ flexDirection: 'row', height: 10, gap: 2, borderRadius: 5, overflow: 'hidden', backgroundColor: semantic.surfaceAlt, marginVertical: 14 }}>
-        <View style={{ flex: cash, backgroundColor: semantic.brand }} />
-        <View style={{ flex: onLoan, backgroundColor: LOAN_COLOR }} />
-      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="overline" color="muted">Total group fund</Text>
+        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 2 }} numberOfLines={1}>{formatPeso(total)}</Text>
 
-      <View style={{ flexDirection: 'row', gap: 14 }}>
-        <FundLegend color={semantic.brand} label="Cash on hand" amount={cash} pct={cashPct} />
-        <View style={{ width: 1, backgroundColor: semantic.border }} />
-        <FundLegend color={LOAN_COLOR} label="Out on loan" amount={onLoan} pct={lentPct} />
+        <View style={{ gap: 10, marginTop: 12 }}>
+          <FundLegend color={semantic.brand} label="Cash on hand" amount={cash} pct={cashPct} />
+          <FundLegend color={LOAN_COLOR} label="Out on loan" amount={onLoan} pct={lentPct} />
+        </View>
       </View>
     </View>
   );
