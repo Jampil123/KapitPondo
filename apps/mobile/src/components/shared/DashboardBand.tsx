@@ -16,6 +16,9 @@ const CROP_HEIGHT = 1500;
 // Secondary text drawn directly on the band — the band reaches steel[400] toward the bottom right, so it needs full ink.
 export const onBandText = steel[900];
 
+// Height of the half-circle tab a dashboard can hang off the bottom centre of the band (a semicircle is twice as wide).
+export const BAND_TAB_HEIGHT = 30;
+
 // Frosted surface for dense detail (lists, stage strips) that sits on the band.
 export const glassPanel = {
   backgroundColor: 'rgba(255,255,255,0.6)',
@@ -89,12 +92,12 @@ function Backdrop() {
   );
 }
 
-export function DashboardBand({ children }: { children: ReactNode }) {
+export function DashboardBand({ children, tab }: { children: ReactNode; tab?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const header = useContext(DashboardHeaderContext);
 
   return (
-    <View style={{ marginHorizontal: -SHELL_PADDING, marginBottom: 10 }}>
+    <View style={{ marginHorizontal: -SHELL_PADDING, marginBottom: tab ? BAND_TAB_HEIGHT + 4 : 10 }}>
       {/* Covers the iOS overscroll gap above the band. */}
       <View pointerEvents="none" style={{ position: 'absolute', top: -800, left: 0, right: 0, height: 800, backgroundColor: BAND_TOP }} />
       <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
@@ -104,6 +107,11 @@ export function DashboardBand({ children }: { children: ReactNode }) {
           {children}
         </View>
       </View>
+      {tab ? (
+        <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: -BAND_TAB_HEIGHT, alignItems: 'center' }}>
+          {tab}
+        </View>
+      ) : null}
     </View>
   );
 }

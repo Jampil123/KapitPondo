@@ -4,11 +4,11 @@ import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
-  Wallet, Layers, ChevronDown,
+  Wallet, Layers, ChevronUp,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
-import { semantic, intent, type IntentName } from '@/theme/colors';
+import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -277,13 +277,35 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Collapsible capital + heads summary under the standing card; both are already-fetched real values. */
-function PositionDropdown({ groupId }: { groupId: string }) {
+/** Half-circle tab hanging off the bottom centre of the band; toggles the capital + heads details. */
+function PositionTab({ open, onPress }: { open: boolean; onPress: () => void }) {
+  const Icon = open ? ChevronUp : Wallet;
+  return (
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={open ? 'Hide capital and heads' : 'Show capital and heads'}
+      style={[
+        {
+          width: BAND_TAB_HEIGHT * 2, height: BAND_TAB_HEIGHT,
+          borderBottomLeftRadius: BAND_TAB_HEIGHT, borderBottomRightRadius: BAND_TAB_HEIGHT,
+          backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center', paddingBottom: 2,
+        },
+        shadowToken.card,
+      ]}
+    >
+      <Icon size={17} color="#fff" strokeWidth={2.2} />
+    </Pressable>
+  );
+}
+
+/** Capital + heads details revealed by PositionTab; both are already-fetched real values. */
+function PositionPanel({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { membership } = useActiveGroup();
   const bal = useMyBalance(groupId);
   const { cycle } = useActiveCycle(groupId);
-  const [open, setOpen] = useState(false);
   const heads = membership?.heads ?? null;
   const capital = bal.loading ? '…' : formatPeso(bal.data?.contributions);
 
@@ -292,47 +314,29 @@ function PositionDropdown({ groupId }: { groupId: string }) {
   }
 
   return (
-    <View style={{ marginTop: 6 }}>
-      <Pressable
-        onPress={() => setOpen((o) => !o)}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.7)' }}
-      >
-        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}>
-          <Wallet size={14} color={semantic.brandDark} />
+    <View style={[glassPanel, { flexDirection: 'row' }]}>
+      <View style={{ flex: 1, padding: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Wallet size={13} color={semantic.brandDark} />
+          <Text variant="overline" color="secondary">My capital</Text>
         </View>
-        <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>My capital & heads</Text>
-        <Text style={{ flex: 1, textAlign: 'right', fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: onBandText }} numberOfLines={1}>
-          {open ? '' : `${capital} · ${heads ?? '—'} head${heads === 1 ? '' : 's'}`}
-        </Text>
-        <ChevronDown size={16} color={onBandText} style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }} />
-      </Pressable>
-
-      {open ? (
-        <View style={[glassPanel, { flexDirection: 'row', marginTop: 10 }]}>
-          <View style={{ flex: 1, padding: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Wallet size={13} color={semantic.brandDark} />
-              <Text variant="overline" color="secondary">My capital</Text>
-            </View>
-            <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{capital}</Text>
-            <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>contributions</Text>
+        <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{capital}</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>contributions</Text>
+      </View>
+      <View style={{ width: 1, backgroundColor: semantic.border }} />
+      <Pressable onPress={goToHeads} style={{ flex: 1, padding: 12 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Layers size={13} color={semantic.brandDark} />
+          <Text variant="overline" color="secondary">My heads</Text>
+          <View style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: semantic.brandDark }}>
+            <ArrowRight size={11} color="#fff" strokeWidth={2.6} />
           </View>
-          <View style={{ width: 1, backgroundColor: semantic.border }} />
-          <Pressable onPress={goToHeads} style={{ flex: 1, padding: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-              <Layers size={13} color={semantic.brandDark} />
-              <Text variant="overline" color="secondary">My heads</Text>
-              <View style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: semantic.brandDark }}>
-                <ArrowRight size={11} color="#fff" strokeWidth={2.6} />
-              </View>
-            </View>
-            <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{heads ?? '—'}</Text>
-            <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }} numberOfLines={1}>
-              {cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}
-            </Text>
-          </Pressable>
         </View>
-      ) : null}
+        <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{heads ?? '—'}</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }} numberOfLines={1}>
+          {cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}
+        </Text>
+      </Pressable>
     </View>
   );
 }
@@ -442,13 +446,14 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
 export function MemberDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { cycle } = useActiveCycle(groupId);
+  const [positionOpen, setPositionOpen] = useState(false);
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
 
   return (
     <>
-      <DashboardBand>
+      <DashboardBand tab={<PositionTab open={positionOpen} onPress={() => setPositionOpen((o) => !o)} />}>
         <StandingCard groupId={groupId} />
-        <PositionDropdown groupId={groupId} />
+        {positionOpen ? <PositionPanel groupId={groupId} /> : null}
       </DashboardBand>
 
       <SectionHead title="This cycle" aside={cycleProgressLabel(cycle)} />
