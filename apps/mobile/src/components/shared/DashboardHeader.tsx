@@ -18,7 +18,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { LogoMark } from './ScreenHeader';
-import { semantic } from '../../theme/colors';
+import { semantic, steel } from '../../theme/colors';
 import { useNotifications } from '../../context/NotificationsContext';
 import type { Group } from '../../api/groups';
 import type { Member } from '../../api/members';
@@ -42,7 +42,7 @@ export function DashboardHeader({
   const hasUnread = unreadCount > 0;
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, paddingTop: 10, paddingBottom: 14, backgroundColor: semantic.background }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 10, paddingBottom: 4 }}>
       <LogoMark size={40} />
 
       <View style={{ flex: 1, gap: 3 }}>
@@ -50,13 +50,13 @@ export function DashboardHeader({
         <Text variant="caption" color="secondary" style={{ fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
       </View>
 
-      <Pressable onPress={() => router.push({ pathname: '/(app)/notifications' as any, params: { groupId } })} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+      <Pressable onPress={() => router.push({ pathname: '/(app)/notifications' as any, params: { groupId } })} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}>
         <Bell size={22} color={semantic.textPrimary} />
         {hasUnread ? (
           <View
             style={{
               position: 'absolute', top: 2, right: 1, minWidth: 16, height: 16, borderRadius: 8,
-              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: semantic.background,
+              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: steel[200],
               alignItems: 'center', justifyContent: 'center',
             }}
           >

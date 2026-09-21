@@ -6,6 +6,7 @@ import {
   ScrollText, FileText, BarChart3, Receipt, X, AlertTriangle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -78,7 +79,7 @@ function MiniLegend({ color, label }: { color: string; label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
       <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: color }} />
-      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: '#88A9B6' }}>{label}</Text>
+      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{label}</Text>
     </View>
   );
 }
@@ -170,106 +171,110 @@ function VerificationHero({ groupId }: { groupId: string }) {
   const checkedAt = useMemo(() => new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }), []);
   const totalScanned = (contribsAll.data?.length ?? 0) + (repaymentsAll.data?.length ?? 0) + (reversalsAll.data?.length ?? 0);
 
-  const bg = issueCount > 0 ? '#5A1E16' : !loading && waitingOnYou === 0 ? '#173C30' : semantic.dashCard;
+  const allClear = issueCount === 0;
+  const pillTone = allClear ? intent.success : intent.danger;
 
   return (
-    <View style={[{ backgroundColor: bg, borderRadius: 18, padding: 16 }, shadowToken.card]}>
+    <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Verification flow</Text>
-          <Text style={{ fontSize: 11.5, lineHeight: 15, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>
+          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Verification flow</Text>
+          <Text style={{ fontSize: 11.5, lineHeight: 15, color: semantic.textSecondary, marginTop: 2 }}>
             {issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'} found` : !loading && waitingOnYou === 0 ? 'Nothing is sitting with you' : 'Where every posting stands right now'}
           </Text>
         </View>
         <Pressable
           onPress={() => setShowHealth((s) => !s)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: issueCount > 0 ? 'rgba(255,120,100,0.22)' : 'rgba(61,214,140,0.18)', paddingVertical: 6, paddingHorizontal: 9, borderRadius: 20 }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: pillTone.soft, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 20 }}
         >
-          <ShieldCheck size={13} color={issueCount > 0 ? '#FFC0B4' : '#7FD9AC'} />
-          <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: issueCount > 0 ? '#FFC0B4' : '#7FD9AC' }}>
+          <ShieldCheck size={13} color={pillTone.text} />
+          <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: pillTone.text }}>
             {issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'All clear'}
           </Text>
-          <ChevronDown size={12} color={issueCount > 0 ? '#FFC0B4' : '#7FD9AC'} style={{ transform: [{ rotate: showHealth ? '180deg' : '0deg' }] }} />
+          <ChevronDown size={12} color={pillTone.text} style={{ transform: [{ rotate: showHealth ? '180deg' : '0deg' }] }} />
         </Pressable>
       </View>
 
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginTop: 16 }}>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: '#7E9CAA' }}>{loading ? '–' : membersYetToPay}</Text>
-          <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: '#7E9CAA', marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Members{'\n'}yet to pay</Text>
-        </View>
-        <View style={{ width: 20, paddingTop: 11 }}>
-          <View style={{ height: 2, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 1 }} />
-        </View>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <View style={{ width: 20, height: 2.5, borderRadius: 2, backgroundColor: '#2FA8FF', marginBottom: 4, shadowColor: '#2FA8FF', shadowOpacity: 0.9, shadowRadius: 6 }} />
-          <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{loading ? '–' : waitingOnYou}</Text>
-          <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#B6D0DA', marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Waiting{'\n'}on you</Text>
-        </View>
-        <View style={{ width: 20, paddingTop: 11 }}>
-          <View style={{ height: 2, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 1 }} />
-        </View>
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: '#7E9CAA' }}>{loading ? '–' : postedCount}</Text>
-          <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: '#7E9CAA', marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Posted{'\n'}to ledger</Text>
-        </View>
-      </View>
-
-      {expanded ? (
-        <>
-          <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.13)' }}>
-            <Text style={{ fontSize: 12, fontFamily: 'Poppins_500Medium', color: '#9BBAC7' }}>Oldest waiting on you</Text>
-            <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_700Bold', color: stale ? '#FFC77D' : '#8CDCB4' }}>{oldestAgeLabel(oldestHours)}</Text>
-          </View>
-
-          <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.09)' }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: '#C4D9E2' }}>{handled} of {totalPostings} postings handled</Text>
-              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: '#8CDCB4' }}>{pct}%</Text>
+      <View style={[glassPanel, { marginTop: 14, overflow: 'hidden' }]}>
+        <View style={{ padding: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{loading ? '–' : membersYetToPay}</Text>
+              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Members{'\n'}yet to pay</Text>
             </View>
-            <View style={{ height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.12)', overflow: 'hidden' }}>
-              <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 4, backgroundColor: '#3DD68C' }} />
+            <View style={{ width: 20, paddingTop: 11 }}>
+              <View style={{ height: 2, backgroundColor: semantic.borderStrong, borderRadius: 1 }} />
             </View>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 9 }}>
-              <MiniLegend color="#3DD68C" label={`${record.verified} verified`} />
-              <MiniLegend color="#FFC77D" label={`${record.flagged} flagged`} />
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <View style={{ width: 20, height: 2.5, borderRadius: 2, backgroundColor: '#2FA8FF', marginBottom: 4, shadowColor: '#2FA8FF', shadowOpacity: 0.9, shadowRadius: 6 }} />
+              <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{loading ? '–' : waitingOnYou}</Text>
+              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Waiting{'\n'}on you</Text>
+            </View>
+            <View style={{ width: 20, paddingTop: 11 }}>
+              <View style={{ height: 2, backgroundColor: semantic.borderStrong, borderRadius: 1 }} />
+            </View>
+            <View style={{ flex: 1, alignItems: 'center' }}>
+              <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{loading ? '–' : postedCount}</Text>
+              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Posted{'\n'}to ledger</Text>
             </View>
           </View>
 
-          {showHealth ? (
-            <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.13)', gap: 2 }}>
-              {checks.map((c) => (
-                <View key={c.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
-                  <View style={{ width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.n > 0 ? '#FF8A70' : 'rgba(61,214,140,0.2)' }}>
-                    {c.n > 0 ? <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: '#4A1108' }}>!</Text> : <Check size={10} color="#3DD68C" strokeWidth={3} />}
-                  </View>
-                  <Text style={{ flex: 1, fontSize: 12, fontFamily: 'Poppins_500Medium', color: c.n > 0 ? '#fff' : '#A9C4CF' }}>{c.n > 0 ? c.failLabel : c.label}</Text>
-                  {c.n > 0 ? <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: '#FFC0B4' }}>{c.n}</Text> : null}
+          {expanded ? (
+            <>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
+                <Text style={{ fontSize: 12, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>Oldest waiting on you</Text>
+                <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_700Bold', color: stale ? intent.warning.text : intent.success.text }}>{oldestAgeLabel(oldestHours)}</Text>
+              </View>
+
+              <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                  <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{handled} of {totalPostings} postings handled</Text>
+                  <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>{pct}%</Text>
                 </View>
-              ))}
-              <Text style={{ fontSize: 10.5, color: '#7E9CAA', fontWeight: '600', marginTop: 8 }}>
-                Last scanned today, {checkedAt} · {totalScanned} postings
-              </Text>
-            </View>
-          ) : null}
-        </>
-      ) : null}
+                <View style={{ height: 7, borderRadius: 4, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
+                  <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 4, backgroundColor: intent.success.base }} />
+                </View>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 9 }}>
+                  <MiniLegend color={intent.success.base} label={`${record.verified} verified`} />
+                  <MiniLegend color={intent.warning.base} label={`${record.flagged} flagged`} />
+                </View>
+              </View>
 
-      <Pressable
-        disabled={locked}
-        onPress={() => setExpanded((e) => !e)}
-        style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 14,
-          marginHorizontal: -16, marginBottom: -16, paddingVertical: 11,
-          backgroundColor: 'rgba(255,255,255,0.05)', borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.09)',
-          opacity: locked ? 0.45 : 1,
-        }}
-      >
-        <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#88A9B6', letterSpacing: 0.3 }}>
-          {locked ? `${waitingOnYou} item${waitingOnYou === 1 ? '' : 's'} waiting` : expanded ? 'Show less' : 'Show my progress'}
-        </Text>
-        <ChevronDown size={13} color="#88A9B6" style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }} />
-      </Pressable>
+              {showHealth ? (
+                <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border, gap: 2 }}>
+                  {checks.map((c) => (
+                    <View key={c.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
+                      <View style={{ width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.n > 0 ? intent.danger.base : intent.success.soft }}>
+                        {c.n > 0 ? <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: '#fff' }}>!</Text> : <Check size={10} color={intent.success.text} strokeWidth={3} />}
+                      </View>
+                      <Text style={{ flex: 1, fontSize: 12, fontFamily: 'Poppins_500Medium', color: c.n > 0 ? semantic.textPrimary : semantic.textSecondary }}>{c.n > 0 ? c.failLabel : c.label}</Text>
+                      {c.n > 0 ? <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{c.n}</Text> : null}
+                    </View>
+                  ))}
+                  <Text style={{ fontSize: 10.5, color: semantic.textSecondary, fontWeight: '600', marginTop: 8 }}>
+                    Last scanned today, {checkedAt} · {totalScanned} postings
+                  </Text>
+                </View>
+              ) : null}
+            </>
+          ) : null}
+        </View>
+
+        <Pressable
+          disabled={locked}
+          onPress={() => setExpanded((e) => !e)}
+          style={{
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11,
+            backgroundColor: 'rgba(255,255,255,0.45)', borderTopWidth: 1, borderColor: semantic.border,
+            opacity: locked ? 0.55 : 1,
+          }}
+        >
+          <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark, letterSpacing: 0.3 }}>
+            {locked ? `${waitingOnYou} item${waitingOnYou === 1 ? '' : 's'} waiting` : expanded ? 'Show less' : 'Show my progress'}
+          </Text>
+          <ChevronDown size={13} color={semantic.brandDark} style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }} />
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -786,7 +791,9 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <VerificationHero groupId={groupId} />
+      <DashboardBand>
+        <VerificationHero groupId={groupId} />
+      </DashboardBand>
 
       <YearEndVerification groupId={groupId} go={go} />
 

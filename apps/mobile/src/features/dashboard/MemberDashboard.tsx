@@ -6,6 +6,7 @@ import {
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { DashboardBand } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -158,9 +159,9 @@ function StandingCard({ groupId }: { groupId: string }) {
   }
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+    <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 9, gap: 10 }}>
-        <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>{label}</Text>
+        <Text variant="overline" color="secondary" style={{ paddingTop: 4 }}>{label}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: tone.soft, paddingVertical: 3.5, paddingHorizontal: 8, borderRadius: 20 }}>
           <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: tone.strong, alignItems: 'center', justifyContent: 'center' }}>
             <Icon size={8} color="#fff" strokeWidth={2.5} />
@@ -196,7 +197,7 @@ function StandingCard({ groupId }: { groupId: string }) {
           style={[
             {
               marginTop: 15, paddingVertical: 11, borderRadius: 12, alignItems: 'center',
-              backgroundColor: ghost ? semantic.surfaceAlt : semantic.brandDark,
+              backgroundColor: ghost ? 'rgba(255,255,255,0.7)' : semantic.brandDark,
             },
           ]}
         >
@@ -433,7 +434,9 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <StandingCard groupId={groupId} />
+      <DashboardBand>
+        <StandingCard groupId={groupId} />
+      </DashboardBand>
 
       <SectionHead title="This cycle" aside={cycleProgressLabel(cycle)} />
       <CycleDots groupId={groupId} />

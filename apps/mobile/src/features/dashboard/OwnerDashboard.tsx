@@ -1,6 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, ScrollView, Alert, Image, Modal, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useQuery, useAction } from '@/hooks/useApi';
 import {
@@ -10,7 +9,8 @@ import {
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { semantic, intent } from '@/theme/colors';
+import { semantic, intent, steel } from '@/theme/colors';
+import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
 
 
 const SOFT_SHADOW = {
@@ -50,8 +50,6 @@ function SectionHead({ title, aside, hot, onAsidePress }: { title: string; aside
 }
 
 /* ---------------- Fund card: composition, not a lone figure ---------------- */
-const CYCLE_DOT: Record<string, string> = { active: '#3DD68C', draft: '#8FB0BC', closed: '#8FB0BC' };
-
 function FundCard({ groupId }: { groupId: string }) {
   const { data, loading } = useSummary(groupId);
   const { cycle } = useActiveCycle(groupId);
@@ -63,44 +61,42 @@ function FundCard({ groupId }: { groupId: string }) {
   const lentPct = 100 - cashPct;
 
   return (
-    <LinearGradient
-      colors={[semantic.brand, semantic.dashCard]}
-      style={[{ borderRadius: 20, padding: 15 }, SOFT_SHADOW]}
-    >
+    <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-        <Text variant="overline" style={{ color: 'rgba(255,255,255,0.55)' }}>Fund value</Text>
+        <Text variant="overline" color="secondary">Fund value</Text>
         {cycle ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(61,214,140,0.16)', paddingVertical: 4, paddingHorizontal: 9, borderRadius: 20 }}>
-            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: CYCLE_DOT[cycle.status] ?? '#8FB0BC' }} />
-            <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: '#7FD9AC' }}>{cycle.status === 'active' ? 'Active' : cycle.status === 'draft' ? 'Draft' : 'Closed'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: intent.success.soft, paddingVertical: 4, paddingHorizontal: 9, borderRadius: 20 }}>
+            <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: cycle.status === 'active' ? intent.success.base : semantic.textMuted }} />
+            <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: cycle.status === 'active' ? intent.success.text : semantic.textSecondary }}>{cycle.status === 'active' ? 'Active' : cycle.status === 'draft' ? 'Draft' : 'Closed'}</Text>
           </View>
         ) : null}
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+        <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
       ) : (
-        <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.8 }}>{formatPeso(total)}</Text>
+        <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(total)}</Text>
       )}
 
-      <View style={{ flexDirection: 'row', height: 7, borderRadius: 4, overflow: 'hidden', marginVertical: 10, backgroundColor: 'rgba(255,255,255,0.14)' }}>
-        <View style={{ width: (cashPct + '%') as any, backgroundColor: '#8FB0BC' }} />
-        <View style={{ width: (lentPct + '%') as any, backgroundColor: '#E4A33C' }} />
-      </View>
-
-      <View style={{ gap: 4 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#8FB0BC' }} />
-          <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: '#A9C4CF' }}>Cash on hand</Text>
-          <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(cash)}</Text>
+      <View style={[glassPanel, { padding: 12, marginTop: 12 }]}>
+        <View style={{ flexDirection: 'row', height: 7, borderRadius: 4, overflow: 'hidden', marginBottom: 10, backgroundColor: semantic.surfaceAlt }}>
+          <View style={{ width: (cashPct + '%') as any, backgroundColor: steel[400] }} />
+          <View style={{ width: (lentPct + '%') as any, backgroundColor: '#E4A33C' }} />
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#E4A33C' }} />
-          <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: '#A9C4CF' }}>Out on loan</Text>
-          <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{formatPeso(onLoan)}</Text>
+        <View style={{ gap: 4 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: steel[400] }} />
+            <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Cash on hand</Text>
+            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#E4A33C' }} />
+            <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Out on loan</Text>
+            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
+          </View>
         </View>
       </View>
-    </LinearGradient>
+    </View>
   );
 }
 
@@ -890,7 +886,9 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <FundCard groupId={groupId} />
+      <DashboardBand>
+        <FundCard groupId={groupId} />
+      </DashboardBand>
 
       <FinalizeCard groupId={groupId} go={go} />
 

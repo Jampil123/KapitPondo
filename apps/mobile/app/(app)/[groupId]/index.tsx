@@ -146,17 +146,17 @@ export default function GroupDashboard() {
         <>
           <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
           {role === 'treasurer' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
+            <View style={{ paddingBottom: 2 }}>
               <RoleSwitch value={treasurerView} onChange={setTreasurerView} officerLabel="Treasurer" />
             </View>
           )}
           {role === 'owner' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
+            <View style={{ paddingBottom: 2 }}>
               <RoleSwitch value={ownerView} onChange={setOwnerView} officerLabel="Owner" />
             </View>
           )}
           {role === 'auditor' && (
-            <View style={{ paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8, backgroundColor: semantic.background }}>
+            <View style={{ paddingBottom: 2 }}>
               <RoleSwitch value={auditorView} onChange={setAuditorView} officerLabel="Auditor" />
             </View>
           )}

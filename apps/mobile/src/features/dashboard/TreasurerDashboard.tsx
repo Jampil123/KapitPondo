@@ -7,6 +7,7 @@ import {
   PiggyBank,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -34,14 +35,12 @@ function SectionHead({ title, aside, tone }: { title: string; aside?: string; to
 }
 
 /* ---------------- Cash card: one reconciled statement ---------------- */
-const CYCLE_DOT: Record<string, string> = { active: '#3DD68C', draft: '#8FB0BC', closed: '#8FB0BC' };
-
 function CashRow({ label, amount, tone }: { label: string; amount: number; tone: 'pos' | 'neg' }) {
   const sign = tone === 'pos' ? '+' : '−';
-  const color = tone === 'pos' ? '#8CDCB4' : '#F0A99E';
+  const color = tone === 'pos' ? intent.success.text : intent.danger.text;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: '#A9C4CF' }}>{label}</Text>
+      <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{label}</Text>
       <Text style={{ marginLeft: 'auto', fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_700Bold', color }}>{sign}{formatPeso(amount)}</Text>
     </View>
   );
@@ -58,33 +57,33 @@ function CashCard({ groupId }: { groupId: string }) {
   const owedBack = Math.max(0, disbursed - repayments);
 
   return (
-    <View style={[{ backgroundColor: semantic.dashCard, borderRadius: 18, padding: 13 }, shadowToken.card]}>
+    <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <Text variant="overline" style={{ color: 'rgba(255,255,255,0.55)' }}>Cash on hand</Text>
+        <Text variant="overline" color="secondary">Cash on hand</Text>
         {cycle ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(61,214,140,0.16)', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 20 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: CYCLE_DOT[cycle.status] ?? '#8FB0BC' }} />
-            <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#7FD9AC' }}>{cycle.status === 'active' ? 'Active' : cycle.status === 'draft' ? 'Draft' : 'Closed'}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: intent.success.soft, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 20 }}>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: cycle.status === 'active' ? intent.success.base : semantic.textMuted }} />
+            <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: cycle.status === 'active' ? intent.success.text : semantic.textSecondary }}>{cycle.status === 'active' ? 'Active' : cycle.status === 'draft' ? 'Draft' : 'Closed'}</Text>
           </View>
         ) : null}
       </View>
 
       {loading ? (
-        <ActivityIndicator color="#fff" style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
+        <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
       ) : (
-        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.7 }}>{formatPeso(data?.available_cash)}</Text>
+        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.7 }}>{formatPeso(data?.available_cash)}</Text>
       )}
 
-      <View style={{ marginTop: 9, paddingTop: 9, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.13)', gap: 4 }}>
+      <View style={[glassPanel, { marginTop: 10, padding: 12, gap: 4 }]}>
         <CashRow label="Contributions received" amount={contributions} tone="pos" />
         <CashRow label="Repayments received" amount={repayments} tone="pos" />
         <CashRow label="Loans released" amount={disbursed} tone="neg" />
         {distributed > 0 ? <CashRow label="Distributions paid" amount={distributed} tone="neg" /> : null}
 
         {owedBack > 0 ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 7, marginTop: 1, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.09)' }}>
-            <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: '#A9C4CF' }}>Owed back by members</Text>
-            <Text style={{ marginLeft: 'auto', fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: '#F2C67D' }}>{formatPeso(owedBack)}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingTop: 7, marginTop: 1, borderTopWidth: 1, borderColor: semantic.border }}>
+            <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>Owed back by members</Text>
+            <Text style={{ marginLeft: 'auto', fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>{formatPeso(owedBack)}</Text>
           </View>
         ) : null}
       </View>
@@ -453,7 +452,9 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <CashCard groupId={groupId} />
+      <DashboardBand>
+        <CashCard groupId={groupId} />
+      </DashboardBand>
 
       <OwnerLoanToDecide groupId={groupId} go={go} />
 
