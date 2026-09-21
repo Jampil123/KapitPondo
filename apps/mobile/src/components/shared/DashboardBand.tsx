@@ -2,7 +2,8 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Defs, LinearGradient, RadialGradient, Stop, Rect, Path, G } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { steel } from '../../theme/colors';
+import { steel, semantic } from '../../theme/colors';
+import { AppBar } from './AppBar';
 
 const BAND_PADDING = 20;
 
@@ -109,6 +110,20 @@ export function DashboardBand({ children, tab }: { children: ReactNode; tab?: Re
           {tab}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/** The dashboard band's steel-blue backdrop behind a page's back/title bar, so sub-pages share the dashboard header's colour. */
+export function BandHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
+      <Backdrop />
+      <View style={{ paddingTop: insets.top, paddingBottom: 6 }}>
+        <AppBar title={title} subtitle={subtitle} right={right} backgroundColor="transparent" tintColor={semantic.textPrimary} />
+      </View>
     </View>
   );
 }

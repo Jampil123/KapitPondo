@@ -6,7 +6,7 @@ import { Check, Clock3, AlertTriangle, Coins, Repeat, ChevronDown, ChevronUp } f
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -198,8 +198,8 @@ export default function LoansOverview() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Loans" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+        <BandHeader title="Loans" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={semantic.brand} /></View>
       </SafeAreaView>
     );
@@ -231,8 +231,8 @@ export default function LoansOverview() {
     .reduce((s, p) => s + Number(p.interest_portion), 0);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title={TITLES[state]} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title={TITLES[state]} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Active loan ---------------- */}

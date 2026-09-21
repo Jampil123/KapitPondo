@@ -5,7 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Clock3, AlertTriangle, RotateCcw, Clock, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -235,8 +235,8 @@ export default function ContributionsOverview() {
     filter === 'all' || (filter === 'action' && (sec === 'action' || sec === 'progress')) || (filter === 'posted' && sec === 'posted');
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My contributions" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="My contributions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: nextPayable ? 110 : 40 }}>
 
         {/* ---------------- Summary (transparent, no card) ---------------- */}

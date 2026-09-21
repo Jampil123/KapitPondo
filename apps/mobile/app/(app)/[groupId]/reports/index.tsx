@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUpRight, ArrowDownRight, FileDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
@@ -176,8 +176,8 @@ export default function Reports() {
   const loading = contribs.loading || balAll.loading || ledger.loading;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My reports" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="My reports" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Summary ---------------- */}

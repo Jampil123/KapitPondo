@@ -113,7 +113,7 @@ function StandingCard({ groupId }: { groupId: string }) {
   }
 
   let label = 'Next payment';
-  let btnLabel = 'Submit payment';
+  let btnLabel = 'Submit contribution';
   let ghost = false;
   let meta1: ReactNode = null;
 
@@ -143,7 +143,7 @@ function StandingCard({ groupId }: { groupId: string }) {
     if (kind === 'late') {
       const lateDays = Math.abs(diff);
       label = 'Amount due';
-      btnLabel = 'Submit payment now';
+      btnLabel = 'Submit contribution now';
       meta1 = (
         <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>
           Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>

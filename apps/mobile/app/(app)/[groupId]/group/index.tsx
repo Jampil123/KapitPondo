@@ -6,7 +6,7 @@ import * as Clipboard from 'expo-clipboard';
 import { MessageCircle, LogOut, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -105,8 +105,8 @@ export default function GroupOverview() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Group & Officers" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Group & Officers" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Fund composition ---------------- */}

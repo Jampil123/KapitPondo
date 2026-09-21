@@ -280,7 +280,7 @@ function SuccessView({ receipt, onClose, onViewAll }: { receipt: Receipt; onClos
             </View>
           </View>
           <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 18 }}>
-            {receipt.resubmitted ? 'Payment resubmitted' : 'Payment submitted'}
+            {receipt.resubmitted ? 'Contribution resubmitted' : 'Contribution submitted'}
           </Text>
           <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 6 }}>{formatPeso(receipt.amount)}</Text>
           <Text variant="body" color="secondary" style={{ fontSize: 12.5, textAlign: 'center', marginTop: 8 }}>
@@ -442,9 +442,9 @@ export default function Contribute() {
   }
 
   const TITLES: Record<PageState, string> = {
-    submit: 'Submit payment',
-    overdue: 'Submit payment',
-    review: 'Payment status',
+    submit: 'Submit contribution',
+    overdue: 'Submit contribution',
+    review: 'Contribution status',
     rejected: 'Resubmit proof',
   };
   const title = TITLES[state];
@@ -469,8 +469,8 @@ export default function Contribute() {
   // a later refetch should update this screen in place, not tear it down.
   //
   // `awaitingFirstLoad` covers the other half: until contributions have loaded
-  // once, `current` is null, so the page would render as "Submit payment" for a
-  // moment and then flip to "Payment status" (or "Resubmit proof"). Data is kept
+  // once, `current` is null, so the page would render as "Submit contribution" for a
+  // moment and then flip to "Contribution status" (or "Resubmit proof"). Data is kept
   // across refetches, so this only holds the very first paint.
   const awaitingFirstLoad = contribs.data === null && contribs.loading;
   if ((loading && !cycle) || awaitingFirstLoad) {
@@ -485,7 +485,7 @@ export default function Contribute() {
   if (!cycle) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Submit payment" onClose={close} />
+        <CloseHeader title="Submit contribution" onClose={close} />
         <BlockedState
           icon={CalendarClock}
           tone="info"
@@ -499,7 +499,7 @@ export default function Contribute() {
   if (noOfficers && (state === 'submit' || state === 'overdue')) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Submit payment" onClose={close} />
+        <CloseHeader title="Submit contribution" onClose={close} />
         <BlockedState
           icon={Users}
           tone="warning"
@@ -515,7 +515,7 @@ export default function Contribute() {
   if (!hasTreasurerGcash && (state === 'submit' || state === 'overdue')) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Submit payment" onClose={close} />
+        <CloseHeader title="Submit contribution" onClose={close} />
         <BlockedState
           icon={Smartphone}
           tone="warning"
@@ -683,7 +683,7 @@ export default function Contribute() {
             />
           ) : (
             <Button
-              label={state === 'rejected' ? 'Resubmit for review' : 'Submit payment'}
+              label={state === 'rejected' ? 'Resubmit for review' : 'Submit contribution'}
               leading={state === 'rejected' ? <RotateCcw size={16} color="#fff" /> : undefined}
               onPress={onSubmit}
               loading={busy}
