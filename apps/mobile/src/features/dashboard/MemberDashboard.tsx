@@ -378,11 +378,11 @@ const LOAN_COLOR = intent.danger.base;
 
 function FundLegend({ color, label, amount, pct }: { color: string; label: string; amount: number; pct: number }) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       <View style={{ width: 7, height: 7, borderRadius: 3, backgroundColor: color }} />
-      <Text variant="caption" color="secondary" style={{ width: 72, fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{label}</Text>
-      <Text style={{ fontSize: 12.5, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
-      <Text style={{ fontSize: 11, lineHeight: 14, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{pct}%</Text>
+      <Text variant="caption" color="secondary" style={{ width: 80, fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{label}</Text>
+      <Text style={{ minWidth: 88, textAlign: 'right', fontSize: 12.5, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
+      <Text style={{ fontSize: 10, lineHeight: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{pct}%</Text>
     </View>
   );
 }
