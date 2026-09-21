@@ -5,12 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle, Home, Plus, User, Menu, X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic } from '../../theme/colors';
+import { activeGroupTab, type GroupTab } from './groupTabs';
 
-export type SheetItem = { label: string; icon: any } & (
-  | { route: string }
-  | { onPress: () => void }
-);
-export type SheetConfig = { title: string; subtitle?: string; items: SheetItem[] };
+export type SheetItem = { label: string; icon: any; route: string; params?: Record<string, string> };
+export type SheetConfig = { title: string; items: SheetItem[] };
 
 const NAV_BG = '#12303C'; // darker than semantic.dashCard — deliberately the darkest surface in the app
 const NAV_ICON = 'rgba(255,255,255,0.8)';
@@ -42,36 +40,26 @@ function NavItem({ icon: Icon, onPress, active }: { icon: any; onPress: () => vo
   );
 }
 
-export function GroupSheetNav({
-  chat, add, more, centerIcon: CenterIcon = Plus, onCenterPress, moreIcon: MoreIcon = Menu, onMorePress, onChatPress,
-}: {
-  chat?: SheetConfig; add: SheetConfig; more?: SheetConfig;
-  /** Override the center FAB glyph — e.g. Search for a role that never creates entries. */
-  centerIcon?: any;
-  /** Override what the center FAB does — defaults to opening the `add` sheet. */
-  onCenterPress?: () => void;
-  /** Override the "More" tab glyph — e.g. a 4-tile grid for a role whose More is a real page, not a sheet. */
-  moreIcon?: any;
-  /** Override what the "More" tab does — defaults to opening the `more` sheet. */
-  onMorePress?: () => void;
-  /** Override what the "Chat" tab does — defaults to opening the `chat` sheet. */
-  onChatPress?: () => void;
-}) {
+export function GroupSheetNav({ add }: { add: SheetConfig }) {
   const insets = useSafeAreaInsets();
   const path = usePathname();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const [active, setActive] = useState<SheetConfig | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  const isHome = path === `/(app)/${groupId}`;
-  const isProfile = path.endsWith('/profile');
-  const isMore = path.endsWith('/more');
-  const isMessages = path.endsWith('/messages');
+  const tab = activeGroupTab(path);
+
+  // Home pops back to the existing dashboard; other tabs replace each other so the stack never grows past Home + one tab.
+  function goTab(target: GroupTab) {
+    if (target === tab) return;
+    if (target === 'home') return router.dismissTo({ pathname: '/(app)/[groupId]', params: { groupId } });
+    const href = { pathname: `/(app)/[groupId]/${target}` as any, params: { groupId } };
+    if (tab === 'home') router.push(href);
+    else router.replace(href);
+  }
 
   function handleItem(it: SheetItem) {
-    setActive(null);
-    if ('onPress' in it) return it.onPress();
-    if (it.route === '@groups') router.replace('/(app)/groups');
-    else router.push({ pathname: `/(app)/[groupId]/${it.route}` as any, params: { groupId } });
+    setSheetOpen(false);
+    router.push({ pathname: `/(app)/[groupId]/${it.route}` as any, params: { groupId, ...it.params } });
   }
 
   return (
@@ -85,46 +73,41 @@ export function GroupSheetNav({
           shadowColor: '#12303C', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 10,
         }}
       >
-        <NavItem icon={Home} active={isHome} onPress={() => router.push({ pathname: '/(app)/[groupId]', params: { groupId } })} />
-        <NavItem icon={MessageCircle} active={onChatPress ? isMessages : undefined} onPress={onChatPress ?? (() => chat && setActive(chat))} />
+        <NavItem icon={Home} active={tab === 'home'} onPress={() => goTab('home')} />
+        <NavItem icon={MessageCircle} active={tab === 'messages'} onPress={() => goTab('messages')} />
         <View style={{ flex: 1, alignItems: 'center' }}>
           <Pressable
-            onPress={onCenterPress ?? (() => setActive(add))}
+            onPress={() => setSheetOpen(true)}
             style={{
               width: 52, height: 52, borderRadius: 18, backgroundColor: NAV_FAB,
               alignItems: 'center', justifyContent: 'center',
               shadowColor: NAV_FAB, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.7, shadowRadius: 16, elevation: 8,
             }}
           >
-            <CenterIcon size={26} color="#fff" strokeWidth={2.6} />
+            <Plus size={26} color="#fff" strokeWidth={2.6} />
           </Pressable>
         </View>
-        <NavItem icon={User} active={isProfile} onPress={() => router.push({ pathname: '/(app)/[groupId]/profile', params: { groupId } })} />
-        <NavItem icon={MoreIcon} active={onMorePress ? isMore : undefined} onPress={onMorePress ?? (() => more && setActive(more))} />
+        <NavItem icon={User} active={tab === 'profile'} onPress={() => goTab('profile')} />
+        <NavItem icon={Menu} active={tab === 'more'} onPress={() => goTab('more')} />
       </View>
 
-      <Modal visible={!!active} transparent animationType="slide" onRequestClose={() => setActive(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setActive(null)}>
+      <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setSheetOpen(false)}>
           <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 16, paddingBottom: insets.bottom + 16 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
-              <View style={{ flex: 1 }}>
-                <Text variant="h3" style={{ fontSize: 17 }}>{active?.title}</Text>
-                {active?.subtitle ? <Text variant="caption" color="secondary">{active.subtitle}</Text> : null}
-              </View>
-              <Pressable onPress={() => setActive(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
+              <Text variant="h3" style={{ fontSize: 17, flex: 1 }}>{add.title}</Text>
+              <Pressable onPress={() => setSheetOpen(false)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
             </View>
-            <View>
-              {active?.items.map((it) => (
-                <Pressable
-                  key={it.label}
-                  onPress={() => handleItem(it)}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 14 }}
-                >
-                  <it.icon size={22} color={semantic.brandDark} />
-                  <Text variant="label" style={{ flex: 1 }}>{it.label}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {add.items.map((it) => (
+              <Pressable
+                key={it.label}
+                onPress={() => handleItem(it)}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 14 }}
+              >
+                <it.icon size={22} color={semantic.brandDark} />
+                <Text variant="label" style={{ flex: 1 }}>{it.label}</Text>
+              </Pressable>
+            ))}
           </Pressable>
         </Pressable>
       </Modal>

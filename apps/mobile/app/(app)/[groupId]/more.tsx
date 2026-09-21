@@ -1,44 +1,72 @@
-import { View, Pressable } from 'react-native';
+import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  Users, Image as ImageIcon, UserCircle,
-  ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Layers, BarChart3,
+  ArrowUpCircle, Coins, Image as ImageIcon, Layers, BarChart3, Users, PiggyBank, Repeat, LifeBuoy,
+  UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ScrollText, FileText, Wallet,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, shadowToken } from '@/theme/colors';
+import { useActiveGroup } from '@/context/GroupContext';
+import type { GroupRole } from '@/constants/roles';
 
-const MEMBER_ITEMS = [
-  { icon: ArrowUpCircle, label: 'Contributions', key: 'contributions', section: 'My records' },
-  { icon: Coins, label: 'Loans', key: 'loans', section: 'My records' },
-  { icon: ImageIcon, label: 'Proofs', key: 'proofs', section: 'My records' },
-  { icon: BarChart3, label: 'Reports', key: 'reports', section: 'My records' },
-  { icon: Layers, label: 'Heads', key: 'heads', section: 'My records' },
-  { icon: Users, label: 'Group & Officers', key: 'group', section: 'Group' },
-  { icon: PiggyBank, label: 'Group Ledger', key: 'reports/group-ledger', section: 'Group' },
-  { icon: UserCircle, label: 'Profile & Settings', key: 'profile', section: 'Support' },
-];
+type Item = { icon: any; label: string; to: string; replace?: boolean };
+type Section = { title: string; items: Item[] };
 
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
+const YEAR_END: Item = { icon: CalendarClock, label: 'Year-end', to: 'distribution/year-end' };
+const LOAN_DECISIONS: Item = { icon: Coins, label: 'Loan decisions', to: 'loans/decisions' };
+const PAYMENT_CHANNEL: Item = { icon: Smartphone, label: 'Payment channel', to: 'group/settings' };
 
-function sectionsOf<T extends { section: string }>(items: T[]): { section: string; items: T[] }[] {
-  const order: string[] = [];
-  const bySection = new Map<string, T[]>();
-  for (const it of items) {
-    if (!bySection.has(it.section)) { bySection.set(it.section, []); order.push(it.section); }
-    bySection.get(it.section)!.push(it);
-  }
-  return order.map((section) => ({ section, items: bySection.get(section)! }));
+const MANAGE: Record<GroupRole, Item[]> = {
+  owner: [
+    { icon: UserCheck, label: 'Approve members', to: 'members/approvals' },
+    LOAN_DECISIONS,
+    PAYMENT_CHANNEL,
+    { icon: ShieldCheck, label: 'Officers', to: 'members/officers' },
+    { icon: SlidersHorizontal, label: 'Cycle settings', to: 'cycles/configure' },
+    { icon: AlertTriangle, label: 'Penalties', to: 'penalties' },
+    YEAR_END,
+  ],
+  treasurer: [LOAN_DECISIONS, PAYMENT_CHANNEL, YEAR_END],
+  auditor: [
+    { icon: ScrollText, label: 'Audit log', to: 'audit/log' },
+    { icon: FileText, label: 'Proof review', to: 'audit/proofs' },
+    { icon: Wallet, label: 'Member balances', to: 'reports/member-balances' },
+    YEAR_END,
+  ],
+  member: [],
+};
+
+function sectionsFor(role: GroupRole): Section[] {
+  const manage = MANAGE[role];
+  return [
+    {
+      title: 'My records',
+      items: [
+        { icon: ArrowUpCircle, label: 'Contributions', to: 'contributions' },
+        { icon: Coins, label: 'Loans', to: 'loans' },
+        { icon: ImageIcon, label: 'Proofs', to: 'proofs' },
+        { icon: Layers, label: 'Heads', to: 'heads' },
+        { icon: BarChart3, label: 'Reports', to: 'reports' },
+      ],
+    },
+    {
+      title: 'Group',
+      items: [
+        { icon: Users, label: 'Group & officers', to: 'group' },
+        { icon: PiggyBank, label: 'Group ledger', to: 'reports/group-ledger' },
+        { icon: Repeat, label: 'Switch group', to: '/(app)/groups', replace: true },
+      ],
+    },
+    ...(manage.length ? [{ title: 'Manage', items: manage }] : []),
+    { title: 'Help', items: [{ icon: LifeBuoy, label: 'Help center', to: '/(app)/help-center' }] },
+  ];
 }
 
 function Tile({ icon: Icon, label, onPress }: { icon: any; label: string; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={{ width: 72, alignItems: 'center', gap: 6 }}>
+    <Pressable onPress={onPress} style={{ width: '25%', alignItems: 'center', gap: 6, paddingVertical: 7 }}>
       <View style={[{ width: 54, height: 54, borderRadius: 16, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }, shadowToken.card]}>
         <Icon size={22} color={semantic.brandDark} />
       </View>
@@ -50,31 +78,32 @@ function Tile({ icon: Icon, label, onPress }: { icon: any; label: string; onPres
 export default function More() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const items = MEMBER_ITEMS;
+  const { role } = useActiveGroup();
 
-  function go(item: (typeof items)[number]) {
-    router.push({ pathname: `/(app)/[groupId]/${item.key}` as any, params: { groupId } });
+  function go(item: Item) {
+    if (item.to.startsWith('/')) {
+      if (item.replace) router.replace(item.to as any);
+      else router.push(item.to as any);
+      return;
+    }
+    router.push({ pathname: `/(app)/[groupId]/${item.to}` as any, params: { groupId } });
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="More" />
-      <View style={{ padding: 20, gap: 22 }}>
-        {sectionsOf(items).map(({ section, items: sectionItems }) => (
-          <View key={section} style={{ gap: 12 }}>
-            <Text variant="h3" style={{ fontSize: 14 }}>{section}</Text>
-            <View style={{ gap: 14 }}>
-              {chunk(sectionItems, 4).map((row, ri) => (
-                <View key={ri} style={{ flexDirection: 'row', gap: 16 }}>
-                  {row.map((it) => (
-                    <Tile key={it.key} icon={it.icon} label={it.label} onPress={() => go(it)} />
-                  ))}
-                </View>
+      <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 24, gap: 18 }}>
+        {sectionsFor(role ?? 'member').map((section) => (
+          <View key={section.title} style={{ gap: 6 }}>
+            <Text variant="h3" style={{ fontSize: 14 }}>{section.title}</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+              {section.items.map((it) => (
+                <Tile key={it.label} icon={it.icon} label={it.label} onPress={() => go(it)} />
               ))}
             </View>
           </View>
         ))}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

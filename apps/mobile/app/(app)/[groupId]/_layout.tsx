@@ -1,18 +1,12 @@
 import { View } from 'react-native';
 import { Stack, usePathname } from 'expo-router';
 import { semantic } from '@/theme/colors';
-import { useActiveGroup } from '@/context/GroupContext';
 import { PresenceProvider } from '@/context/PresenceContext';
-import { OrganizerNav } from '@/components/shared/OrganizerNav';
-import { TreasurerNav } from '@/components/shared/TreasurerNav';
-import { AuditorNav } from '@/components/shared/AuditorNav';
-import { MemberNav } from '@/components/shared/MemberNav';
+import { GroupNav } from '@/components/shared/GroupNav';
+import { activeGroupTab } from '@/components/shared/groupTabs';
 
 export default function GroupLayout() {
-  const { role } = useActiveGroup();
-  const pathname = usePathname();
-  const segments = pathname.split('/').filter(Boolean);
-  const hideNav = segments.length > 1;
+  const showNav = activeGroupTab(usePathname()) !== null;
 
   return (
     <PresenceProvider>
@@ -26,10 +20,7 @@ export default function GroupLayout() {
             }}
           />
         </View>
-        {!hideNav && role === 'owner' && <OrganizerNav />}
-        {!hideNav && role === 'treasurer' && <TreasurerNav />}
-        {!hideNav && role === 'auditor' && <AuditorNav />}
-        {!hideNav && role === 'member' && <MemberNav />}
+        {showNav ? <GroupNav /> : null}
       </View>
     </PresenceProvider>
   );

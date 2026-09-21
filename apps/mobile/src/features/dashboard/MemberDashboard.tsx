@@ -444,7 +444,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
 
-      <SectionHead title="Shortcuts" aside="View all" onAsidePress={() => go('more')} />
+      <SectionHead title="Shortcuts" />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {ACTIONS.map((a) => (
           <Pressable

@@ -772,7 +772,7 @@ function RecentVerifications({ groupId }: { groupId: string }) {
 // Ledger and Reports/Proofs are distinct real screens (no route serves double duty
 // here): Ledger → the raw transaction ledger, Audit log → the postings review/
 // decision trail, Reports → the aggregate member-balances report, Proofs → the
-// dedicated proof-review screen. Same routes AuditorNav's "More" sheet already uses.
+// dedicated proof-review screen.
 const LOOKUP_ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },
   { label: 'Audit Log', icon: FileText, route: 'audit/log' },
