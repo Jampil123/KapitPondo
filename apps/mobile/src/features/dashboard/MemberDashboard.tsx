@@ -8,6 +8,7 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -270,9 +271,6 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-// Same clear blue the bottom nav uses for its active marker.
-const TAB_ARROW = '#2FA8FF';
-
 /** Bare arrow hanging off the bottom centre of the band; toggles the capital + heads details. */
 function PositionTab({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
   return (
@@ -284,7 +282,7 @@ function PositionTab({ open, progress, onPress }: { open: boolean; progress: Ani
       style={{ width: BAND_TAB_HEIGHT * 2, height: BAND_TAB_HEIGHT, alignItems: 'center', justifyContent: 'center' }}
     >
       <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
-        <ChevronDown size={26} color={TAB_ARROW} strokeWidth={3} />
+        <ChevronDown size={26} color={NAV_BG} strokeWidth={3} />
       </Animated.View>
     </Pressable>
   );

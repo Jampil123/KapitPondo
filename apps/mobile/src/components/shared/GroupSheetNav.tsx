@@ -10,7 +10,7 @@ import { activeGroupTab, type GroupTab } from './groupTabs';
 export type SheetItem = { label: string; icon: any; route: string; params?: Record<string, string> };
 export type SheetConfig = { title: string; items: SheetItem[] };
 
-const NAV_BG = '#12303C'; // darker than semantic.dashCard — deliberately the darkest surface in the app
+export const NAV_BG = '#12303C'; // darker than semantic.dashCard — deliberately the darkest surface in the app
 const NAV_ICON = 'rgba(255,255,255,0.8)';
 const NAV_ICON_ON = '#FFFFFF';
 const NAV_SPARK = '#2FA8FF';
