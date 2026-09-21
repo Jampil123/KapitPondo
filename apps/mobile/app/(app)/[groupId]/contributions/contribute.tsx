@@ -386,10 +386,16 @@ export default function Contribute() {
   // on loading alone would unmount this whole screen — including whatever photo
   // the member just attached — every single time. Once cycle has loaded once,
   // a later refetch should update this screen in place, not tear it down.
-  if (loading && !cycle) {
+  //
+  // `awaitingFirstLoad` covers the other half: until contributions have loaded
+  // once, `current` is null, so the page would render as "Submit payment" for a
+  // moment and then flip to "Payment status" (or "Resubmit proof"). Data is kept
+  // across refetches, so this only holds the very first paint.
+  const awaitingFirstLoad = contribs.data === null && contribs.loading;
+  if ((loading && !cycle) || awaitingFirstLoad) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Payment" onClose={close} />
+        <CloseHeader title="" onClose={close} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={semantic.brand} /></View>
       </SafeAreaView>
     );
