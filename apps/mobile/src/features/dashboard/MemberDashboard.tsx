@@ -209,8 +209,7 @@ function StandingCard({ groupId }: { groupId: string }) {
   );
 }
 
-// Translucent white, so upcoming periods read as "not yet" on the frosted panel; a faint outline keeps them visible.
-const UPCOMING_DOT = 'rgba(255,255,255,0.75)';
+const UPCOMING_DOT = 'rgba(255,255,255,0.7)';
 
 const DOT_TONE: Record<string, string> = {
   paid: intent.success.base,
@@ -233,13 +232,6 @@ function CycleDots({ groupId }: { groupId: string }) {
   const slots = timeline.length;
   const kinds = timeline.map((p) => (p.kind === 'rejected' ? 'late' : p.kind));
 
-  const counts = kinds.reduce<Record<string, number>>((acc, k) => ({ ...acc, [k]: (acc[k] ?? 0) + 1 }), {});
-  const summary = [
-    counts.paid ? `${counts.paid} posted` : null,
-    counts.review ? `${counts.review} under review` : null,
-    counts.due ? `${counts.due} due` : null,
-    counts.late ? `${counts.late} late` : null,
-  ].filter(Boolean).join(' · ') || 'No periods recorded yet';
   const progress = cycleProgressLabel(cycle);
 
   return (
@@ -252,31 +244,25 @@ function CycleDots({ groupId }: { groupId: string }) {
       {slots ? (
         <View style={{ flexDirection: 'row', flexWrap: 'nowrap', gap: 4, marginBottom: 9 }}>
           {kinds.map((k, i) => (
-            <View
-              key={i}
-              style={{
-                flex: 1, height: 9, minWidth: 0, borderRadius: 5, backgroundColor: DOT_TONE[k],
-                borderWidth: k === 'upcoming' ? 1 : 0, borderColor: semantic.borderStrong,
-              }}
-            />
+            <View key={i} style={{ flex: 1, height: 9, minWidth: 0, borderRadius: 5, backgroundColor: DOT_TONE[k] }} />
           ))}
         </View>
       ) : null}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        <LegendDot color={intent.success.base} label="Posted" />
         <LegendDot color={intent.info.base} label="Under review" />
-        <LegendDot color={UPCOMING_DOT} label="Upcoming" outlined />
+        <LegendDot color={semantic.brand} label="Due" />
+        <LegendDot color={UPCOMING_DOT} label="Upcoming" />
       </View>
-
-      <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold', marginTop: 8 }}>{summary}</Text>
     </View>
   );
 }
 
-function LegendDot({ color, label, outlined }: { color: string; label: string; outlined?: boolean }) {
+function LegendDot({ color, label }: { color: string; label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-      <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color, borderWidth: outlined ? 1 : 0, borderColor: semantic.borderStrong }} />
+      <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
       <Text style={{ fontSize: 10 }} variant="caption" color="secondary">
         {label}
       </Text>
