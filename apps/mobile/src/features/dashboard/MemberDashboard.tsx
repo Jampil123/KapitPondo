@@ -7,7 +7,7 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -271,18 +271,18 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Bare arrow hanging off the bottom centre of the band; toggles the capital + heads details. */
-function PositionTab({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
+/** Compact round arrow at the bottom-right of the band; toggles the capital + heads details. */
+function PositionToggle({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      hitSlop={12}
+      hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={open ? 'Hide capital and heads' : 'Show capital and heads'}
-      style={{ width: BAND_TAB_HEIGHT * 2, height: BAND_TAB_HEIGHT, alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}
     >
       <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
-        <ChevronDown size={26} color={NAV_BG} strokeWidth={3} />
+        <ChevronDown size={18} color={NAV_BG} strokeWidth={2.8} />
       </Animated.View>
     </Pressable>
   );
@@ -314,7 +314,7 @@ function Collapsible({ open, progress, children }: { open: boolean; progress: An
   );
 }
 
-/** Capital + heads details revealed by PositionTab; both are already-fetched real values. */
+/** Capital + heads details revealed by PositionToggle; both are already-fetched real values. */
 function PositionPanel({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { membership } = useActiveGroup();
@@ -485,11 +485,14 @@ export function MemberHero({ groupId }: { groupId: string }) {
   }
 
   return (
-    <DashboardBand tab={<PositionTab open={positionOpen} progress={progress} onPress={togglePosition} />}>
+    <DashboardBand>
       <StandingCard groupId={groupId} />
       <Collapsible open={positionOpen} progress={progress}>
         <PositionPanel groupId={groupId} />
       </Collapsible>
+      <View style={{ alignItems: 'flex-end' }}>
+        <PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />
+      </View>
     </DashboardBand>
   );
 }
