@@ -1,8 +1,8 @@
-import { View, Pressable, Alert } from 'react-native';
+import { View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  Users, Image as ImageIcon, LifeBuoy, UserCircle,
+  Users, Image as ImageIcon, UserCircle,
   ArrowUpCircle, Coins, PiggyBank, BadgeCheck, Layers, BarChart3,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -18,7 +18,6 @@ const MEMBER_ITEMS = [
   { icon: Users, label: 'Group & Officers', key: 'group', section: 'Group' },
   { icon: PiggyBank, label: 'Group Ledger', key: 'reports/group-ledger', section: 'Group' },
   { icon: UserCircle, label: 'Profile & Settings', key: 'profile', section: 'Support' },
-  { icon: LifeBuoy, label: 'Help', key: 'help', section: 'Support', soon: true },
 ];
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -54,7 +53,6 @@ export default function More() {
   const items = MEMBER_ITEMS;
 
   function go(item: (typeof items)[number]) {
-    if ('soon' in item && item.soon) return void Alert.alert(item.label, 'Coming soon.');
     router.push({ pathname: `/(app)/[groupId]/${item.key}` as any, params: { groupId } });
   }
 

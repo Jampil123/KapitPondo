@@ -4,7 +4,7 @@ import { Platform, View, ScrollView, Animated, Easing } from 'react-native';
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Clock, Mail, HelpCircle, Shield } from 'lucide-react-native';
+import { Clock, Mail } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/shared/ScreenHeader';
@@ -61,10 +61,6 @@ export default function Pending() {
 
         <View style={{ flex: 1, minHeight: 10 }} />
         <Button label="Got It" onPress={() => router.replace('/(app)/groups')} />
-
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 18, marginTop: 20 }}>
-          
-        </View>
       </ScrollView>
     </SafeAreaView>
   );

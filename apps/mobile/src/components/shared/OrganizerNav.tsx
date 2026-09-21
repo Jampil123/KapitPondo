@@ -6,7 +6,7 @@
  * dashboard's manage row.
  */
 import {
-  ArrowUpCircle, Coins, Repeat, UserCheck, LifeBuoy, Smartphone,
+  ArrowUpCircle, Coins, Repeat, UserCheck, Smartphone,
 } from 'lucide-react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { GroupSheetNav } from './GroupSheetNav';
@@ -28,7 +28,6 @@ export function OrganizerNav() {
         { label: 'Approve members', icon: UserCheck, route: 'members/approvals' },
         { label: 'Loan decision', icon: Coins, route: 'loans/decisions' },
         { label: 'Switch group', icon: Repeat, route: '@groups' },
-        { label: 'Help & support', icon: LifeBuoy, soon: true },
       ] }}
     />
   );

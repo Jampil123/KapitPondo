@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, TextInput, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Search, Download, Lock, ArrowRight } from 'lucide-react-native';
+import { Search, Lock, ArrowRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { PillTabs } from '@/components/ui/PillTabs';
 import { AppBar } from '@/components/shared/AppBar';
@@ -149,15 +149,7 @@ export default function AuditLog() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar
-        title="Audit Log"
-        subtitle="Auditor"
-        right={
-          <Pressable onPress={() => Alert.alert('Coming soon', 'Exporting the log to a file isn\'t available yet.')} hitSlop={8} style={{ padding: 8 }}>
-            <Download size={19} color={semantic.textSecondary} />
-          </Pressable>
-        }
-      />
+      <AppBar title="Audit Log" subtitle="Auditor" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surface, borderRadius: 14, paddingHorizontal: 14, height: 46 }}>

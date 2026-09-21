@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Pressable, Modal, Alert } from 'react-native';
+import { View, Pressable, Modal } from 'react-native';
 import { router, usePathname, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MessageCircle, Home, Plus, User, Menu, X } from 'lucide-react-native';
@@ -8,7 +8,6 @@ import { semantic } from '../../theme/colors';
 
 export type SheetItem = { label: string; icon: any } & (
   | { route: string }
-  | { soon: true }
   | { onPress: () => void }
 );
 export type SheetConfig = { title: string; subtitle?: string; items: SheetItem[] };
@@ -70,7 +69,6 @@ export function GroupSheetNav({
 
   function handleItem(it: SheetItem) {
     setActive(null);
-    if ('soon' in it) return void Alert.alert(it.label, 'Coming soon.');
     if ('onPress' in it) return it.onPress();
     if (it.route === '@groups') router.replace('/(app)/groups');
     else router.push({ pathname: `/(app)/[groupId]/${it.route}` as any, params: { groupId } });
@@ -124,7 +122,6 @@ export function GroupSheetNav({
                 >
                   <it.icon size={22} color={semantic.brandDark} />
                   <Text variant="label" style={{ flex: 1 }}>{it.label}</Text>
-                  {'soon' in it ? <Text variant="caption" color="muted">Soon</Text> : null}
                 </Pressable>
               ))}
             </View>

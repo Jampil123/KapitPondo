@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { Users, Info, Plus, Camera, Clock } from 'lucide-react-native';
+import { Users, Info, Plus, Clock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
@@ -101,12 +101,6 @@ export default function JoinGroup() {
               <Plus size={28} color={semantic.textPrimary} style={{ marginBottom: 4 }} />
               <Text variant="label">Need a new group?</Text>
               <Text variant="bodySmall" color="secondary">Start your own KapitPondo savings circle and invite others.</Text>
-            </Pressable>
-
-            <Pressable onPress={() => setError('QR scanning is coming soon.')} style={{ backgroundColor: semantic.surface, borderWidth: 1, borderColor: semantic.borderStrong, padding: 16, borderRadius: 24, opacity: 0.7 }}>
-              <Camera size={28} color={semantic.textPrimary} style={{ marginBottom: 4 }} />
-              <Text variant="label">Scan QR Code</Text>
-              <Text variant="bodySmall" color="secondary">Quickly join by scanning the group's invitation QR. (Coming soon)</Text>
             </Pressable>
           </View>
         </ScrollView>

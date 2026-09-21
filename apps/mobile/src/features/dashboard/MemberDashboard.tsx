@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { Alert, View, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
@@ -374,7 +374,7 @@ function FundComposition({ groupId }: { groupId: string }) {
 }
 
 
-const ACTIONS: ({ label: string; icon: any } & ({ route: string } | { soon: true }))[] = [
+const ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Contributions', icon: ArrowUpCircle, route: 'contributions' },
   { label: 'Loans', icon: Coins, route: 'loans' },
   { label: 'Group & Officers', icon: Users, route: 'group' },
@@ -431,11 +431,6 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
   const { cycle } = useActiveCycle(groupId);
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
 
-  function onTilePress(a: (typeof ACTIONS)[number]) {
-    if ('soon' in a) return void Alert.alert(a.label, 'Coming soon.');
-    go(a.route);
-  }
-
   return (
     <>
       <StandingCard groupId={groupId} />
@@ -457,7 +452,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
         {ACTIONS.map((a) => (
           <Pressable
             key={a.label}
-            onPress={() => onTilePress(a)}
+            onPress={() => go(a.route)}
             style={[{ width: '23%', borderRadius: 18, backgroundColor: CARD_BG, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, CARD_SHADOW]}
           >
             <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />

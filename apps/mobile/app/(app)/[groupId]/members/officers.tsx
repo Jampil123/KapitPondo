@@ -57,10 +57,9 @@ function AvatarBadge({ m, size = 42 }: { m: GroupMember; size?: number }) {
   );
 }
 
-function Pill({ tone, children }: { tone: 'role' | 'member' | 'heads' | 'warn' | 'pend'; children: string }) {
+function Pill({ tone, children }: { tone: 'role' | 'heads' | 'warn' | 'pend'; children: string }) {
   const map = {
     role: { bg: semantic.dashCard, fg: '#fff' },
-    member: { bg: semantic.surfaceAlt, fg: semantic.brandDark },
     heads: { bg: '#F2F7F9', fg: semantic.textSecondary },
     warn: { bg: intent.warning.soft, fg: intent.warning.text },
     pend: { bg: intent.info.soft, fg: intent.info.text },
@@ -265,7 +264,6 @@ export default function MembersOfficers() {
                         <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
                         <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
                           {m.role !== 'member' ? <Pill tone="role">{ROLE_LABEL[m.role]}</Pill> : null}
-                          <Pill tone="member">Member</Pill>
                           <Pill tone="heads">{`${m.heads} head${m.heads === 1 ? '' : 's'}`}</Pill>
                           {m.members?.verification_status !== 'verified' ? <Pill tone="warn">Unverified</Pill> : null}
                         </View>

@@ -264,7 +264,7 @@ export default function RecordPayment() {
             ) : null}
 
             <Button label="Record payment" onPress={onSubmit} loading={saving} disabled={disabled} />
-            <Text variant="caption" color={disabled ? 'secondary' : 'secondary'} style={{ textAlign: 'center', marginTop: -8 }}>{barNote}</Text>
+            <Text variant="caption" color="secondary" style={{ textAlign: 'center', marginTop: -8 }}>{barNote}</Text>
           </>
         )}
       </ScrollView>

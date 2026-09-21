@@ -119,17 +119,14 @@ function ContactRow({ groupId, myMemberId, memberId, name, avatarUrl, roleLabel,
   );
 }
 
-function Row({ left, title, time, subtitle, preview, isSoon, onPress }: {
+function Row({ left, title, time, subtitle, preview, onPress }: {
   left: ReactNode; title: string; time?: string; subtitle?: string; preview?: string;
-  isSoon?: boolean; onPress: () => void;
+  onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      style={{
-        flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8,
-        opacity: isSoon ? 0.7 : 1,
-      }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 8 }}
     >
       {left}
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -140,7 +137,6 @@ function Row({ left, title, time, subtitle, preview, isSoon, onPress }: {
         {subtitle ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>{subtitle}</Text> : null}
         {preview ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>{preview}</Text> : null}
       </View>
-      {isSoon ? <Text variant="caption" color="muted">Soon</Text> : null}
     </Pressable>
   );
 }
