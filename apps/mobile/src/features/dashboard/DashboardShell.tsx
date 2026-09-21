@@ -1,11 +1,11 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { View, ScrollView, Pressable, RefreshControl, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { ReactNode } from 'react';
+import { View, ScrollView, Pressable, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { DashboardHeaderContext, DashboardScrollContext } from '@/components/shared/DashboardBand';
+import { DashboardHeaderContext } from '@/components/shared/DashboardBand';
 import { semantic } from '@/theme/colors';
 import type { Group } from '@/api/groups';
 import type { GroupRole } from '@/constants/roles';
@@ -34,23 +34,8 @@ export function DashboardShell({
   hero?: ReactNode;
 }) {
   const router = useRouter();
-  const [collapsed, setCollapsed] = useState(false);
-  const heroHeight = useRef(0);
-  const reportHeroHeight = useCallback((height: number) => { heroHeight.current = height; }, []);
-  const scrollContext = useMemo(() => ({ collapsed, reportHeroHeight }), [collapsed, reportHeroHeight]);
-
-  // Fold the band's card away once the page is scrolled, and bring it back only at the very top. Skipped when the
-  // content couldn't keep scrolling after the card is gone: the freed space would push the offset back to 0 and re-open it.
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const y = contentOffset.y;
-    if (!collapsed && y > 40 && contentSize.height > layoutMeasurement.height + heroHeight.current + 24) setCollapsed(true);
-    else if (collapsed && y <= 4) setCollapsed(false);
-  }
-
   return (
     <DashboardHeaderContext.Provider value={header ?? null}>
-      <DashboardScrollContext.Provider value={scrollContext}>
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={header ? [] : ['top']}>
         {header ? null : (
           <View
@@ -80,8 +65,6 @@ export function DashboardShell({
 
         <ScrollView
           style={{ flex: 1 }}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
           contentContainerStyle={{ padding: 20, paddingTop: 4, paddingBottom: 20, gap: 6 }}
           refreshControl={onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined}
         >
@@ -90,7 +73,6 @@ export function DashboardShell({
 
         {bottomBar}
       </SafeAreaView>
-      </DashboardScrollContext.Provider>
     </DashboardHeaderContext.Provider>
   );
 }

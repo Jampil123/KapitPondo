@@ -382,9 +382,9 @@ function FundLegend({ color, label, amount, pct }: { color: string; label: strin
         <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
         <Text variant="overline" color="secondary">{label}</Text>
       </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 6, marginTop: 4 }}>
-        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(amount)}</Text>
-        <Text variant="caption" color="secondary" style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold' }}>{pct}%</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+        <Text style={{ flexShrink: 1, fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
+        <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{pct}%</Text>
       </View>
     </View>
   );
