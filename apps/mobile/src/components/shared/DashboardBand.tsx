@@ -15,6 +15,9 @@ const CROP_HEIGHT = 1500;
 // Secondary text drawn directly on the band — the band reaches steel[400] toward the bottom right, so it needs full ink.
 export const onBandText = steel[900];
 
+// Diameter of the round toggle a dashboard can straddle across the bottom-right edge of the band.
+export const BAND_TAB_SIZE = 30;
+
 // Frosted surface for dense detail (lists, stage strips) that sits on the band.
 export const glassPanel = {
   backgroundColor: 'rgba(255,255,255,0.6)',
@@ -88,12 +91,12 @@ function Backdrop() {
   );
 }
 
-export function DashboardBand({ children }: { children: ReactNode }) {
+export function DashboardBand({ children, tab }: { children: ReactNode; tab?: ReactNode }) {
   const insets = useSafeAreaInsets();
   const header = useContext(DashboardHeaderContext);
 
   return (
-    <View style={{ zIndex: 2, marginBottom: 10 }}>
+    <View style={{ zIndex: 2, marginBottom: tab ? BAND_TAB_SIZE / 2 + 6 : 10 }}>
       <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden' }}>
         <Backdrop />
         <View style={{ paddingTop: insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: 8 }}>
@@ -101,6 +104,11 @@ export function DashboardBand({ children }: { children: ReactNode }) {
           {children}
         </View>
       </View>
+      {tab ? (
+        <View pointerEvents="box-none" style={{ position: 'absolute', right: BAND_PADDING, bottom: -BAND_TAB_SIZE / 2 }}>
+          {tab}
+        </View>
+      ) : null}
     </View>
   );
 }

@@ -7,9 +7,9 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
-import { semantic, intent, type IntentName } from '@/theme/colors';
+import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -271,7 +271,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** Compact round arrow at the bottom-right of the band; toggles the capital + heads details. */
+/** Compact round arrow straddling the bottom-right edge of the band; toggles the capital + heads details. */
 function PositionToggle({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
   return (
     <Pressable
@@ -279,7 +279,14 @@ function PositionToggle({ open, progress, onPress }: { open: boolean; progress: 
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={open ? 'Hide capital and heads' : 'Show capital and heads'}
-      style={{ width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}
+      style={[
+        {
+          width: BAND_TAB_SIZE, height: BAND_TAB_SIZE, borderRadius: BAND_TAB_SIZE / 2,
+          backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: semantic.borderStrong,
+          alignItems: 'center', justifyContent: 'center',
+        },
+        shadowToken.card,
+      ]}
     >
       <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
         <ChevronDown size={18} color={NAV_BG} strokeWidth={2.8} />
@@ -485,14 +492,11 @@ export function MemberHero({ groupId }: { groupId: string }) {
   }
 
   return (
-    <DashboardBand>
+    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
       <StandingCard groupId={groupId} />
       <Collapsible open={positionOpen} progress={progress}>
         <PositionPanel groupId={groupId} />
       </Collapsible>
-      <View style={{ alignItems: 'flex-end' }}>
-        <PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />
-      </View>
     </DashboardBand>
   );
 }
