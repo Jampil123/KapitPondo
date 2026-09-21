@@ -6,7 +6,7 @@ import {
   ScrollText, FileText, BarChart3, Receipt, X, AlertTriangle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -179,7 +179,7 @@ function VerificationHero({ groupId }: { groupId: string }) {
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
         <View style={{ flex: 1 }}>
           <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Verification flow</Text>
-          <Text style={{ fontSize: 11.5, lineHeight: 15, color: semantic.textSecondary, marginTop: 2 }}>
+          <Text style={{ fontSize: 11.5, lineHeight: 15, color: onBandText, marginTop: 2 }}>
             {issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'} found` : !loading && waitingOnYou === 0 ? 'Nothing is sitting with you' : 'Where every posting stands right now'}
           </Text>
         </View>

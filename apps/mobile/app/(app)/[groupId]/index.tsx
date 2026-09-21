@@ -15,6 +15,7 @@ import { TreasurerDashboard } from '@/features/dashboard/TreasurerDashboard';
 import { AuditorDashboard } from '@/features/dashboard/AuditorDashboard';
 import { MemberDashboard } from '@/features/dashboard/MemberDashboard';
 import { semantic } from '@/theme/colors';
+import { onBandText } from '@/components/shared/DashboardBand';
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
@@ -52,7 +53,7 @@ function RoleSwitch({ value, onChange, officerLabel }: { value: 'officer' | 'mem
               backgroundColor: active ? semantic.brand : 'transparent',
             }}
           >
-            <Text variant="label" style={{ fontSize: 13.5, fontWeight: active ? '700' : '500', color: active ? '#fff' : semantic.textSecondary }}>
+            <Text variant="label" style={{ fontSize: 13.5, fontWeight: active ? '700' : '500', color: active ? '#fff' : onBandText }}>
               {o.label}
             </Text>
           </Pressable>

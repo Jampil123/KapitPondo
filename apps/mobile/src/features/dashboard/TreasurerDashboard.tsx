@@ -7,7 +7,7 @@ import {
   PiggyBank,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -59,7 +59,7 @@ function CashCard({ groupId }: { groupId: string }) {
   return (
     <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
-        <Text variant="overline" color="secondary">Cash on hand</Text>
+        <Text variant="overline" style={{ color: onBandText }}>Cash on hand</Text>
         {cycle ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: intent.success.soft, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 20 }}>
             <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: cycle.status === 'active' ? intent.success.base : semantic.textMuted }} />

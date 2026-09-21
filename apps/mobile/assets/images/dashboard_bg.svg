@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1170" height="2532" viewBox="0 0 1170 2532">
+  <defs>
+    <!-- Soft blue background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="0.95">
+      <stop offset="0%" stop-color="#DDF2FF"/>
+      <stop offset="48%" stop-color="#8ED0FA"/>
+      <stop offset="100%" stop-color="#B9E2FC"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="62%" cy="42%" r="62%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="58%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+
+    <linearGradient id="waveFade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.68"/>
+      <stop offset="55%" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.18"/>
+    </linearGradient>
+
+    <filter id="soften">
+      <feGaussianBlur stdDeviation="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1170" height="2532" fill="url(#bg)"/>
+  <rect width="1170" height="2532" fill="url(#glow)"/>
+
+  <!-- Large translucent flowing wave -->
+  <path d="M -80 1580
+           C 180 1460, 310 1260, 525 1040
+           C 735 825, 895 700, 1135 790
+           C 1260 838, 1300 930, 1370 1030
+           L 1370 2532 L -80 2532 Z"
+        fill="#FFFFFF" fill-opacity="0.09"/>
+
+  <!-- Fine flowing wave lines -->
+  <g fill="none" stroke="url(#waveFade)" stroke-width="2.2" filter="url(#soften)">
+    <path d="M -70 1575 C 190 1455, 320 1250, 540 1030 C 750 820, 905 705, 1145 800"/>
+    <path d="M -70 1600 C 195 1480, 325 1275, 545 1055 C 755 845, 910 730, 1150 825"/>
+    <path d="M -70 1625 C 200 1505, 330 1300, 550 1080 C 760 870, 915 755, 1155 850"/>
+    <path d="M -70 1650 C 205 1530, 335 1325, 555 1105 C 765 895, 920 780, 1160 875"/>
+    <path d="M -70 1675 C 210 1555, 340 1350, 560 1130 C 770 920, 925 805, 1165 900"/>
+    <path d="M -70 1700 C 215 1580, 345 1375, 565 1155 C 775 945, 930 830, 1170 925"/>
+    <path d="M -70 1725 C 220 1605, 350 1400, 570 1180 C 780 970, 935 855, 1175 950"/>
+    <path d="M -70 1750 C 225 1630, 355 1425, 575 1205 C 785 995, 940 880, 1180 975"/>
+    <path d="M -70 1775 C 230 1655, 360 1450, 580 1230 C 790 1020, 945 905, 1185 1000"/>
+    <path d="M -70 1800 C 235 1680, 365 1475, 585 1255 C 795 1045, 950 930, 1190 1025"/>
+    <path d="M -70 1825 C 240 1705, 370 1500, 590 1280 C 800 1070, 955 955, 1195 1050"/>
+    <path d="M -70 1850 C 245 1730, 375 1525, 595 1305 C 805 1095, 960 980, 1200 1075"/>
+    <path d="M -70 1875 C 250 1755, 380 1550, 600 1330 C 810 1120, 965 1005, 1205 1100"/>
+    <path d="M -70 1900 C 255 1780, 385 1575, 605 1355 C 815 1145, 970 1030, 1210 1125"/>
+    <path d="M -70 1925 C 260 1805, 390 1600, 610 1380 C 820 1170, 975 1055, 1215 1150"/>
+  </g>
+
+  <!-- Crossing wave structure on the right -->
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.22" stroke-width="2">
+    <path d="M 560 1180 C 760 1090, 900 1010, 1210 820"/>
+    <path d="M 540 1210 C 750 1115, 900 1035, 1215 845"/>
+    <path d="M 520 1240 C 740 1140, 900 1060, 1220 870"/>
+    <path d="M 500 1270 C 730 1165, 900 1085, 1225 895"/>
+    <path d="M 480 1300 C 720 1190, 900 1110, 1230 920"/>
+    <path d="M 460 1330 C 710 1215, 900 1135, 1235 945"/>
+    <path d="M 440 1360 C 700 1240, 900 1160, 1240 970"/>
+    <path d="M 420 1390 C 690 1265, 900 1185, 1245 995"/>
+    <path d="M 400 1420 C 680 1290, 900 1210, 1250 1020"/>
+  </g>
+
+  <!-- Lower sweeping arc -->
+  <path d="M 60 2140
+           C 260 1880, 480 1750, 710 1780
+           C 930 1810, 1015 1990, 1010 2210
+           C 1005 2350, 965 2470, 900 2580"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="4"/>
+
+  <path d="M 35 2180
+           C 250 1910, 475 1780, 720 1810
+           C 950 1840, 1035 2020, 1025 2240
+           C 1020 2380, 980 2490, 915 2600"
+        fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="12"/>
+</svg>

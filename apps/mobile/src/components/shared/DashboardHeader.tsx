@@ -18,7 +18,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Bell } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { LogoMark } from './ScreenHeader';
-import { semantic, steel } from '../../theme/colors';
+import { semantic } from '../../theme/colors';
+import { onBandText } from './DashboardBand';
 import { useNotifications } from '../../context/NotificationsContext';
 import type { Group } from '../../api/groups';
 import type { Member } from '../../api/members';
@@ -47,7 +48,7 @@ export function DashboardHeader({
 
       <View style={{ flex: 1, gap: 3 }}>
         <Text variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>Kumusta, {firstName(member?.full_name)}!</Text>
-        <Text variant="caption" color="secondary" style={{ fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
+        <Text variant="caption" style={{ fontSize: 11, lineHeight: 14, color: onBandText }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
       </View>
 
       <Pressable onPress={() => router.push({ pathname: '/(app)/notifications' as any, params: { groupId } })} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}>
@@ -56,7 +57,7 @@ export function DashboardHeader({
           <View
             style={{
               position: 'absolute', top: 2, right: 1, minWidth: 16, height: 16, borderRadius: 8,
-              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: steel[200],
+              paddingHorizontal: 3, backgroundColor: '#E5484D', borderWidth: 1.5, borderColor: '#BFE5FD',
               alignItems: 'center', justifyContent: 'center',
             }}
           >

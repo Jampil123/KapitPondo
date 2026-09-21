@@ -6,7 +6,7 @@ import {
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand } from '@/components/shared/DashboardBand';
+import { DashboardBand, onBandText } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -116,14 +116,14 @@ function StandingCard({ groupId }: { groupId: string }) {
   let meta1: ReactNode = null;
 
   if (!cycle) {
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>This group has no active contribution cycle right now.</Text>;
+    meta1 = <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>This group has no active contribution cycle right now.</Text>;
   } else if (!entry) {
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>No contribution period has been recorded yet.</Text>;
+    meta1 = <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>No contribution period has been recorded yet.</Text>;
   } else if (kind === 'paid') {
     btnLabel = 'View my contributions';
     ghost = true;
     meta1 = (
-      <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
+      <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>
         Posted{current?.paid_date ? <> <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(current.paid_date)}</Text></> : null}
       </Text>
     );
@@ -131,11 +131,11 @@ function StandingCard({ groupId }: { groupId: string }) {
     label = 'Submitted';
     btnLabel = 'View my proof';
     ghost = true;
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Awaiting officer approval{due ? <> · originally due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text></> : null}</Text>;
+    meta1 = <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>Awaiting officer approval{due ? <> · originally due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text></> : null}</Text>;
   } else if (kind === 'rejected') {
     label = 'Amount due';
     btnLabel = 'Upload new proof';
-    meta1 = <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due?.toISOString() ?? null)}</Text> · proof rejected</Text>;
+    meta1 = <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due?.toISOString() ?? null)}</Text> · proof rejected</Text>;
   } else if (due) {
     const diff = daysBetween(due, now);
     if (kind === 'late') {
@@ -143,14 +143,14 @@ function StandingCard({ groupId }: { groupId: string }) {
       label = 'Amount due';
       btnLabel = 'Submit payment now';
       meta1 = (
-        <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
+        <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>
           Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>
           {'  '}<Text style={{ fontSize: 12, lineHeight: 16, color: intent.danger.text }}>· {lateDays} day{lateDays === 1 ? '' : 's'} late{cycle.penalty_amount ? ' — a penalty may apply after review' : ''}</Text>
         </Text>
       );
     } else {
       meta1 = (
-        <Text variant="body" color="secondary" style={{ fontSize: 12, lineHeight: 16 }}>
+        <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>
           Due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>
           {diff > 0 ? ` · ${diff} day${diff === 1 ? '' : 's'} from now` : diff === 0 ? ' · today' : ''}
         </Text>
@@ -161,7 +161,7 @@ function StandingCard({ groupId }: { groupId: string }) {
   return (
     <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 9, gap: 10 }}>
-        <Text variant="overline" color="secondary" style={{ paddingTop: 4 }}>{label}</Text>
+        <Text variant="overline" style={{ paddingTop: 4, color: onBandText }}>{label}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: tone.soft, paddingVertical: 3.5, paddingHorizontal: 8, borderRadius: 20 }}>
           <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: tone.strong, alignItems: 'center', justifyContent: 'center' }}>
             <Icon size={8} color="#fff" strokeWidth={2.5} />

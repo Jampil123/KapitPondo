@@ -10,7 +10,7 @@ import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent, steel } from '@/theme/colors';
-import { DashboardBand, glassPanel } from '@/components/shared/DashboardBand';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 
 
 const SOFT_SHADOW = {
@@ -63,7 +63,7 @@ function FundCard({ groupId }: { groupId: string }) {
   return (
     <View style={{ paddingTop: 6 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-        <Text variant="overline" color="secondary">Fund value</Text>
+        <Text variant="overline" style={{ color: onBandText }}>Fund value</Text>
         {cycle ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: intent.success.soft, paddingVertical: 4, paddingHorizontal: 9, borderRadius: 20 }}>
             <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: cycle.status === 'active' ? intent.success.base : semantic.textMuted }} />
