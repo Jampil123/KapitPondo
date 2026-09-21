@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -7,7 +7,7 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, BAND_TAB_SIZE, glassPanel, onBandText, useDashboardScroll } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -373,6 +373,8 @@ function PositionPanel({ groupId }: { groupId: string }) {
 }
 
 /** Group fund shown as composition (cash + on loan) so it never looks like money went missing. */
+const LOAN_COLOR = intent.warning.base;
+
 function FundLegend({ color, label, amount, pct }: { color: string; label: string; amount: number; pct: number }) {
   return (
     <View style={{ flex: 1 }}>
@@ -380,8 +382,10 @@ function FundLegend({ color, label, amount, pct }: { color: string; label: strin
         <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: color }} />
         <Text variant="overline" color="secondary">{label}</Text>
       </View>
-      <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(amount)}</Text>
-      <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>{pct}% of fund</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 6, marginTop: 4 }}>
+        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
+        <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{pct}%</Text>
+      </View>
     </View>
   );
 }
@@ -411,13 +415,13 @@ function FundComposition({ groupId }: { groupId: string }) {
 
       <View style={{ flexDirection: 'row', height: 10, gap: 2, borderRadius: 5, overflow: 'hidden', backgroundColor: semantic.surfaceAlt, marginVertical: 14 }}>
         <View style={{ flex: cash, backgroundColor: semantic.brand }} />
-        <View style={{ flex: onLoan, backgroundColor: '#E4A33C' }} />
+        <View style={{ flex: onLoan, backgroundColor: LOAN_COLOR }} />
       </View>
 
       <View style={{ flexDirection: 'row', gap: 14 }}>
         <FundLegend color={semantic.brand} label="Cash on hand" amount={cash} pct={cashPct} />
         <View style={{ width: 1, backgroundColor: semantic.border }} />
-        <FundLegend color="#E4A33C" label="Out on loan" amount={onLoan} pct={lentPct} />
+        <FundLegend color={LOAN_COLOR} label="Out on loan" amount={onLoan} pct={lentPct} />
       </View>
     </View>
   );
@@ -477,22 +481,23 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
 }
 
 export function MemberHero({ groupId }: { groupId: string }) {
-  const [positionOpen, setPositionOpen] = useState(false);
+  const { scrollEpoch } = useDashboardScroll();
+  // Remember which scroll epoch the panel was opened in; scrolling bumps the epoch, which closes it.
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
   const [progress] = useState(() => new Animated.Value(0));
+  const positionOpen = openedAt === scrollEpoch;
 
-  function togglePosition() {
-    const next = !positionOpen;
-    setPositionOpen(next);
+  useEffect(() => {
     Animated.timing(progress, {
-      toValue: next ? 1 : 0,
+      toValue: positionOpen ? 1 : 0,
       duration: POSITION_ANIM_MS,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
-  }
+  }, [positionOpen, progress]);
 
   return (
-    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
+    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={() => setOpenedAt(positionOpen ? null : scrollEpoch)} />}>
       <StandingCard groupId={groupId} />
       <Collapsible open={positionOpen} progress={progress}>
         <PositionPanel groupId={groupId} />
