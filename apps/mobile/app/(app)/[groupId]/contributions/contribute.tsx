@@ -1,38 +1,31 @@
-import { useState, useEffect } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { useMemo, useState, useEffect, type ReactNode } from 'react';
+import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Clipboard from 'expo-clipboard';
 import {
-  Hash, Camera, Check, Clock3, AlertTriangle, RotateCcw, CalendarClock, Users, Smartphone,
+  Hash, Camera, Check, Clock3, AlertTriangle, RotateCcw, CalendarClock, Users, Smartphone, X, Copy, QrCode as QrCodeIcon,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { parseApiDate } from '@/lib/cycle';
+import { buildContributionReference } from '@/lib/qrPh';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
 import { buildTimeline } from '@/features/contributions/periods';
 import { useQuery } from '@/hooks/useApi';
 import { listOfficers } from '@/api/groups';
-import { PayGcashSheet } from '@/features/contributions/PayGcashSheet';
 import { useProofScan, confirmSubmitDespiteDuplicate, type ProofFlags } from '@/features/contributions/useProofScan';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
 import type { Contribution } from '@/api/contributions';
 
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
-  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
-} as const;
-
 type PageState = 'submit' | 'overdue' | 'review' | 'rejected';
-/** Only meaningful while PageState is 'submit'/'overdue' — how the member is paying this period. The QR flow lives in a pull-up sheet on top of 'choose', not a route of its own. */
-type PayRoute = 'choose' | 'manual';
 
 function shortDate(iso: string | Date | null | undefined) {
   if (!iso) return '';
@@ -42,6 +35,23 @@ function shortDate(iso: string | Date | null | undefined) {
 
 function daysBetween(a: Date, b: Date) {
   return Math.round((a.getTime() - b.getTime()) / 86400000);
+}
+
+function CloseHeader({ title, onClose }: { title: string; onClose: () => void }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16, height: 56 }}>
+      <Pressable
+        onPress={onClose}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <X size={20} color={semantic.textPrimary} />
+      </Pressable>
+      <Text variant="h3" style={{ fontSize: 16 }} numberOfLines={1}>{title}</Text>
+    </View>
+  );
 }
 
 function Badge({ tone, label, Icon }: { tone: IntentName; label: string; Icon: any }) {
@@ -56,24 +66,30 @@ function Badge({ tone, label, Icon }: { tone: IntentName; label: string; Icon: a
   );
 }
 
-function Split({ items }: { items: { k: string; v: string }[] }) {
+function SectionHead({ title }: { title: string }) {
   return (
-    <View style={{ flexDirection: 'row', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-      {items.map((it, i) => (
-        <View key={it.k} style={{ flex: 1, paddingLeft: i > 0 ? 14 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: semantic.border }}>
-          <Text variant="overline" color="muted">{it.k}</Text>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }}>{it.v}</Text>
-        </View>
-      ))}
-    </View>
+    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 24, marginBottom: 10 }}>{title}</Text>
   );
 }
 
-function SectionHead({ title, aside }: { title: string; aside?: string }) {
+/** The amount, front and centre, with its status and due date; the copy icon is only passed while the member still has to pay. */
+function AmountBlock({ label, amount, badge, meta, note, copied, onCopy }: {
+  label: string; amount: number | string; badge: ReactNode; meta: ReactNode; note?: string; copied?: boolean; onCopy?: () => void;
+}) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 20, marginBottom: 9 }}>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
-      {aside ? <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{aside}</Text> : null}
+    <View style={{ alignItems: 'center', paddingTop: 8 }}>
+      <Text variant="overline" color="muted">{label}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
+        <Text style={{ fontSize: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1.2 }}>{formatPeso(amount)}</Text>
+        {onCopy ? (
+          <Pressable onPress={onCopy} hitSlop={10} accessibilityRole="button" accessibilityLabel="Copy amount">
+            {copied ? <Check size={18} color={intent.success.text} /> : <Copy size={18} color={semantic.textMuted} />}
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={{ marginTop: 10 }}>{badge}</View>
+      <Text variant="body" color="secondary" style={{ marginTop: 10, fontSize: 12.5, textAlign: 'center' }}>{meta}</Text>
+      {note ? <Text variant="caption" color="muted" style={{ marginTop: 3 }}>{note}</Text> : null}
     </View>
   );
 }
@@ -81,7 +97,7 @@ function SectionHead({ title, aside }: { title: string; aside?: string }) {
 function ProofThumb({ path, title, sub }: { path: string | null; title: string; sub: string }) {
   const url = useSignedProofUrl(path);
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 }, CARD_SHADOW]}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
       <View style={{ width: 54, height: 54, borderRadius: 12, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
         {url ? <Image source={{ uri: url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" /> : null}
       </View>
@@ -97,26 +113,74 @@ function ProofThumb({ path, title, sub }: { path: string | null; title: string; 
 function FlagRow({ label, tone }: { label: string; tone: 'warn' | 'danger' }) {
   const t = tone === 'danger' ? intent.danger : intent.warning;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, backgroundColor: t.soft, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, marginBottom: 7 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 9, marginBottom: 8 }}>
       <AlertTriangle size={14} color={t.text} style={{ marginTop: 1 }} />
       <Text style={{ flex: 1, fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: t.text, lineHeight: 15.5 }}>{label}</Text>
     </View>
   );
 }
 
-/** Full-screen "can't proceed yet" card — no-cycle / no-officer / no-gcash states. */
+/** "Can't proceed yet" state — no-cycle / no-officer / no-gcash. */
 function BlockedState({ icon: Icon, tone, title, body }: { icon: any; tone: IntentName; title: string; body: string }) {
   const t = intent[tone];
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }}>
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center', maxWidth: 340 }, CARD_SHADOW]}>
-        <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: t.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-          <Icon size={26} color={t.text} />
-        </View>
-        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'center' }}>{title}</Text>
-        <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 6, lineHeight: 19 }}>{body}</Text>
+      <View style={{ width: 56, height: 56, borderRadius: 18, backgroundColor: t.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+        <Icon size={26} color={t.text} />
       </View>
+      <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'center' }}>{title}</Text>
+      <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 6, lineHeight: 19, maxWidth: 320 }}>{body}</Text>
     </View>
+  );
+}
+
+function DetailRow({ label, value, copied, onCopy, last }: { label: string; value: string; copied: boolean; onCopy: () => void; last?: boolean }) {
+  return (
+    <Pressable
+      onPress={onCopy}
+      accessibilityRole="button"
+      accessibilityLabel={`Copy ${label}`}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 12, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}
+    >
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="overline" color="muted" style={{ marginBottom: 2 }}>{label}</Text>
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{value}</Text>
+      </View>
+      {copied ? <Check size={16} color={intent.success.text} /> : <Copy size={16} color={semantic.textMuted} />}
+    </Pressable>
+  );
+}
+
+/** The treasurer's GCash QR plus copyable recipient and reference — what the member needs to pay. */
+function GcashDetails({ qrPath, recipientName, number, reference, copiedField, onCopy }: {
+  qrPath: string | null | undefined; recipientName: string; number: string; reference: string;
+  copiedField: string | null; onCopy: (key: string, value: string) => void;
+}) {
+  const qrUrl = useSignedProofUrl(qrPath);
+  return (
+    <>
+      <SectionHead title="Pay with GCash" />
+      {qrPath ? (
+        <View style={{ alignItems: 'center' }}>
+          {qrUrl ? (
+            <Image source={{ uri: qrUrl }} style={{ width: 200, height: 200, borderRadius: 8 }} resizeMode="contain" />
+          ) : (
+            <View style={{ width: 200, height: 200, alignItems: 'center', justifyContent: 'center' }}>
+              <ActivityIndicator color={semantic.brand} />
+            </View>
+          )}
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <QrCodeIcon size={20} color={semantic.textMuted} />
+          <Text variant="caption" color="secondary" style={{ flex: 1, lineHeight: 16 }}>No QR uploaded yet — use the details below.</Text>
+        </View>
+      )}
+      <View style={{ marginTop: 6 }}>
+        <DetailRow label={`Recipient · ${recipientName}`} value={number} copied={copiedField === 'number'} onCopy={() => onCopy('number', number)} />
+        <DetailRow label="Reference · put in the message field" value={reference} copied={copiedField === 'ref'} onCopy={() => onCopy('ref', reference)} last />
+      </View>
+    </>
   );
 }
 
@@ -133,11 +197,11 @@ function PaymentForm({
 }) {
   return (
     <>
-      <SectionHead title="Proof of payment" />
+      <SectionHead title="Attach your receipt" />
       <Pressable
         onPress={pickProof}
         disabled={scanning}
-        style={{ borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}
+        style={{ borderWidth: 1.6, borderStyle: 'dashed', borderColor: semantic.brand, borderRadius: 16, overflow: 'hidden' }}
       >
         {proofUri ? (
           <View>
@@ -166,8 +230,7 @@ function PaymentForm({
         </View>
       ) : null}
 
-      <SectionHead title="Payment details" />
-      <View style={{ gap: 14 }}>
+      <View style={{ gap: 14, marginTop: 16 }}>
         <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
         <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
       </View>
@@ -216,17 +279,14 @@ export default function Contribute() {
     !current && due && due < now ? 'overdue' :
     'submit';
 
-  // "Pay online" (the QR sheet) only exists once the group's Owner has set a
-  // treasurer GCash number (see group/settings.tsx) — otherwise there's
-  // nothing to build a QR against, so the flow goes straight to the manual
-  // record-it-yourself form, same as before this feature existed.
+  // Paying needs the group's Owner to have set a treasurer GCash number
+  // (see group/settings.tsx) — without it the screen below is blocked outright.
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
-  const [route, setRoute] = useState<PayRoute>(() => (hasTreasurerGcash ? 'choose' : 'manual'));
-  const [paySheetOpen, setPaySheetOpen] = useState(false);
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const { scanning, flags, scanMeta, scanProof, reset: resetScan } = useProofScan({
     groupId,
@@ -238,6 +298,14 @@ export default function Contribute() {
     },
   });
 
+  // Keyed on the due date's timestamp, not the Date object — `due` is rebuilt every render, and the `new Date()` fallback is deliberately left out.
+  const dueTime = due?.getTime();
+  const qrReference = useMemo(
+    () => (group && membership ? buildContributionReference({ fundCode: group.fund_code, membershipId: membership.id, when: dueTime ? new Date(dueTime) : new Date() }) : ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [group?.fund_code, membership?.id, dueTime],
+  );
+
   useEffect(() => {
     if (loading) return;
     if (state === 'rejected' && current) {
@@ -248,6 +316,12 @@ export default function Contribute() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, state, cycle?.id, current?.id]);
+
+  async function copyValue(key: string, value: string) {
+    await Clipboard.setStringAsync(value);
+    setCopiedField(key);
+    setTimeout(() => setCopiedField((k) => (k === key ? null : k)), 1500);
+  }
 
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -276,7 +350,13 @@ export default function Contribute() {
     setUploading(true);
     try {
       const proof_url = await uploadImage('proofs', proofUri, 'contribution');
-      const ok = await submit.run({ cycle_id: cycle.id, amount: amt, external_reference: reference || undefined, proof_url });
+      const ok = await submit.run({
+        cycle_id: cycle.id,
+        amount: amt,
+        payment_method: state === 'rejected' ? undefined : 'gcash',
+        external_reference: reference || undefined,
+        proof_url,
+      });
       if (ok !== undefined) {
         Alert.alert('Submitted', 'Your contribution was submitted for confirmation.');
         router.back();
@@ -290,27 +370,26 @@ export default function Contribute() {
     }
   }
 
-  const TITLES: Record<PageState, { t: string; s: string }> = {
-    submit: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
-    overdue: { t: 'Submit payment', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''} · overdue` },
-    review: { t: 'Payment status', s: `${group?.name ?? 'Group'} · ${cycle?.name ?? ''}` },
-    rejected: { t: 'Resubmit proof', s: '' },
+  const TITLES: Record<PageState, string> = {
+    submit: 'Submit payment',
+    overdue: 'Submit payment',
+    review: 'Payment status',
+    rejected: 'Resubmit proof',
   };
-  const title = TITLES[state].t;
-  const subtitle = TITLES[state].s;
+  const title = TITLES[state];
+  const close = () => router.back();
 
   // `&& !cycle`, not just `loading` — useQuery's background refetch (e.g. the
   // AppState-triggered one that fires the instant the native image picker
   // hands control back, see useApi.ts) sets loading=true on every foreground
   // return while deliberately KEEPING the previous cycle/contribs data. Gating
-  // on loading alone would unmount this whole screen — including an open
-  // PayGcashSheet and whatever photo the member just attached — every single
-  // time. Once cycle has loaded once, a later refetch should update this
-  // screen in place, not tear it down and rebuild it.
+  // on loading alone would unmount this whole screen — including whatever photo
+  // the member just attached — every single time. Once cycle has loaded once,
+  // a later refetch should update this screen in place, not tear it down.
   if (loading && !cycle) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Payment" />
+        <CloseHeader title="Payment" onClose={close} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color={semantic.brand} /></View>
       </SafeAreaView>
     );
@@ -319,7 +398,7 @@ export default function Contribute() {
   if (!cycle) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Submit payment" />
+        <CloseHeader title="Submit payment" onClose={close} />
         <BlockedState
           icon={CalendarClock}
           tone="info"
@@ -333,7 +412,7 @@ export default function Contribute() {
   if (noOfficers && (state === 'submit' || state === 'overdue')) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Submit payment" />
+        <CloseHeader title="Submit payment" onClose={close} />
         <BlockedState
           icon={Users}
           tone="warning"
@@ -345,14 +424,11 @@ export default function Contribute() {
   }
 
   // Blocks ALL payment methods here (not just GCash) — without a verified GCash
-  // number there's no confirmed treasurer to reconcile against yet. This is a
-  // stricter, separate use of hasTreasurerGcash from the choose/manual routing
-  // comment above; that comment still correctly explains the routing decision
-  // once submission IS allowed.
+  // number there's no confirmed treasurer to reconcile against yet.
   if (!hasTreasurerGcash && (state === 'submit' || state === 'overdue')) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Submit payment" />
+        <CloseHeader title="Submit payment" onClose={close} />
         <BlockedState
           icon={Smartphone}
           tone="warning"
@@ -363,216 +439,172 @@ export default function Contribute() {
     );
   }
 
+  const canPay = state === 'submit' || state === 'overdue';
+  const busy = submit.loading || uploading;
+  const diff = due ? daysBetween(due, now) : null;
+  const lateDays = due ? Math.abs(daysBetween(due, now)) : 0;
+  const breakdown = `${heads} head${heads === 1 ? '' : 's'} × ${formatPeso(cycle.contribution_amount)}`;
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title={title} subtitle={subtitle} />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
+      <CloseHeader title={title} onClose={close} />
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
 
-        {/* ---------------- Summary hero (all states) ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
-          {state === 'submit' && (() => {
-            const diff = due ? daysBetween(due, now) : null;
-            return (
-              <>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Amount due</Text>
-                  <Badge tone="success" label="On time" Icon={Check} />
-                </View>
-                <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(current?.amount ?? expected)}</Text>
-                <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                  {cycle.name}{due ? <> · due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(due)}</Text>{diff !== null && diff >= 0 ? ` · ${diff} day${diff === 1 ? '' : 's'} left` : ''}</> : ' · no due date set'}
-                </Text>
-                <Split items={[{ k: 'Heads', v: String(heads) }, { k: 'Per head', v: formatPeso(cycle.contribution_amount) }]} />
-              </>
-            );
-          })()}
+          {state === 'submit' && (
+            <AmountBlock
+              label="Amount due"
+              amount={current?.amount ?? expected}
+              badge={<Badge tone="success" label="On time" Icon={Check} />}
+              meta={<>{cycle.name}{due ? <> · due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(due)}</Text>{diff !== null && diff >= 0 ? ` · ${diff} day${diff === 1 ? '' : 's'} left` : ''}</> : ' · no due date set'}</>}
+              note={breakdown}
+              copied={copiedField === 'amount'}
+              onCopy={() => copyValue('amount', payAmount.toFixed(2))}
+            />
+          )}
 
-          {state === 'overdue' && (() => {
-            const lateDays = due ? Math.abs(daysBetween(due, now)) : 0;
-            return (
-              <>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Amount due</Text>
-                  <Badge tone="danger" label={`${lateDays} day${lateDays === 1 ? '' : 's'} late`} Icon={AlertTriangle} />
-                </View>
-                <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(current?.amount ?? expected)}</Text>
-                <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                  {cycle.name} · was due <Text style={{ fontWeight: '700', color: intent.danger.text }}>{shortDate(due)}</Text>
-                </Text>
-                <Split items={[{ k: 'Heads', v: String(heads) }, { k: 'Per head', v: formatPeso(cycle.contribution_amount) }]} />
-              </>
-            );
-          })()}
+          {state === 'overdue' && (
+            <AmountBlock
+              label="Amount due"
+              amount={current?.amount ?? expected}
+              badge={<Badge tone="danger" label={`${lateDays} day${lateDays === 1 ? '' : 's'} late`} Icon={AlertTriangle} />}
+              meta={<>{cycle.name} · was due <Text style={{ fontWeight: '700', color: intent.danger.text }}>{shortDate(due)}</Text></>}
+              note={breakdown}
+              copied={copiedField === 'amount'}
+              onCopy={() => copyValue('amount', payAmount.toFixed(2))}
+            />
+          )}
+
+          {state === 'review' && current && (
+            <AmountBlock
+              label="Submitted"
+              amount={current.amount}
+              badge={<Badge tone="info" label="Under review" Icon={Clock3} />}
+              meta={<>Sent <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}</>}
+              note={cycle.name}
+            />
+          )}
+
+          {state === 'rejected' && current && (
+            <AmountBlock
+              label="Still unpaid"
+              amount={current.amount}
+              badge={<Badge tone="danger" label="Needs resubmission" Icon={AlertTriangle} />}
+              meta={<>{cycle.name}{due ? <> · was due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text></> : ''}</>}
+              note={`Returned ${shortDate(current.updated_at)}`}
+            />
+          )}
+
+          {state === 'overdue' && cycle.penalty_amount ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18 }}>
+              <AlertTriangle size={15} color={intent.warning.text} />
+              <Text style={{ flex: 1, fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>
+                A {cycle.penalty_type === 'percent' ? `${cycle.penalty_amount}%` : formatPeso(cycle.penalty_amount)} late penalty may be added
+              </Text>
+            </View>
+          ) : null}
+
+          {canPay && (
+            <>
+              <GcashDetails
+                qrPath={group?.treasurer_gcash_qr_url}
+                recipientName={group?.treasurer_gcash_name || 'Treasurer GCash'}
+                number={group?.treasurer_gcash_number ?? ''}
+                reference={qrReference}
+                copiedField={copiedField}
+                onCopy={copyValue}
+              />
+              <PaymentForm
+                amount={amount} setAmount={setAmount}
+                reference={reference} setReference={setReference}
+                proofUri={proofUri} pickProof={pickProof} scanning={scanning}
+                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
+              />
+            </>
+          )}
 
           {state === 'review' && current && (
             <>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Submitted</Text>
-                <Badge tone="info" label="Under review" Icon={Clock3} />
+              <SectionHead title="Progress" />
+              <View style={{ gap: 4 }}>
+                {[
+                  { done: true, now: false, title: 'You submitted your proof', sub: shortDate(current.created_at) },
+                  { done: false, now: true, title: 'An officer is reviewing', sub: 'Checked against the amount and reference number' },
+                  { done: false, now: false, title: 'Posted to the ledger', sub: 'Counts towards your capital and year-end share' },
+                ].map((s, i, arr) => (
+                  <View key={s.title} style={{ flexDirection: 'row', gap: 12 }}>
+                    <View style={{ alignItems: 'center', width: 24 }}>
+                      <View style={{
+                        width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
+                        backgroundColor: s.done ? intent.success.base : s.now ? intent.info.base : semantic.surfaceAlt,
+                      }}>
+                        {s.done ? <Check size={11} color="#fff" strokeWidth={3} /> : (
+                          <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: s.now ? '#fff' : semantic.textMuted }}>{i + 1}</Text>
+                        )}
+                      </View>
+                      {i < arr.length - 1 ? <View style={{ width: 2, flex: 1, minHeight: 22, backgroundColor: s.done ? intent.success.base : semantic.border, marginTop: 2 }} /> : null}
+                    </View>
+                    <View style={{ flex: 1, paddingBottom: 16 }}>
+                      <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: s.now ? intent.info.text : s.done ? semantic.textPrimary : semantic.textMuted }}>{s.title}</Text>
+                      <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 16 }}>{s.sub}</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(current.amount)}</Text>
-              <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                Sent <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}
-              </Text>
-              <Split items={[{ k: 'For', v: cycle.name }, { k: 'Heads', v: String(heads) }]} />
+
+              <SectionHead title="What you sent" />
+              {current.proof_url ? (
+                <ProofThumb path={current.proof_url} title="Proof of payment" sub={`Uploaded ${shortDate(current.created_at)}`} />
+              ) : (
+                <Text variant="body" color="muted">No proof attached to this submission.</Text>
+              )}
             </>
           )}
 
           {state === 'rejected' && current && (
             <>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Still unpaid</Text>
-                <Badge tone="danger" label="Needs resubmission" Icon={AlertTriangle} />
+              <SectionHead title="Why it was returned" />
+              <View style={{ borderLeftWidth: 3, borderColor: intent.danger.base, paddingLeft: 12 }}>
+                <Text style={{ fontSize: 13, lineHeight: 19, color: '#8E3227', fontWeight: '600' }}>
+                  {current.rejection_reason ?? 'No reason was given — ask an officer for details.'}
+                </Text>
               </View>
-              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(current.amount)}</Text>
-              <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                {cycle.name}{due ? <> · was due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.due_date)}</Text></> : ''}
-              </Text>
-              <Split items={[{ k: 'Submitted', v: shortDate(current.created_at) }, { k: 'Returned', v: shortDate(current.updated_at) }]} />
+
+              {current.proof_url ? (
+                <>
+                  <SectionHead title="What you sent before" />
+                  <ProofThumb path={current.proof_url} title="Previous proof" sub={`Returned ${shortDate(current.updated_at)}`} />
+                </>
+              ) : null}
+
+              <PaymentForm
+                amount={amount} setAmount={setAmount}
+                reference={reference} setReference={setReference}
+                proofUri={proofUri} pickProof={pickProof} scanning={scanning}
+                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
+              />
             </>
           )}
-        </View>
+        </ScrollView>
 
-        {/* ---------------- Overdue: penalty notice ---------------- */}
-        {state === 'overdue' && cycle.penalty_amount ? (
-          <View style={{ marginTop: 15, backgroundColor: intent.warning.soft, borderRadius: 18, padding: 15, flexDirection: 'row', gap: 11 }}>
-            <View style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: 'rgba(168,124,44,0.18)', alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>!</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>
-                A {cycle.penalty_type === 'percent' ? `${cycle.penalty_amount}%` : formatPeso(cycle.penalty_amount)} late penalty may be added
-              </Text>
-            </View>
-          </View>
-        ) : null}
-
-        {/* ---------------- Submit / Overdue: choose how to pay ---------------- */}
-        {(state === 'submit' || state === 'overdue') && route === 'choose' && (
-          <>
-            <SectionHead title="How would you like to pay" />
-            <Button label={`Pay ${formatPeso(payAmount)} with GCash`} onPress={() => setPaySheetOpen(true)} />
-            <Button label="I already paid — record it" variant="ghost" onPress={() => setRoute('manual')} style={{ marginTop: 10 }} />
-          </>
-        )}
-
-        {/* ---------------- Submit / Overdue: record payment ---------------- */}
-        {(state === 'submit' || state === 'overdue') && route === 'manual' && (
-          <>
-            <PaymentForm
-              amount={amount} setAmount={setAmount}
-              reference={reference} setReference={setReference}
-              proofUri={proofUri} pickProof={pickProof} scanning={scanning}
-              flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
-            />
-            <Button
-              label={state === 'overdue' ? 'Submit payment now' : 'Submit for review'}
-              onPress={onSubmit}
-              loading={submit.loading || uploading}
-              disabled={!proofUri}
-              style={{ marginTop: 18 }}
-            />
-            {hasTreasurerGcash ? (
-              <Button label="Choose a different way to pay" variant="ghost" onPress={() => setRoute('choose')} style={{ marginTop: 10 }} />
-            ) : null}
-          </>
-        )}
-
-        {/* ---------------- Under review: read-only tracker ---------------- */}
-        {state === 'review' && current && (
-          <>
-            <SectionHead title="Progress" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, gap: 4 }, CARD_SHADOW]}>
-              {[
-                { done: true, now: false, title: 'You submitted your proof', sub: shortDate(current.created_at) },
-                { done: false, now: true, title: 'An officer is reviewing', sub: 'Checked against the amount and reference number' },
-                { done: false, now: false, title: 'Posted to the ledger', sub: 'Counts towards your capital and year-end share' },
-              ].map((s, i, arr) => (
-                <View key={s.title} style={{ flexDirection: 'row', gap: 12 }}>
-                  <View style={{ alignItems: 'center', width: 24 }}>
-                    <View style={{
-                      width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
-                      backgroundColor: s.done ? intent.success.base : s.now ? intent.info.base : semantic.surfaceAlt,
-                    }}>
-                      {s.done ? <Check size={11} color="#fff" strokeWidth={3} /> : (
-                        <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: s.now ? '#fff' : semantic.textMuted }}>{i + 1}</Text>
-                      )}
-                    </View>
-                    {i < arr.length - 1 ? <View style={{ width: 2, flex: 1, minHeight: 22, backgroundColor: s.done ? intent.success.base : semantic.border, marginTop: 2 }} /> : null}
-                  </View>
-                  <View style={{ flex: 1, paddingBottom: 16 }}>
-                    <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: s.now ? intent.info.text : s.done ? semantic.textPrimary : semantic.textMuted }}>{s.title}</Text>
-                    <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 16 }}>{s.sub}</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
-
-            <SectionHead title="What you sent" />
-            {current.proof_url ? (
-              <ProofThumb path={current.proof_url} title="Proof of payment" sub={`Uploaded ${shortDate(current.created_at)}`} />
-            ) : (
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, CARD_SHADOW]}>
-                <Text variant="body" color="muted">No proof attached to this submission.</Text>
-              </View>
-            )}
-
+        <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, backgroundColor: semantic.background }}>
+          {state === 'review' ? (
             <Button
               label="View all my contributions"
               variant="ghost"
               onPress={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
-              style={{ marginTop: 18 }}
             />
-          </>
-        )}
-
-        {/* ---------------- Rejected: reason, fix list, previous proof, resubmit ---------------- */}
-        {state === 'rejected' && current && (
-          <>
-            <SectionHead title="Why it was returned" />
-            <View style={{ backgroundColor: intent.danger.soft, borderRadius: 18, padding: 16 }}>
-              <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', letterSpacing: 0.4, color: intent.danger.text, marginBottom: 6, textTransform: 'uppercase' }}>
-                Returned {shortDate(current.updated_at)}
-              </Text>
-              <Text style={{ fontSize: 13, lineHeight: 19, color: '#8E3227', fontWeight: '600' }}>
-                {current.rejection_reason ?? 'No reason was given — ask an officer for details.'}
-              </Text>
-            </View>
-
-            {current.proof_url ? (
-              <>
-                <SectionHead title="What you sent before" />
-                <ProofThumb path={current.proof_url} title="Previous proof" sub={`Returned ${shortDate(current.updated_at)}`} />
-              </>
-            ) : null}
-
-            <PaymentForm
-              amount={amount} setAmount={setAmount}
-              reference={reference} setReference={setReference}
-              proofUri={proofUri} pickProof={pickProof} scanning={scanning}
-              flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
-            />
+          ) : (
             <Button
-              label="Resubmit for review"
-              leading={<RotateCcw size={16} color="#fff" />}
+              label={state === 'rejected' ? 'Resubmit for review' : 'Submit payment'}
+              leading={state === 'rejected' ? <RotateCcw size={16} color="#fff" /> : undefined}
               onPress={onSubmit}
-              loading={submit.loading || uploading}
+              loading={busy}
               disabled={!proofUri}
-              style={{ marginTop: 18 }}
             />
-          </>
-        )}
-
-      </ScrollView>
-
-      <PayGcashSheet
-        visible={paySheetOpen}
-        onClose={() => setPaySheetOpen(false)}
-        cycleId={cycle.id}
-        amount={payAmount}
-        dueDate={due}
-        onSubmitted={() => router.back()}
-      />
+          )}
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

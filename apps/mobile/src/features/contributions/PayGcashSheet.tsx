@@ -54,8 +54,8 @@ interface PayGcashSheetProps {
  * details, attach a receipt (auto-read via OCR), submit for an officer to
  * confirm. Self-contained (reads groupId/group/membership itself via
  * useActiveGroup) so any screen inside a [groupId] route can drop it in
- * with just the period being paid — see contributions/contribute.tsx and
- * contributions/index.tsx for the two current call sites.
+ * with just the period being paid — see contributions/index.tsx for the
+ * current call site (contribute.tsx pays inline on the page instead).
  */
 export function PayGcashSheet({ visible, onClose, cycleId, amount, dueDate, onSubmitted }: PayGcashSheetProps) {
   const { groupId, group, membership } = useActiveGroup();
