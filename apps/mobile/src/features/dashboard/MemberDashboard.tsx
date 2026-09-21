@@ -373,15 +373,16 @@ function PositionPanel({ groupId }: { groupId: string }) {
   );
 }
 
-const LOAN_COLOR = intent.warning.base;
+const CASH_COLOR = semantic.brandDark;
+const LOAN_COLOR = intent.danger.base;
 
 function FundLegend({ color, label, amount, pct }: { color: string; label: string; amount: number; pct: number }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
       <View style={{ width: 7, height: 7, borderRadius: 3, backgroundColor: color }} />
-      <Text variant="caption" color="secondary" style={{ flex: 1, fontSize: 11 }} numberOfLines={1}>{label}</Text>
-      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
-      <Text style={{ width: 30, textAlign: 'right', fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{pct}%</Text>
+      <Text variant="caption" color="secondary" style={{ width: 72, fontSize: 11, lineHeight: 14 }} numberOfLines={1}>{label}</Text>
+      <Text style={{ fontSize: 12.5, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{formatPeso(amount)}</Text>
+      <Text style={{ fontSize: 11, lineHeight: 14, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{pct}%</Text>
     </View>
   );
 }
@@ -403,7 +404,7 @@ function FundRing({ cash, onLoan, cashPct }: { cash: number; onLoan: number; cas
     <View style={{ width: RING_SIZE, height: RING_SIZE }}>
       <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
         <Circle {...arc} stroke={semantic.surfaceAlt} />
-        {cashLen > 0 ? <Circle {...arc} stroke={semantic.brand} strokeDasharray={`${Math.max(cashLen - gap, 0)} ${circumference}`} /> : null}
+        {cashLen > 0 ? <Circle {...arc} stroke={CASH_COLOR} strokeDasharray={`${Math.max(cashLen - gap, 0)} ${circumference}`} /> : null}
         {loanLen > 0 ? <Circle {...arc} stroke={LOAN_COLOR} strokeDasharray={`${Math.max(loanLen - gap, 0)} ${circumference}`} strokeDashoffset={-cashLen} /> : null}
       </Svg>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
@@ -440,8 +441,8 @@ function FundComposition({ groupId }: { groupId: string }) {
         <Text variant="overline" color="muted">Total group fund</Text>
         <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4 }} numberOfLines={1}>{formatPeso(total)}</Text>
 
-        <View style={{ gap: 5, marginTop: 8 }}>
-          <FundLegend color={semantic.brand} label="Cash on hand" amount={cash} pct={cashPct} />
+        <View style={{ gap: 2, marginTop: 6 }}>
+          <FundLegend color={CASH_COLOR} label="Cash on hand" amount={cash} pct={cashPct} />
           <FundLegend color={LOAN_COLOR} label="Out on loan" amount={onLoan} pct={lentPct} />
         </View>
       </View>
