@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
-  Wallet, Layers, ChevronUp, ChevronDown,
+  Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { DashboardBand, BAND_TAB_HEIGHT, glassPanel, onBandText } from '@/components/shared/DashboardBand';
@@ -271,8 +271,7 @@ function LegendDot({ color, label }: { color: string; label: string }) {
 }
 
 /** Half-circle tab hanging off the bottom centre of the band; toggles the capital + heads details. */
-function PositionTab({ open, onPress }: { open: boolean; onPress: () => void }) {
-  const Icon = open ? ChevronUp : ChevronDown;
+function PositionTab({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
@@ -288,8 +287,36 @@ function PositionTab({ open, onPress }: { open: boolean; onPress: () => void }) 
         shadowToken.card,
       ]}
     >
-      <Icon size={17} color="#fff" strokeWidth={2.2} />
+      <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+        <ChevronDown size={17} color="#fff" strokeWidth={2.2} />
+      </Animated.View>
     </Pressable>
+  );
+}
+
+const BAND_CHILD_GAP = 8; // DashboardBand spaces its children by this much
+const POSITION_ANIM_MS = 260;
+
+/** Animates its content's measured height and opacity with `progress` (0 closed, 1 open); stays mounted so it can animate. */
+function Collapsible({ open, progress, children }: { open: boolean; progress: Animated.Value; children: ReactNode }) {
+  const [height, setHeight] = useState(0);
+
+  return (
+    <Animated.View
+      pointerEvents={open ? 'auto' : 'none'}
+      accessibilityElementsHidden={!open}
+      importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
+      style={{
+        overflow: 'hidden',
+        opacity: progress,
+        height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, height] }),
+        marginTop: progress.interpolate({ inputRange: [0, 1], outputRange: [-BAND_CHILD_GAP, 0] }),
+      }}
+    >
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
+        {children}
+      </View>
+    </Animated.View>
   );
 }
 
@@ -448,11 +475,25 @@ function RecentActivity({ groupId, onSeeAll }: { groupId: string; onSeeAll: () =
 
 export function MemberHero({ groupId }: { groupId: string }) {
   const [positionOpen, setPositionOpen] = useState(false);
+  const [progress] = useState(() => new Animated.Value(0));
+
+  function togglePosition() {
+    const next = !positionOpen;
+    setPositionOpen(next);
+    Animated.timing(progress, {
+      toValue: next ? 1 : 0,
+      duration: POSITION_ANIM_MS,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }
 
   return (
-    <DashboardBand tab={<PositionTab open={positionOpen} onPress={() => setPositionOpen((o) => !o)} />}>
+    <DashboardBand tab={<PositionTab open={positionOpen} progress={progress} onPress={togglePosition} />}>
       <StandingCard groupId={groupId} />
-      {positionOpen ? <PositionPanel groupId={groupId} /> : null}
+      <Collapsible open={positionOpen} progress={progress}>
+        <PositionPanel groupId={groupId} />
+      </Collapsible>
     </DashboardBand>
   );
 }
