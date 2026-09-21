@@ -1,12 +1,13 @@
-import { type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
+  Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -276,51 +277,62 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: ReactNode; sub: string }) {
-  return (
-    <View style={[{ flex: 1, backgroundColor: CARD_BG, borderRadius: 16, padding: 15 }, CARD_SHADOW]}>
-      <Text variant="overline" color="muted">{label}</Text>
-      <Text style={{ fontSize: 21, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, letterSpacing: -0.4 }}>{value}</Text>
-      <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{sub}</Text>
-    </View>
-  );
-}
-
-/** My capital (this cycle's contributions) + heads, both already-fetched real values. */
-function MyPosition({ groupId }: { groupId: string }) {
+/** Collapsible capital + heads summary under the standing card; both are already-fetched real values. */
+function PositionDropdown({ groupId }: { groupId: string }) {
   const router = useRouter();
   const { membership } = useActiveGroup();
   const bal = useMyBalance(groupId);
   const { cycle } = useActiveCycle(groupId);
+  const [open, setOpen] = useState(false);
   const heads = membership?.heads ?? null;
+  const capital = bal.loading ? '…' : formatPeso(bal.data?.contributions);
 
   function goToHeads() {
     router.push({ pathname: '/(app)/[groupId]/heads' as any, params: { groupId } });
   }
 
   return (
-    <View style={{ flexDirection: 'row', gap: 11 }}>
-      <Stat
-        label="My capital"
-        value={bal.loading ? '…' : formatPeso(bal.data?.contributions)}
-        sub="contributions"
-      />
+    <View style={{ marginTop: 6 }}>
       <Pressable
-        onPress={goToHeads}
-        style={[{ flex: 1, backgroundColor: CARD_BG, borderRadius: 16, padding: 15 }, CARD_SHADOW]}
+        onPress={() => setOpen((o) => !o)}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.7)' }}
       >
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Text variant="overline" color="muted">My heads</Text>
-          <View style={{
-            width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
-            backgroundColor: semantic.brandDark,
-          }}>
-            <ArrowRight size={12} color="#fff" strokeWidth={2.6} />
-          </View>
+        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}>
+          <Wallet size={14} color={semantic.brandDark} />
         </View>
-        <Text style={{ fontSize: 21, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, letterSpacing: -0.4 }}>{heads ?? '—'}</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}</Text>
+        <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>My capital & heads</Text>
+        <Text style={{ flex: 1, textAlign: 'right', fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: onBandText }} numberOfLines={1}>
+          {open ? '' : `${capital} · ${heads ?? '—'} head${heads === 1 ? '' : 's'}`}
+        </Text>
+        <ChevronDown size={16} color={onBandText} style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }} />
       </Pressable>
+
+      {open ? (
+        <View style={[glassPanel, { flexDirection: 'row', marginTop: 10 }]}>
+          <View style={{ flex: 1, padding: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Wallet size={13} color={semantic.brandDark} />
+              <Text variant="overline" color="secondary">My capital</Text>
+            </View>
+            <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{capital}</Text>
+            <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>contributions</Text>
+          </View>
+          <View style={{ width: 1, backgroundColor: semantic.border }} />
+          <Pressable onPress={goToHeads} style={{ flex: 1, padding: 12 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Layers size={13} color={semantic.brandDark} />
+              <Text variant="overline" color="secondary">My heads</Text>
+              <View style={{ marginLeft: 'auto', width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: semantic.brandDark }}>
+                <ArrowRight size={11} color="#fff" strokeWidth={2.6} />
+              </View>
+            </View>
+            <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{heads ?? '—'}</Text>
+            <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }} numberOfLines={1}>
+              {cycle ? `${formatPeso(cycle.contribution_amount)} per head · ${cycle.frequency}` : 'No active cycle'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -436,13 +448,11 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
     <>
       <DashboardBand>
         <StandingCard groupId={groupId} />
+        <PositionDropdown groupId={groupId} />
       </DashboardBand>
 
       <SectionHead title="This cycle" aside={cycleProgressLabel(cycle)} />
       <CycleDots groupId={groupId} />
-
-     
-      <MyPosition groupId={groupId} />
 
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
