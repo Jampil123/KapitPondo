@@ -1,5 +1,5 @@
 import { ReactNode, useMemo, useState } from 'react';
-import { View, Pressable, RefreshControl, Animated, ActivityIndicator } from 'react-native';
+import { View, Pressable, RefreshControl, Animated, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ChevronLeft } from 'lucide-react-native';
@@ -61,16 +61,22 @@ export function DashboardShell({
   );
   const foldContext = useMemo(() => ({ headerHeight, reportFoldHeight: setFoldHeight }), [headerHeight]);
 
-  // The system spinner is hidden; this one sits at the very top of the screen, over the header band.
+  // Android: the system spinner follows the finger as you pull — dropped just below the folding band, which is drawn
+  // over the top of the list and would otherwise hide it. iOS draws its spinner at the top of the list, under that same
+  // band, so there it's hidden and the overlay further down shows while refreshing instead.
+  const androidSpinner = Platform.OS === 'android';
   const refreshControl = onRefresh ? (
-    <RefreshControl
-      refreshing={!!refreshing}
-      onRefresh={onRefresh}
-      tintColor="transparent"
-      colors={['transparent']}
-      progressBackgroundColor="transparent"
-      progressViewOffset={-200}
-    />
+    androidSpinner ? (
+      <RefreshControl
+        refreshing={!!refreshing}
+        onRefresh={onRefresh}
+        colors={[NAV_BG]}
+        progressBackgroundColor="#FFFFFF"
+        progressViewOffset={(folds ? bandHeight : 0) + 8}
+      />
+    ) : (
+      <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} tintColor="transparent" />
+    )
   ) : undefined;
 
   const scrollView = (
@@ -132,7 +138,7 @@ export function DashboardShell({
           </>
         )}
 
-        {refreshing ? (
+        {refreshing && !androidSpinner ? (
           <View pointerEvents="none" style={{ position: 'absolute', top: insets.top + 8, left: 0, right: 0, alignItems: 'center', zIndex: 10 }}>
             <View
               style={{

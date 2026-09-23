@@ -41,6 +41,17 @@ async function createContribution(input) {
   return data;
 }
 
+// Walk-in recorded by an officer for another member: posts to the ledger
+// right away, no second officer (migration 0064).
+async function postWalkInContribution({ contributionId, recorderId }) {
+  const { data, error } = await supabase.rpc('post_walk_in_contribution', {
+    p_contribution_id: contributionId,
+    p_recorder_id: recorderId,
+  });
+  if (error) throw error;
+  return data;
+}
+
 async function listContributions({ groupId, membershipId, role, status, cycleId, filterMembershipId }) {
   let q = supabase.from('contributions')
     .select('*, recorder:members!recorded_by(full_name), approver:members!approved_by(full_name), memberships!membership_id(member_id, heads, members!member_id(full_name, avatar_url))')
@@ -141,4 +152,5 @@ async function autoConfirmContribution({ membershipId, cycleId, groupId, amount,
 module.exports = {
   createContribution, listContributions, getContribution, getActiveMembership,
   approveContribution, rejectContribution, autoConfirmContribution, hasDuplicateReference,
+  postWalkInContribution,
 };

@@ -177,29 +177,17 @@ export default function ConfirmContributions() {
         ) : cycle && summary ? (
           <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginBottom: 16 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>This {periodWord}</Text>
+              <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Collected this {periodWord}</Text>
               {notYetCount > 0 ? (
                 <View style={{ backgroundColor: intent.warning.soft, paddingVertical: 3, paddingHorizontal: 9, borderRadius: 20 }}>
                   <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>{notYetCount} not yet paid</Text>
                 </View>
               ) : null}
             </View>
-            <View style={{ flexDirection: 'row', marginTop: 10 }}>
-              {[
-                { k: 'Collected', v: summary.collected, color: intent.success.base },
-                { k: 'Expected', v: summary.expected, color: semantic.brand },
-                { k: 'Still to collect', v: Math.max(0, summary.expected - summary.collected), color: intent.warning.base },
-              ].map((x, i) => (
-                <View key={x.k} style={{ flex: 1, paddingLeft: i > 0 ? 12 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: 'rgba(42,62,75,0.1)' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <View style={{ width: 7, height: 7, borderRadius: 3, backgroundColor: x.color }} />
-                    <Text variant="overline" color="muted" numberOfLines={1}>{x.k}</Text>
-                  </View>
-                  <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1} adjustsFontSizeToFit>{formatPeso(x.v)}</Text>
-                </View>
-              ))}
-            </View>
-            <Text variant="body" color="secondary" style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderColor: 'rgba(42,62,75,0.1)', fontSize: 12.5 }}>
+            <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4, marginTop: 4 }}>
+              {formatPeso(summary.collected)} <Text style={{ fontSize: 13, color: semantic.textMuted, fontFamily: 'Poppins_500Medium' }}>of {formatPeso(summary.expected)}</Text>
+            </Text>
+            <Text variant="body" color="secondary" style={{ marginTop: 6, fontSize: 12.5 }}>
               {summary.collectedCount} of {summary.totalMembers} members posted{summary.dueDate ? <Text> · due {shortDate(summary.dueDate.toISOString())}</Text> : null}
             </Text>
           </View>

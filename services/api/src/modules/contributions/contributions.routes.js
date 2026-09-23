@@ -54,6 +54,18 @@ router.post('/groups/:groupId/contributions',
         recordedBy: req.member.id,
         isWalkIn,
       });
+
+      // A walk-in for someone else posts immediately (migration 0064); the
+      // officer's own contribution still waits for another officer.
+      if (isWalkIn && targetMembershipId !== req.membership.id) {
+        const ledgerEntry = await service.postWalkInContribution({ contributionId: contribution.id, recorderId: req.member.id });
+        await logAudit({
+          groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+          action: 'approved', entityType: 'contribution', entityId: contribution.id,
+          before: { status: 'submitted' }, after: { status: 'approved', amount: contribution.amount, recorded_by: req.member.id, walk_in: true },
+        });
+        return res.status(201).json({ contribution: { ...contribution, status: 'approved' }, ledger_entry: ledgerEntry });
+      }
       res.status(201).json({ contribution });
     } catch (err) { next(err); }
   }

@@ -1,11 +1,13 @@
-import { useMemo, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator } from 'react-native';
+import { useMemo, useState, type ReactNode } from 'react';
+import { View, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpRight, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
   ArrowUpCircle,
-  PiggyBank, HandCoins } from 'lucide-react-native';
+  PiggyBank, HandCoins, Receipt, X, Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { ENTRY_LABEL } from '@/features/activity/entryCopy';
@@ -14,8 +16,8 @@ import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useContributions } from '@/features/contributions/contributions.hooks';
-import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
+import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
+import { useLoans, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import type { Contribution } from '@/api/contributions';
 import type { Loan } from '@/api/lending';
 
@@ -116,8 +118,98 @@ function EmptyRow({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-/* ---------------- Proofs to review ---------------- */
-type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean; kind: 'contribution' | 'repayment' };
+/* ---------------- Payment verifications — confirm/return right here, like the Organizer's decision cards ---------------- */
+type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean; kind: 'contribution' | 'repayment'; proof: string | null };
+
+const VERIFY_SHOWN = 3;
+
+function VerifyAction({ label, tone, Icon, onPress, disabled }: { label: string; tone: 'ok' | 'danger'; Icon: any; onPress: () => void; disabled?: boolean }) {
+  // Confirm uses the app's primary button color; Return stays a soft red — same as the Organizer's quick actions.
+  const t = tone === 'ok' ? { bg: semantic.brandDark, fg: '#fff' } : { bg: intent.danger.soft, fg: intent.danger.text };
+  return (
+    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.bg, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 11, opacity: disabled ? 0.5 : 1 }}>
+      <Icon size={12} color={t.fg} strokeWidth={2.6} />
+      <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: t.fg }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: ProofRow; onChanged: () => void }) {
+  const approveContribution = useApproveContribution(groupId);
+  const rejectContribution = useRejectContribution(groupId);
+  const confirmRepayment = useConfirmRepayment(groupId);
+  const rejectRepayment = useRejectRepayment(groupId);
+  const approve = row.kind === 'contribution' ? approveContribution : confirmRepayment;
+  const reject = row.kind === 'contribution' ? rejectContribution : rejectRepayment;
+  const [returning, setReturning] = useState(false);
+  const [viewingProof, setViewingProof] = useState(false);
+  const busy = approve.loading || reject.loading;
+  const what = row.kind === 'contribution' ? 'contribution' : 'repayment';
+
+  async function onConfirm() {
+    const ok = await approve.run(row.id);
+    if (ok !== undefined) onChanged();
+    else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
+  }
+  async function onReturn(reason: string) {
+    setReturning(false);
+    const ok = await reject.run(row.id, reason || undefined);
+    if (ok !== undefined) onChanged();
+    else if (reject.error) Alert.alert('Could not return', reject.error.message);
+  }
+
+  return (
+    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.card]}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text variant="overline" color="muted">{row.kind === 'contribution' ? 'Contribution' : 'Loan repayment'}</Text>
+          <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, marginTop: 4 }} numberOfLines={2}>{row.name}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+            <Text variant="caption" color="secondary" numberOfLines={1}>{row.sub}</Text>
+            {row.late ? <Tag tone="late">Late</Tag> : null}
+          </View>
+        </View>
+        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(row.amount)}</Text>
+      </View>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        {row.proof ? (
+          <Pressable onPress={() => setViewingProof(true)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
+            <Image source={{ uri: row.proof }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+          </Pressable>
+        ) : (
+          <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+            <Receipt size={16} color={semantic.textMuted} />
+          </View>
+        )}
+        <View style={{ flex: 1 }} />
+        <VerifyAction label="Return" tone="danger" Icon={X} onPress={() => setReturning(true)} disabled={busy} />
+        <VerifyAction label="Confirm" tone="ok" Icon={Check} onPress={onConfirm} disabled={busy} />
+      </View>
+      <ReasonPrompt
+        visible={returning}
+        title={`Return ${row.name}'s ${what}?`}
+        confirmLabel="Return"
+        destructive
+        onCancel={() => setReturning(false)}
+        onConfirm={onReturn}
+      />
+      <Modal visible={viewingProof} transparent animationType="fade" onRequestClose={() => setViewingProof(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewingProof(false)}>
+          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
+              <View style={{ flex: 1 }}>
+                <Text variant="label">{row.name}</Text>
+                <Text variant="caption" color="secondary">{formatPeso(row.amount)}</Text>
+              </View>
+              <Pressable onPress={() => setViewingProof(false)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
+            </View>
+            {row.proof ? <Image source={{ uri: row.proof }} style={{ width: '100%', aspectRatio: 3 / 4, backgroundColor: semantic.surfaceAlt }} resizeMode="contain" /> : null}
+          </View>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
 
 function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: Record<string, string>) => void }) {
   const { member } = useAuth();
@@ -130,28 +222,35 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
     (balances.data ?? []).forEach((b) => m.set(b.membership_id, b.full_name ?? 'Member'));
     return m;
   }, [balances.data]);
+  // Anything this Treasurer recorded themselves needs a different officer, so it isn't theirs to confirm.
   const contribRows: ProofRow[] = (pendingContribs.data ?? [])
     .filter((c: Contribution) => c.recorded_by !== member?.id)
     .map((c: Contribution) => ({
       id: c.id,
       name: nameById.get(c.membership_id) ?? 'Member',
-      sub: `Contribution · sent ${shortDate(c.created_at)}`,
+      sub: `Sent ${shortDate(c.created_at)}`,
       amount: Number(c.amount),
       late: c.is_late,
       kind: 'contribution',
+      proof: c.proof_signed_url,
     }));
   const repayRows: ProofRow[] = (pendingRepayments.data ?? [])
     .filter((p) => p.recorded_by !== member?.id)
     .map((p) => ({
       id: p.id,
       name: p.loans?.membership?.members?.full_name ?? 'Member',
-      sub: `Loan repayment · sent ${shortDate(p.created_at)}`,
+      sub: `Sent ${shortDate(p.created_at)}`,
       amount: Number(p.amount),
       kind: 'repayment',
+      proof: p.proof_signed_url,
     }));
 
   const rows = [...contribRows, ...repayRows];
-  const loading = pendingContribs.loading || pendingRepayments.loading || balances.loading;
+  const loading = (pendingContribs.data == null && !pendingContribs.error) || (pendingRepayments.data == null && !pendingRepayments.error);
+  const refresh = () => { pendingContribs.refetch(); pendingRepayments.refetch(); };
+  // "See all" opens whichever list the hidden ones belong to — repayments live on their own page.
+  const hidden = rows.slice(VERIFY_SHOWN);
+  const seeAllRepayments = hidden.length > 0 && hidden.every((r) => r.kind === 'repayment');
 
   return (
     <>
@@ -164,31 +263,17 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
       ) : rows.length === 0 ? (
         <EmptyRow title="No proofs waiting" sub="New submissions will show up here" />
       ) : (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card]}>
-          {rows.slice(0, 4).map((r, i) => (
-            <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 11, padding: 14, borderBottomWidth: i < Math.min(rows.length, 4) - 1 ? 1 : 0, borderColor: semantic.border }}>
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{r.name}</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  <Text variant="caption" color="secondary" numberOfLines={1}>{r.sub}</Text>
-                  {r.late ? <Tag tone="late">Late</Tag> : null}
-                </View>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.amount)}</Text>
-                <Pressable
-                  onPress={() => go(r.kind === 'repayment' ? 'loans/record-repayment' : 'contributions/confirm', r.kind === 'repayment' ? undefined : { tab: 'pending' })}
-                  style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10 }}
-                >
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Review</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))}
-          <Pressable onPress={() => go('contributions/confirm', { tab: 'pending' })} style={{ padding: 13, alignItems: 'center', backgroundColor: semantic.surfaceAlt, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 }}>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Review all</Text>
-          </Pressable>
-        </View>
+        <>
+          {rows.slice(0, VERIFY_SHOWN).map((r) => <VerificationCard key={`${r.kind}-${r.id}`} groupId={groupId} row={r} onChanged={refresh} />)}
+          {hidden.length > 0 ? (
+            <Pressable
+              onPress={() => (seeAllRepayments ? go('loans/record-repayment') : go('contributions/confirm', { tab: 'pending' }))}
+              style={{ paddingVertical: 12, alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: semantic.border }}
+            >
+              <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>See all {rows.length}</Text>
+            </Pressable>
+          ) : null}
+        </>
       )}
     </>
   );

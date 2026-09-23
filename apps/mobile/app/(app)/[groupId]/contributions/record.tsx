@@ -117,7 +117,9 @@ export default function RecordPayment() {
         proof_url,
       });
       if (ok !== undefined) {
-        Alert.alert('Recorded', `${target.members?.full_name ?? 'Member'}'s payment of ${formatPeso(amt)} was submitted for ${confirmer} to confirm.`);
+        Alert.alert('Recorded', isSelf
+          ? `Your payment of ${formatPeso(amt)} was submitted for ${confirmer} to confirm.`
+          : `${target.members?.full_name ?? 'Member'}'s payment of ${formatPeso(amt)} is posted to the ledger.`);
         router.back();
       } else if (submit.error) {
         Alert.alert('Could not record', submit.error.message);
@@ -132,7 +134,7 @@ export default function RecordPayment() {
   const disabled = !amtNum || needsRef || !target || !cycle;
   const barNote = !amtNum ? 'Enter the amount received'
     : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required`
-    : `Goes to ${confirmer} for confirmation`;
+    : isSelf ? `Goes to ${confirmer} for confirmation` : 'Posts to the ledger right away';
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>

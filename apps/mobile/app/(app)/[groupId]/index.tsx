@@ -187,7 +187,7 @@ export default function GroupDashboard() {
           <Hero key={refreshKey} groupId={groupId!} />
         </Animated.View>
       }
-      foldHero={Hero === MemberHero || Hero === OwnerHero || Hero === TreasurerHero}
+      foldHero
       refreshing={refreshing}
       onRefresh={onRefresh}
     >

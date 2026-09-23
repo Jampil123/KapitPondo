@@ -7,7 +7,7 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -789,7 +789,9 @@ const LOOKUP_ACTIONS: { label: string; icon: any; route: string }[] = [
 export function AuditorHero({ groupId }: { groupId: string }) {
   return (
     <DashboardBand>
-      <VerificationHero groupId={groupId} />
+      <FoldTarget>
+        <VerificationHero groupId={groupId} />
+      </FoldTarget>
     </DashboardBand>
   );
 }
