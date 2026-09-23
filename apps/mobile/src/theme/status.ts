@@ -32,7 +32,7 @@ export const membershipStatus: Record<string, StatusMeta> = {
 // Role accents (per-group). Owner/Treasurer/Auditor get brand-leaning colors;
 // plain member stays neutral.
 export const membershipRole: Record<string, StatusMeta> = {
-  owner:     { intent: 'primary', label: 'Owner' },
+  owner:     { intent: 'primary', label: 'Organizer' },
   treasurer: { intent: 'info',    label: 'Treasurer' },
   auditor:   { intent: 'accent',  label: 'Auditor' },
   member:    { intent: 'neutral', label: 'Member' },
@@ -48,7 +48,7 @@ export const cycleStatus: Record<string, StatusMeta> = {
 // M5 — contribution_status (+ is_late flag handled separately below)
 export const contributionStatus: Record<string, StatusMeta> = {
   pending:   { intent: 'warning', label: 'Due' },
-  submitted: { intent: 'info',    label: 'Submitted' },
+  submitted: { intent: 'info',    label: 'Under review' },
   approved:  { intent: 'success', label: 'Approved' },
   rejected:  { intent: 'danger',  label: 'Rejected' },
 };
@@ -68,7 +68,7 @@ export const loanStatus: Record<string, StatusMeta> = {
 // M6 — loan_payment_status
 export const loanPaymentStatus: Record<string, StatusMeta> = {
   scheduled: { intent: 'neutral', label: 'Scheduled' },
-  submitted: { intent: 'info',    label: 'Submitted' },
+  submitted: { intent: 'info',    label: 'Under review' },
   approved:  { intent: 'success', label: 'Approved' },
   paid:      { intent: 'success', label: 'Paid' },
   late:      { intent: 'danger',  label: 'Late' },

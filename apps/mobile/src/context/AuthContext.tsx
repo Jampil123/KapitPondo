@@ -231,8 +231,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInWithPassword = useCallback(async (phone: string, password: string) => {
     const e164 = toE164PH(phone);
     if (!e164) throw new Error('Enter a valid Philippine mobile number.');
-    const { error } = await supabase.auth.signInWithPassword({ phone: e164, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ phone: e164, password });
     if (error) throw error;
+    // Same as confirmOtp: wait until `status` is really 'signedIn' before the screen navigates into (app),
+    // or the root guard still sees 'signedOut', flashes (auth)/landing, then bounces to (app)/groups.
+    await applySessionRef.current(data.session);
   }, []);
 
   const refreshMember = useCallback(async () => {

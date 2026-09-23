@@ -103,6 +103,12 @@ function Backdrop({ top = 0 }: { top?: number }) {
   );
 }
 
+/** Tells the dashboard shell how tall the hero content that folds away on scroll is; the shell does the folding (see DashboardShell). */
+export function FoldTarget({ children }: { children: ReactNode }) {
+  const fold = useContext(DashboardFoldContext);
+  return <View onLayout={(e) => fold?.reportFoldHeight(e.nativeEvent.layout.height)} style={{ gap: BAND_GAP }}>{children}</View>;
+}
+
 /** The pinned top of a folding band: backdrop, status-bar inset and the dashboard header. Reports its height so the body below can continue the same artwork. */
 export function BandTop({ children, onHeight }: { children: ReactNode; onHeight: (height: number) => void }) {
   const insets = useSafeAreaInsets();
@@ -121,7 +127,7 @@ export function DashboardBand({ children, tab }: { children: ReactNode; tab?: Re
   const fold = useContext(DashboardFoldContext);
 
   return (
-    <View style={{ zIndex: 2, marginBottom: tab ? BAND_TAB_SIZE / 2 + 6 : 10 }}>
+    <View style={{ zIndex: 2, marginBottom: tab ? BAND_TAB_SIZE / 2 : 10 }}>
       <View style={{ borderBottomLeftRadius: 28, borderBottomRightRadius: 28, overflow: 'hidden', backgroundColor: steel[200] }}>
         <Backdrop top={fold ? -fold.headerHeight : 0} />
         <View style={{ paddingTop: fold ? BAND_GAP : insets.top, paddingHorizontal: BAND_PADDING, paddingBottom: 20, gap: BAND_GAP }}>

@@ -1,20 +1,22 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TextInput, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Check, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
+import { can } from '@/constants/roles';
 import { useSummary } from '@/features/reporting/reporting.hooks';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import {
-  useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useFinalizeDistribution,
+  useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useFinalizeDistribution, useCancelDistribution,
 } from '@/features/distribution/distribution.hooks';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
@@ -70,6 +72,7 @@ export default function YearEnd() {
   const preview = usePreviewDistribution(groupId!);
   const verify = useVerifyDistribution(groupId!);
   const finalize = useFinalizeDistribution(groupId!);
+  const cancel = useCancelDistribution(groupId!);
 
   const [period, setPeriod] = useState(String(new Date().getFullYear()));
 
@@ -112,6 +115,25 @@ export default function YearEnd() {
     else if (verify.error) Alert.alert('Could not verify', verify.error.message);
   }
 
+  // Only a preview the Auditor hasn't verified yet can be cancelled (server deletes status = 'previewed' only).
+  const canCancel = previewed && can(role, 'cancelDistribution');
+
+  function onCancel() {
+    if (!current) return;
+    Alert.alert(`Cancel the ${current.period} preview?`, 'This deletes the preview. Nothing has been paid — you can build a new one any time.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Cancel preview',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await cancel.run(current.id);
+          if (res) distributions.refetch();
+          else if (cancel.error) Alert.alert('Could not cancel', cancel.error.message);
+        },
+      },
+    ]);
+  }
+
   function onFinalize() {
     if (!current) return;
     Alert.alert(
@@ -137,9 +159,9 @@ export default function YearEnd() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Year-End Distribution" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 130, gap: 4 }} keyboardShouldPersistTaps="handled">
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Year-End Distribution" />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: canCancel && role === 'owner' ? 190 : 130, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
         <View style={{ paddingHorizontal: 2 }}>
@@ -152,7 +174,7 @@ export default function YearEnd() {
           {summary.loading && !current ? (
             <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
           ) : (
-            <Text style={{ fontSize: 32, fontFamily: 'Poppins_700Bold', color: semantic.dashCard, letterSpacing: -1, marginTop: 6 }}>
+            <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.5, marginTop: 4 }}>
               {formatPeso(current ? current.total_amount : cashNow)}
             </Text>
           )}
@@ -191,7 +213,7 @@ export default function YearEnd() {
               />
               <Gate
                 state={finalized ? 'done' : verified ? 'now' : 'wait'}
-                label="Owner finalizes"
+                label="Organizer finalizes"
                 sub={finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined}
               />
             </View>
@@ -252,18 +274,21 @@ export default function YearEnd() {
         ) : null}
       </ScrollView>
 
-      {current && !finalized && (role === 'owner' || (role === 'auditor' && previewed)) ? (
+      {current && !finalized && (role === 'owner' || (role === 'auditor' && previewed) || canCancel) ? (
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 10, backgroundColor: semantic.background, borderTopWidth: 1, borderColor: semantic.border, gap: 10 }}>
           {role === 'auditor' ? (
             <Button label="Verify preview" onPress={onVerify} loading={verify.loading} />
-          ) : (
+          ) : role === 'owner' ? (
             <Button
               label={verified ? 'Finalize distribution' : 'Waiting on Auditor verification'}
               onPress={onFinalize}
               disabled={!verified || fundChanged}
               loading={finalize.loading}
             />
-          )}
+          ) : null}
+          {canCancel ? (
+            <Button label="Cancel preview" variant="ghost" onPress={onCancel} loading={cancel.loading} />
+          ) : null}
         </View>
       ) : null}
     </SafeAreaView>

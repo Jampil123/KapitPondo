@@ -1,10 +1,8 @@
-import type { ReactNode } from 'react';
 import { View, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowDownRight, ArrowUpRight, Check, Receipt } from 'lucide-react-native';
+import { ArrowDownRight, ArrowUpRight, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { Button } from '@/components/ui/Button';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -14,8 +12,9 @@ import { useLedger } from '@/features/reporting/reporting.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
-import { ACTION_COPY, ENTRY_LABEL, PAYMENT_METHOD_LABEL } from '@/features/activity/entryCopy';
-import { Badge, BlockedState, CloseHeader, SectionHead, SummaryRow, formatDateTime } from '@/features/payments/PaymentPage';
+import { ENTRY_LABEL, PAYMENT_METHOD_LABEL } from '@/features/activity/entryCopy';
+import { DetailSection, DetailTitle, StatusPill } from '@/features/activity/DetailCard';
+import { BlockedState, CloseHeader, formatDateTime } from '@/features/payments/PaymentPage';
 import type { LedgerEntry } from '@/api/ledger';
 
 function shortDate(iso: string | null | undefined) {
@@ -24,28 +23,16 @@ function shortDate(iso: string | null | undefined) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** A titled group of label/value rows; rows with no value are left out, and the group disappears if none are left. */
-function DetailRows({ title, rows }: { title: string; rows: [string, ReactNode][] }) {
-  const shown = rows.filter(([, value]) => value !== null && value !== undefined && value !== '');
-  if (shown.length === 0) return null;
-  return (
-    <>
-      <SectionHead title={title} />
-      {shown.map(([label, value], i) => <SummaryRow key={label} label={label} value={value} last={i === shown.length - 1} />)}
-    </>
-  );
-}
-
 function ProofPreview({ path }: { path: string | null | undefined }) {
   const url = useSignedProofUrl(path);
   if (!path) return null;
   return (
     <>
-      <SectionHead title="Proof of payment" />
+      <DetailTitle title="Proof of payment" />
       {url ? (
-        <Image source={{ uri: url }} style={{ width: '100%', height: 200, borderRadius: 12, backgroundColor: semantic.surfaceAlt }} resizeMode="cover" />
+        <Image source={{ uri: url }} style={{ width: '100%', height: 200, borderRadius: 18, backgroundColor: semantic.surfaceAlt }} resizeMode="cover" />
       ) : (
-        <View style={{ height: 200, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ height: 200, borderRadius: 18, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={semantic.brand} />
         </View>
       )}
@@ -59,7 +46,7 @@ function ContributionExtras({ entry }: { entry: LedgerEntry }) {
   if (!c) return null;
   return (
     <>
-      <DetailRows
+      <DetailSection
         title="Payment details"
         rows={[
           ['For period', c.due_date ? `Due ${shortDate(c.due_date)}` : null],
@@ -78,7 +65,7 @@ function RepaymentExtras({ entry }: { entry: LedgerEntry }) {
   if (!p) return null;
   return (
     <>
-      <DetailRows
+      <DetailSection
         title="Payment details"
         rows={[
           ['Principal', formatPeso(p.principal_portion)],
@@ -97,7 +84,7 @@ function LoanExtras({ entry }: { entry: LedgerEntry }) {
   const l = loans.data?.find((x) => x.id === entry.source_id);
   if (!l) return null;
   return (
-    <DetailRows
+    <DetailSection
       title="Loan details"
       rows={[
         ['Purpose', l.purpose],
@@ -118,12 +105,14 @@ function EntryExtras({ entry }: { entry: LedgerEntry }) {
 }
 
 export default function ActivityDetail() {
-  const { groupId, entryId } = useLocalSearchParams<{ groupId: string; entryId: string }>();
+  const { groupId, entryId, scope } = useLocalSearchParams<{ groupId: string; entryId: string; scope?: 'group' }>();
   const router = useRouter();
   const { membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
-  // Same query as the Activity list, so members only ever see their own entries here.
-  const ledger = useLedger(groupId!, { membership_id: membership?.id });
+  // Same query as the Activity list, so members only ever see their own entries here. Officers opening a
+  // group-wide transaction (Transactions page, dashboard) pass scope=group — the server only returns the whole
+  // group's ledger to officer roles.
+  const ledger = useLedger(groupId!, scope === 'group' ? { limit: 500 } : { membership_id: membership?.id });
   const entry = (ledger.data ?? []).find((e) => e.id === entryId) ?? null;
   const close = () => router.back();
 
@@ -148,49 +137,36 @@ export default function ActivityDetail() {
 
   const credit = entry.direction === 'credit';
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
-  const isLoan = entry.entry_type === 'loan_disbursement' || entry.entry_type === 'loan_repayment';
-  const target = entry.entry_type === 'contribution'
-    ? { label: 'View my contributions', route: 'contributions' }
-    : isLoan ? { label: 'View my loan', route: 'loans' } : null;
-
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
       <CloseHeader onClose={close} />
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }}>
-        <View style={{ alignItems: 'center', paddingTop: 20 }}>
-          <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Icon size={28} color={credit ? intent.success.text : semantic.brandDark} />
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+        <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+          <View style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+            <Icon size={24} color={credit ? intent.success.text : semantic.brandDark} />
           </View>
-          <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 14 }}>{ENTRY_LABEL[entry.entry_type]}</Text>
-          <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', letterSpacing: -0.6, marginTop: 4, color: credit ? intent.success.text : semantic.textPrimary }}>
+          <Text style={{ fontSize: 17, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 12 }}>{ENTRY_LABEL[entry.entry_type]}</Text>
+          <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', letterSpacing: -0.5, marginTop: 2, color: credit ? intent.success.text : semantic.textPrimary }}>
             {credit ? '+' : '-'}{formatPeso(entry.amount)}
           </Text>
-          <Text variant="body" color="secondary" style={{ fontSize: 12.5, textAlign: 'center', marginTop: 8 }}>
-            {ACTION_COPY[entry.entry_type] ?? ENTRY_LABEL[entry.entry_type]}
-          </Text>
+          <StatusPill label="Posted" bg={intent.success.soft} fg={intent.success.text} />
         </View>
 
-        <View style={{ marginTop: 26 }}>
-          <SummaryRow label="Status" value={<Badge tone="success" label="Posted" Icon={Check} />} />
-          <SummaryRow label="Posted" value={formatDateTime(new Date(entry.posted_at))} />
-          {entry.poster ? <SummaryRow label="Confirmed by" value={entry.poster.full_name} /> : null}
-          {cycle && entry.cycle_id === cycle.id ? <SummaryRow label="Cycle" value={cycle.name} /> : null}
-          {entry.description ? <SummaryRow label="Note" value={entry.description} /> : null}
-          <SummaryRow label="Ledger entry" value={`#${entry.id.slice(0, 8).toUpperCase()}`} last />
-        </View>
+        <DetailSection
+          title="Record"
+          rows={[
+            ['Member', scope === 'group' ? entry.membership?.members?.full_name ?? 'Group' : null],
+            ['Posted', formatDateTime(new Date(entry.posted_at))],
+            ['Confirmed by', entry.poster?.full_name],
+            ['Cycle', cycle && entry.cycle_id === cycle.id ? cycle.name : null],
+            ['Note', entry.description],
+            ['Ledger entry', `#${entry.id.slice(0, 8).toUpperCase()}`],
+          ]}
+        />
 
         <EntryExtras entry={entry} />
       </ScrollView>
 
-      {target ? (
-        <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12 }}>
-          <Button
-            label={target.label}
-            variant="ghost"
-            onPress={() => router.replace({ pathname: `/(app)/[groupId]/${target.route}` as any, params: { groupId } })}
-          />
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }

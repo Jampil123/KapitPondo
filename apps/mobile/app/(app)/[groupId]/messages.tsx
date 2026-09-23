@@ -18,7 +18,7 @@ import { listMessages } from '@/api/messages';
 import { listDirectMessages } from '@/api/directMessages';
 import { useAnnouncements } from '@/features/announcements/announcements.hooks';
 
-const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 /** Compact relative time — "2d", "1h", "6h", "1w" — matching a chat-list convention. */
 function timeAgo(iso: string): string {
@@ -252,7 +252,7 @@ export default function Messages() {
                   left={<IconTile icon={Megaphone} bg={intent.warning.soft} color={intent.warning.text} />}
                   title="Announcements"
                   time={latestAnnouncement ? timeAgo(latestAnnouncement.created_at) : undefined}
-                  subtitle="From the Owner · you can't reply"
+                  subtitle="From the Organizer · you can't reply"
                   preview={latestAnnouncement ? latestAnnouncement.body : undefined}
                   onPress={() => go('announcements')}
                 />
@@ -279,7 +279,7 @@ export default function Messages() {
                 left={<IconTile icon={Users} bg={semantic.surfaceAlt} color={semantic.brandDark} />}
                 title="Officers room"
                 time={latestOfficers ? timeAgo(latestOfficers.created_at) : undefined}
-                subtitle="Owner, Treasurer & Auditor"
+                subtitle="Organizer, Treasurer & Auditor"
                 preview={latestOfficers ? `${latestOfficers.sender_name}: ${previewLine(latestOfficers.body, latestOfficers.image_url)}` : undefined}
                 onPress={() => go('chat/officers')}
               />

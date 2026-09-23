@@ -4,7 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { ArrowUpRight, ArrowDownRight, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { PillFilters } from '@/components/shared/PillFilters';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -73,7 +74,7 @@ function Row({ e, mine }: { e: LedgerEntry; mine: boolean }) {
           by" name should wrap instead of hiding behind "...". */}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>
             {TYPE_LABEL[e.entry_type] ?? e.entry_type}
           </Text>
           {mine ? (
@@ -83,13 +84,13 @@ function Row({ e, mine }: { e: LedgerEntry; mine: boolean }) {
           ) : null}
         </View>
         {who ? (
-          <Text variant="caption" color="secondary" style={{ marginTop: 2, fontFamily: 'Poppins_600SemiBold' }}>{who}</Text>
+          <Text variant="caption" color="secondary" style={{ marginTop: 2, fontFamily: 'Poppins_500Medium' }}>{who}</Text>
         ) : null}
         <Text variant="caption" color="muted" style={{ marginTop: 2, lineHeight: 15 }}>
           {shortDate(e.posted_at)}{e.poster?.full_name ? ` · confirmed by ${e.poster.full_name}` : ''}
         </Text>
       </View>
-      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary, marginTop: 1 }}>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary, marginTop: 1 }}>
         {credit ? '+' : '−'}{formatPeso(e.amount)}
       </Text>
     </View>
@@ -102,7 +103,7 @@ export default function GroupLedger() {
   const { cycle } = useActiveCycle(groupId!);
   const fund = useFundSummary(groupId!);
   // Explicit, generous limit — the default server-side cap (300) is fine for
-  // a young group, but this page's own "Net of postings shown" is summed
+  // a young group, but this page's breakdown is summed
   // from exactly what's fetched (see composition below), so once a
   // long-running group crosses that cap, that total would silently stop
   // matching "Cash on hand" above it with no indication why. A member
@@ -166,22 +167,21 @@ export default function GroupLedger() {
       .filter((t) => sums.has(t))
       .map((t) => ({ label: COMPOSITION_LABEL[t] ?? (TYPE_LABEL[t] ?? t), v: sums.get(t)!, pos: sums.get(t)! >= 0 }));
   }, [entries]);
-  const compositionTotal = composition.reduce((s, r) => s + r.v, 0);
 
   const FILTERS: { key: Filter; label: string }[] = [
-    { key: 'all', label: 'All postings' },
+    { key: 'all', label: 'All' },
     { key: 'in', label: 'Money in' },
     { key: 'out', label: 'Money out' },
     { key: 'mine', label: 'My entries' },
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Group Ledger" subtitle={`${group?.name ?? 'Group'} · ${cycle?.name ?? 'No active cycle'}`} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Group Ledger" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Summary ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Cash on hand</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: intent.success.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
@@ -195,19 +195,15 @@ export default function GroupLedger() {
             <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(cash)}</Text>
           )}
           {composition.length > 0 ? (
-            <View style={{ marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border, gap: 8 }}>
+            <View style={{ marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: 'rgba(42,62,75,0.1)', gap: 8 }}>
               {composition.map((row) => (
                 <View key={row.label} style={{ flexDirection: 'row' }}>
                   <Text variant="caption" color="secondary">{row.label}</Text>
-                  <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: row.pos ? intent.success.text : intent.danger.text }}>
+                  <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: row.pos ? intent.success.text : intent.danger.text }}>
                     {row.pos ? '+' : '−'}{formatPeso(Math.abs(row.v))}
                   </Text>
                 </View>
               ))}
-              <View style={{ flexDirection: 'row', marginTop: 3, paddingTop: 10, borderTopWidth: 1, borderColor: semantic.border }}>
-                <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Net of postings shown</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(compositionTotal)}</Text>
-              </View>
               {possiblyTruncated ? (
                 <Text variant="caption" color="muted" style={{ lineHeight: 15 }}>
                   Showing the most recent {LEDGER_FETCH_LIMIT.toLocaleString()} postings — this group has more, so the breakdown above may not match cash on hand exactly.
@@ -218,20 +214,9 @@ export default function GroupLedger() {
         </View>
 
         {/* ---------------- Filters ---------------- */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 18 }} contentContainerStyle={{ gap: 7 }}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={{ paddingVertical: 7, paddingHorizontal: 13, borderRadius: 18, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}
-              >
-                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{f.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <View style={{ marginTop: 14 }}>
+          <PillFilters<Filter> options={FILTERS} value={filter} onChange={setFilter} />
+        </View>
 
         {/* ---------------- Postings, grouped by month ---------------- */}
         {ledger.loading ? (

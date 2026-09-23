@@ -63,7 +63,7 @@ async function submitGcashProposal(groupId, { number, name, note, qrUrl, submitt
     .from('groups').select('treasurer_gcash_status').eq('id', groupId).single();
   if (cErr) throw cErr;
   if (current.treasurer_gcash_status === 'pending') {
-    throw Object.assign(new Error("A submission is already pending the Owner's review"), { status: 409 });
+    throw Object.assign(new Error("A submission is already pending the Organizer's review"), { status: 409 });
   }
 
   const { data, error } = await supabase
@@ -455,7 +455,7 @@ async function leaveGroup(groupId, memberId) {
     throw Object.assign(new Error('You are not an active member of this group.'), { status: 404 });
   }
   if (membership.role === 'owner') {
-    throw Object.assign(new Error('The Owner cannot leave the group. Transfer ownership first.'), { status: 409 });
+    throw Object.assign(new Error('The Organizer cannot leave the group. Hand over the Organizer role first.'), { status: 409 });
   }
 
   const reasons = await checkLeaveBlockers(membership.id);

@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { PillFilters } from '@/components/shared/PillFilters';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -52,12 +53,12 @@ function monthLabel(iso: string) {
   return new Date(iso).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 }
 
-function Row({ e }: { e: LedgerEntry }) {
+function Row({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
   const credit = e.direction === 'credit';
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
   const who = e.membership?.members?.full_name ?? 'Group';
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
       </View>
@@ -65,20 +66,21 @@ function Row({ e }: { e: LedgerEntry }) {
           ("Contribution · Some Very Long Name") cut the name off behind an
           ellipsis; splitting them keeps both fully readable. */}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>
           {TYPE_LABEL[e.entry_type] ?? e.entry_type}
         </Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2, fontFamily: 'Poppins_600SemiBold' }} numberOfLines={2}>
+        <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={2}>
           {who}
         </Text>
         <Text variant="caption" color="muted" style={{ marginTop: 2 }} numberOfLines={1}>
           {shortDate(e.posted_at)}{e.description ? ` · ${e.description}` : ''}
         </Text>
       </View>
-      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
         {credit ? '+' : '−'}{formatPeso(e.amount)}
       </Text>
-    </View>
+      <ChevronRight size={16} color={semantic.textMuted} />
+    </Pressable>
   );
 }
 
@@ -89,6 +91,7 @@ function Row({ e }: { e: LedgerEntry }) {
  * approved and pushed to the ledger. */
 export default function MyTransactions() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const router = useRouter();
   const { member } = useAuth();
   const { role } = useActiveGroup();
   const isOwner = role === 'owner';
@@ -130,8 +133,8 @@ export default function MyTransactions() {
   }, [filtered]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="My Transactions" subtitle={isOwner ? 'Organizer' : 'Treasurer'} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Transactions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, shadowToken.card]}>
           {ledger.loading ? (
@@ -140,30 +143,20 @@ export default function MyTransactions() {
             <View style={{ flexDirection: 'row' }}>
               <View style={{ flex: 1 }}>
                 <Text variant="overline" color="muted">Received</Text>
-                <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: intent.success.text, marginTop: 4 }}>{formatPeso(receivedTotal)}</Text>
+                <Text style={{ fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: intent.success.text, marginTop: 4 }}>{formatPeso(receivedTotal)}</Text>
                 <Text variant="caption" color="muted" style={{ marginTop: 2 }}>Contributions + repayments</Text>
               </View>
               <View style={{ flex: 1, paddingLeft: 14, borderLeftWidth: 1, borderColor: semantic.border }}>
                 <Text variant="overline" color="muted">{isOwner ? 'Paid out' : 'Released'}</Text>
-                <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(releasedTotal)}</Text>
+                <Text style={{ fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(releasedTotal)}</Text>
                 <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{isOwner ? 'Year-end shares' : 'Loans disbursed'}</Text>
               </View>
             </View>
           )}
-          <Text variant="caption" color="secondary" style={{ marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border }}>
-            {mine.length} entr{mine.length === 1 ? 'y' : 'ies'} you personally confirmed and pushed to the ledger — not what other officers recorded or approved.
-          </Text>
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
-          {categories.map((c) => {
-            const active = category === c.key;
-            return (
-              <Pressable key={c.key} onPress={() => setCategory(c.key)} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>
-                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{c.label}</Text>
-              </Pressable>
-            );
-          })}
+        <View style={{ marginTop: 14 }}>
+          <PillFilters<Category> options={categories} value={category} onChange={setCategory} />
         </View>
 
         {ledger.loading ? (
@@ -179,7 +172,7 @@ export default function MyTransactions() {
             <View key={g.label}>
               <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{g.label}</Text>
               <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
-                {g.list.map((e) => <Row key={e.id} e={e} />)}
+                {g.list.map((e) => <Row key={e.id} e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id, scope: 'group' } })} />)}
               </View>
             </View>
           ))

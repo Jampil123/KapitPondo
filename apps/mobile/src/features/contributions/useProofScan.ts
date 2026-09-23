@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { readImageBase64 } from '@/lib/upload';
 import { extractText } from '@/api/ocr';
 import { parseReceiptText } from '@/lib/receiptOcr';

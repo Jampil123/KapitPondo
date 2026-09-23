@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { ArrowUpDown, Check, FileDown } from 'lucide-react-native';
+import { ArrowUpDown, FileDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { AppBar } from '@/components/shared/AppBar';
-import { semantic, intent } from '@/theme/colors';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { FilterChips } from '@/components/shared/FilterChips';
+import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
 import { useAuth } from '@/context/AuthContext';
@@ -18,15 +20,10 @@ import { useQuery, useAction } from '@/hooks/useApi';
 import { listMembers, nudgeMember, type GroupMember } from '@/api/groups';
 import { buildTimeline, type PeriodKind } from '@/features/contributions/periods';
 
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
-  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
-} as const;
-
 type Filter = 'all' | 'arrears' | 'loans' | 'clear';
 type Sort = 'owed' | 'name';
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor' };
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor' };
 const DOT_TONE: Record<PeriodKind, string> = {
   paid: intent.success.base, review: intent.info.base, rejected: intent.danger.base,
   late: intent.danger.base, due: semantic.surfaceAlt, upcoming: semantic.surfaceAlt,
@@ -102,8 +99,7 @@ export default function MemberBalances() {
   }, [rows, filter, sort]);
 
   const behindRows = rows.filter((r) => r.behindCount > 0);
-  const totalCapital = rows.reduce((s, r) => s + r.capital, 0);
-  const totalHeads = rows.reduce((s, r) => s + r.m.heads, 0);
+
   const arrearsTotal = rows.reduce((s, r) => s + r.owed, 0);
   const onLoanTotal = rows.reduce((s, r) => s + r.loanBalance, 0);
   const penaltiesTotal = rows.reduce((s, r) => s + r.penaltyTotal, 0);
@@ -142,19 +138,18 @@ export default function MemberBalances() {
   }
 
   const FILTERS: { key: Filter; label: string; count?: number }[] = [
-    { key: 'all', label: 'Everyone' },
+    { key: 'all', label: 'All' },
     { key: 'arrears', label: 'Behind', count: behindRows.length || undefined },
-    { key: 'loans', label: 'With loans' },
+    { key: 'loans', label: 'Loans' },
     { key: 'clear', label: 'Up to date' },
   ];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader
         title="Member balances"
-        subtitle={cycle?.name ?? 'No active cycle'}
         right={
-          <Pressable onPress={() => setSort((s) => (s === 'owed' ? 'name' : 'owed'))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+          <Pressable onPress={() => setSort((s) => (s === 'owed' ? 'name' : 'owed'))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }}>
             <ArrowUpDown size={16} color={semantic.brandDark} />
           </Pressable>
         }
@@ -162,85 +157,54 @@ export default function MemberBalances() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: behindRows.length > 0 ? 100 : 40 }}>
 
         {/* ---------------- Summary ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Capital held for members</Text>
-            {behindRows.length > 0 ? (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: intent.danger.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
-                <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{behindRows.length} behind</Text>
-              </View>
-            ) : null}
-          </View>
-          {loading ? (
-            <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
-          ) : (
-            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(totalCapital)}</Text>
-          )}
-          <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-            {rows.length} members · <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{totalHeads} heads</Text> · returned at cycle close
-          </Text>
-
-          <View style={{ flexDirection: 'row', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
+          <View style={{ flexDirection: 'row' }}>
             {[
-              { k: 'In arrears', v: arrearsTotal, color: intent.danger.text },
-              { k: 'Out on loan', v: onLoanTotal, color: intent.warning.text },
-              { k: 'Penalties', v: penaltiesTotal, color: semantic.textPrimary },
+              { k: 'Overdue', v: arrearsTotal, color: intent.danger.base },
+              { k: 'Out on loan', v: onLoanTotal, color: intent.danger.base },
+              { k: 'Penalties', v: penaltiesTotal, color: intent.warning.base },
             ].map((s, i) => (
-              <View key={s.k} style={{ flex: 1, paddingLeft: i > 0 ? 13 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: semantic.border }}>
-                <Text variant="overline" color="muted">{s.k}</Text>
-                <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: s.color, marginTop: 3 }}>{formatPeso(s.v)}</Text>
+              <View key={s.k} style={{ flex: 1, paddingLeft: i > 0 ? 13 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: 'rgba(42,62,75,0.1)' }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={{ width: 7, height: 7, borderRadius: 3, backgroundColor: s.color }} />
+                  <Text variant="overline" color="muted">{s.k}</Text>
+                </View>
+                <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }}>{formatPeso(s.v)}</Text>
               </View>
             ))}
           </View>
         </View>
 
         {/* ---------------- Filters ---------------- */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 18 }} contentContainerStyle={{ gap: 7 }}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable key={f.key} onPress={() => setFilter(f.key)} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 7, paddingHorizontal: 13, borderRadius: 18, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>
-                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{f.label}</Text>
-                {f.count ? (
-                  <View style={{ marginLeft: 5, backgroundColor: active ? 'rgba(255,255,255,0.25)' : intent.danger.soft, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 1 }}>
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : intent.danger.text }}>{f.count}</Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterChips<Filter> options={FILTERS} value={filter} onChange={setFilter} style={{ marginTop: 14 }} />
 
         {/* ---------------- Rows ---------------- */}
         {loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : !cycle ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
-            <Text variant="body" color="muted">No active cycle right now.</Text>
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Text variant="body" color="secondary">No active cycle right now.</Text>
           </View>
         ) : filtered.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
-            <Text variant="body" color="muted">No one matches this filter.</Text>
+          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Text variant="body" color="secondary">No one matches this filter.</Text>
           </View>
         ) : (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden', marginTop: 20 }, CARD_SHADOW]}>
-            {filtered.map((r, i) => {
+          <View style={{ gap: 12, marginTop: 14 }}>
+            {filtered.map((r) => {
               const behind = r.behindCount > 0;
               const unverified = r.m.members?.verification_status !== 'verified';
               return (
-                <View key={r.m.id} style={{ flexDirection: 'row', gap: 12, padding: 14, borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                <View key={r.m.id} style={[{ flexDirection: 'row', gap: 12, padding: 14, backgroundColor: semantic.surface, borderRadius: 16 }, shadowToken.card]}>
                   <View style={{ marginTop: 2 }}>
-                    <Avatar name={name(r.m)} uri={r.m.members?.avatar_url} size={40} />
-                    <View style={{ position: 'absolute', bottom: -2, right: -2, width: 15, height: 15, borderRadius: 8, backgroundColor: unverified ? intent.warning.base : intent.success.base, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: semantic.surface }}>
-                      {unverified ? <Text style={{ fontSize: 7.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>!</Text> : <Check size={7.5} color="#fff" strokeWidth={4} />}
-                    </View>
+                    <Avatar name={name(r.m)} uri={r.m.members?.avatar_url} size={44} />
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-                      <Text style={{ flex: 1, fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
+                      <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>
                         {name(r.m)}{r.m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
                       </Text>
-                      <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{r.m.heads} head{r.m.heads === 1 ? '' : 's'}</Text>
+                      <Text style={{ fontSize: 11, fontFamily: 'Poppins_500Medium', color: semantic.textMuted }}>{r.m.heads} head{r.m.heads === 1 ? '' : 's'}</Text>
                     </View>
 
                     {r.kinds.length > 0 ? (
@@ -250,25 +214,25 @@ export default function MemberBalances() {
                     ) : null}
 
                     {r.m.role !== 'member' || r.loanBalance > 0 || r.penaltyTotal > 0 || unverified ? (
-                      <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                      <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
                         {r.m.role !== 'member' ? (
-                          <View style={{ backgroundColor: semantic.dashCard, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#fff', textTransform: 'uppercase' }}>{ROLE_LABEL[r.m.role]}</Text>
+                          <View style={{ backgroundColor: semantic.dashCard, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+                            <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{ROLE_LABEL[r.m.role]}</Text>
                           </View>
                         ) : null}
                         {r.loanBalance > 0 ? (
-                          <View style={{ backgroundColor: intent.warning.soft, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text, textTransform: 'uppercase' }}>{formatPeso(r.loanBalance)} loan</Text>
+                          <View style={{ backgroundColor: intent.danger.soft, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+                            <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>{formatPeso(r.loanBalance)} loan</Text>
                           </View>
                         ) : null}
                         {r.penaltyTotal > 0 ? (
-                          <View style={{ backgroundColor: intent.danger.soft, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text, textTransform: 'uppercase' }}>{formatPeso(r.penaltyTotal)} penalty</Text>
+                          <View style={{ backgroundColor: intent.danger.soft, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+                            <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>{formatPeso(r.penaltyTotal)} penalty</Text>
                           </View>
                         ) : null}
                         {unverified ? (
-                          <View style={{ backgroundColor: intent.warning.soft, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-                            <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.warning.text, textTransform: 'uppercase' }}>Unverified</Text>
+                          <View style={{ backgroundColor: intent.warning.soft, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+                            <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>Unverified</Text>
                           </View>
                         ) : null}
                       </View>
@@ -289,7 +253,7 @@ export default function MemberBalances() {
                           <Text variant="caption" color="secondary" style={{ flex: 1 }}>
                             Capital{r.reviewCount > 0 ? ` · ${r.reviewCount} under review` : ''}
                           </Text>
-                          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.capital)}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(r.capital)}</Text>
                         </>
                       )}
                     </View>
@@ -303,18 +267,16 @@ export default function MemberBalances() {
         <Pressable
           onPress={onExport}
           disabled={exporting || rows.length === 0}
-          style={[{ marginTop: 18, backgroundColor: semantic.surface, borderRadius: 16, padding: 15, flexDirection: 'row', alignItems: 'center', gap: 12, opacity: exporting || rows.length === 0 ? 0.6 : 1 }, CARD_SHADOW]}
+          style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: semantic.border, opacity: exporting || rows.length === 0 ? 0.5 : 1 }}
         >
-          <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={17} color={semantic.brandDark} />}
-          </View>
-          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Export list (CSV)</Text>
+          {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={17} color={semantic.brandDark} />}
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Export list (CSV)</Text>
         </Pressable>
       </ScrollView>
 
       {behindRows.length > 0 ? (
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: semantic.background, borderTopWidth: 1, borderColor: semantic.border }}>
-          <Pressable onPress={onNudgeAll} disabled={nudge.loading} style={[{ backgroundColor: semantic.brandDark, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }, CARD_SHADOW]}>
+          <Pressable onPress={onNudgeAll} disabled={nudge.loading} style={[{ backgroundColor: semantic.brandDark, borderRadius: 14, paddingVertical: 14, alignItems: 'center' }, shadowToken.card]}>
             <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Nudge all behind · {behindRows.length}</Text>
           </Pressable>
         </View>

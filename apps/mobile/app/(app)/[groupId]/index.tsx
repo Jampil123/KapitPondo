@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Clock, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -78,6 +79,12 @@ export default function GroupDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [treasurerView, setTreasurerView] = useState<'officer' | 'member'>('officer');
   const [ownerView, setOwnerView] = useState<'officer' | 'member'>('officer');
+  // Which way the dashboard slides after a role switch — null until the first switch, so opening the page doesn't animate.
+  const [slide, setSlide] = useState<'left' | 'right' | null>(null);
+  const switchTo = (set: (v: 'officer' | 'member') => void) => (v: 'officer' | 'member') => {
+    setSlide(v === 'member' ? 'right' : 'left');
+    set(v);
+  };
   const [auditorView, setAuditorView] = useState<'officer' | 'member'>('officer');
 
   // Each dashboard's data hooks live inside its own component tree, so
@@ -146,6 +153,7 @@ export default function GroupDashboard() {
   }
 
   const officerView = role === 'owner' ? ownerView : role === 'treasurer' ? treasurerView : role === 'auditor' ? auditorView : 'member';
+  const slideIn = slide === 'right' ? FadeInRight.duration(260) : slide === 'left' ? FadeInLeft.duration(260) : undefined;
   const { Hero, Body } = officerView === 'officer' && role !== 'member'
     ? OFFICER_VIEWS[role]
     : { Hero: MemberHero, Body: MemberDashboard };
@@ -159,27 +167,33 @@ export default function GroupDashboard() {
           <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
           {role === 'treasurer' && (
             <View style={{ paddingBottom: 2 }}>
-              <RoleSwitch value={treasurerView} onChange={setTreasurerView} officerLabel="Treasurer" />
+              <RoleSwitch value={treasurerView} onChange={switchTo(setTreasurerView)} officerLabel="Treasurer" />
             </View>
           )}
           {role === 'owner' && (
             <View style={{ paddingBottom: 2 }}>
-              <RoleSwitch value={ownerView} onChange={setOwnerView} officerLabel="Owner" />
+              <RoleSwitch value={ownerView} onChange={switchTo(setOwnerView)} officerLabel="Organizer" />
             </View>
           )}
           {role === 'auditor' && (
             <View style={{ paddingBottom: 2 }}>
-              <RoleSwitch value={auditorView} onChange={setAuditorView} officerLabel="Auditor" />
+              <RoleSwitch value={auditorView} onChange={switchTo(setAuditorView)} officerLabel="Auditor" />
             </View>
           )}
         </>
       }
-      hero={<Hero key={refreshKey} groupId={groupId!} />}
-      foldHero={Hero === MemberHero}
+      hero={
+        <Animated.View key={`hero-${officerView}`} entering={slideIn}>
+          <Hero key={refreshKey} groupId={groupId!} />
+        </Animated.View>
+      }
+      foldHero={Hero === MemberHero || Hero === OwnerHero || Hero === TreasurerHero}
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
-      <Body key={refreshKey} groupId={groupId!} />
+      <Animated.View key={`body-${officerView}`} entering={slideIn}>
+        <Body key={refreshKey} groupId={groupId!} />
+      </Animated.View>
     </DashboardShell>
   );
 }

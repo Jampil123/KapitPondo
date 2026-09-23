@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Search, Check, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
@@ -79,8 +80,8 @@ export default function MembershipApprovals() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Membership Approvals" subtitle={`${rows.length} pending`} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Membership Approvals" />
 
       {loading ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>

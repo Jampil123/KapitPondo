@@ -82,7 +82,7 @@ router.post(
         action: 'verified', entityType: 'distribution', entityId: req.params.id,
         before: { status: 'previewed' }, after: { status: 'verified', period: distribution.period, total_amount: distribution.total_amount },
       });
-      res.json({ message: 'Distribution verified — awaiting Owner finalization', distribution: verified });
+      res.json({ message: 'Distribution verified — awaiting Organizer finalization', distribution: verified });
     } catch (err) { next(err); }
   }
 );

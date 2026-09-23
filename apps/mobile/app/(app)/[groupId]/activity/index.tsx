@@ -4,13 +4,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { PillFilters } from '@/components/shared/PillFilters';
+import { semantic } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLedger } from '@/features/reporting/reporting.hooks';
-import { ACTION_COPY } from '@/features/activity/entryCopy';
+import { ENTRY_LABEL } from '@/features/activity/entryCopy';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
+
+const CARD_SHADOW = {
+  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
+  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
+} as const;
 
 type Filter = 'all' | 'contribution' | 'loan' | 'penalty';
 
@@ -35,14 +41,17 @@ function shortDate(iso: string) {
 function ActivityRow({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
   const credit = e.direction === 'credit';
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
-  const copy = ACTION_COPY[e.entry_type] ?? (e.description ?? e.entry_type.replace(/_/g, ' '));
+  const copy = ENTRY_LABEL[e.entry_type] ?? (e.description ?? e.entry_type.replace(/_/g, ' '));
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', gap: 12, paddingVertical: 12, paddingHorizontal: 10 }}>
-      <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
+    <Pressable
+      onPress={onPress}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}
+    >
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={18} color={credit ? '#3E8E66' : '#C25C5E'} />
       </View>
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text variant="label" style={{ fontSize: 13 }}>{copy}</Text>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{copy}</Text>
         <Text variant="caption" color="secondary">
           {e.poster?.full_name ? `by ${e.poster.full_name} · ` : ''}{shortDate(e.posted_at)}
         </Text>
@@ -66,46 +75,25 @@ export default function ActivityFeed() {
   const filtered = useMemo(() => entries.filter((e) => matchesFilter(filter, e.entry_type)), [entries, filter]);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Activity" subtitle="Member" />
-      <View style={{ padding: 16, gap: 14, flex: 1 }}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-          {FILTERS.map((f) => {
-            const active = f.key === filter;
-            return (
-              <Text
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                variant="caption"
-                style={{
-                  paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
-                  backgroundColor: active ? semantic.dashCard : semantic.surface,
-                  borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border,
-                  color: active ? '#fff' : semantic.textSecondary,
-                  fontWeight: active ? '600' : '400',
-                  overflow: 'hidden',
-                }}
-              >
-                {f.label}
-              </Text>
-            );
-          })}
-        </View>
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Activity" />
+      <View style={{ padding: 16, gap: 10, flex: 1 }}>
+        <PillFilters<Filter> options={FILTERS} value={filter} onChange={setFilter} />
 
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />
         ) : filtered.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, shadowToken.card]}>
+          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
             <Text variant="body" color="muted">Nothing here yet.</Text>
           </View>
         ) : (
-          <ScrollView>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 6 }, shadowToken.card]}>
-              {filtered.map((e, i) => (
-                <View key={e.id} style={{ borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                  <ActivityRow e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id } })} />
-                </View>
-              ))}
+          <ScrollView showsVerticalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingTop: 4, paddingBottom: 24, paddingHorizontal: 4 }}>
+            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+            {filtered.map((e, i) => (
+              <View key={e.id} style={{ borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                <ActivityRow e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id } })} />
+              </View>
+            ))}
             </View>
           </ScrollView>
         )}

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Wallet, Banknote, Eye, CheckCircle2, AlertTriangle, X } from 'lucide-react-native';
@@ -7,7 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { TabBar } from '@/components/ui/TabBar';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { SlideSheet } from '@/components/shared/SlideSheet';
 import { semantic, shadowToken } from '@/theme/colors';
@@ -87,8 +88,8 @@ export default function LoanDecisions() {
   const list = tabList.data ?? [];
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Loan Decisions" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Loan Decisions" />
       <View style={{ flex: 1, padding: 16, gap: 14 }}>
         {/* Fund balance */}
         <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -141,7 +142,7 @@ export default function LoanDecisions() {
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 20, paddingVertical: 6, paddingHorizontal: 11, borderWidth: 1, borderColor: semantic.border }}
                   >
                     <Eye size={13} color={semantic.textSecondary} />
-                    <Text variant="caption" style={{ color: semantic.textSecondary, fontFamily: 'Poppins_700Bold' }}>View details</Text>
+                    <Text variant="caption" style={{ color: semantic.textSecondary, fontFamily: 'Poppins_500Medium' }}>View details</Text>
                   </Pressable>
                 </View>
                 {l.status === 'approved' ? (
@@ -173,7 +174,7 @@ export default function LoanDecisions() {
         )}
       </View>
 
-      {/* View details — what the Owner should review before deciding (TC-014/TC-034) */}
+      {/* View details — what the Organizer should review before deciding (TC-014/TC-034) */}
       <SlideSheet value={detailsTarget} onClose={() => setDetailsTarget(null)}>
         {(d) => (
           <>

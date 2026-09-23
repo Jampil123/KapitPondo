@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, TextInput, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { Camera, Banknote, Smartphone, Landmark, MoreHorizontal, AlertTriangle } from 'lucide-react-native';
+import { Camera, Banknote, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { AppBar } from '@/components/shared/AppBar';
+import { CloseHeader } from '@/features/payments/PaymentPage';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
@@ -28,24 +29,6 @@ const METHODS: { key: PaymentMethod; icon: any; tileLabel: string; refLabel: str
     refLabel: 'Receipt or slip number', ph: 'e.g. slip 041',
     dropTitle: 'Photo of the signed slip', dropSub: 'A slip the member signed, or a photo of the handover',
     required: false, warn: true,
-  },
-  {
-    key: 'gcash', icon: Smartphone, tileLabel: 'GCash',
-    refLabel: 'Reference number', ph: 'e.g. 8027 4451 9032',
-    dropTitle: 'Attach the receipt', dropSub: 'A screenshot showing the amount, reference number and date',
-    required: true, warn: false,
-  },
-  {
-    key: 'bank_transfer', icon: Landmark, tileLabel: 'Bank',
-    refLabel: 'Transaction reference', ph: 'e.g. TRX-88213004',
-    dropTitle: 'Attach the deposit slip', dropSub: 'A photo or screenshot showing amount, date and reference',
-    required: true, warn: false,
-  },
-  {
-    key: 'other', icon: MoreHorizontal, tileLabel: 'Other',
-    refLabel: 'Describe how it was received', ph: 'e.g. remittance through a relative',
-    dropTitle: 'Attach whatever proof exists', dropSub: 'A photo, screenshot or written acknowledgment',
-    required: true, warn: true,
   },
 ];
 
@@ -70,7 +53,7 @@ export default function RecordPayment() {
   const { member } = useAuth();
   const { role } = useActiveGroup();
   // Backend rule (migration 0062): a Treasurer's entry must be confirmed by the Owner.
-  const confirmer = role === 'treasurer' ? 'the Owner' : 'another officer';
+  const confirmer = role === 'treasurer' ? 'the Organizer' : 'another officer';
 
   const { cycle } = useActiveCycle(groupId!);
   const membersQ = useQuery(() => listMembers(groupId!), [groupId]);
@@ -89,7 +72,8 @@ export default function RecordPayment() {
   const expected = nextEntry?.amount ?? 0;
 
   const [amount, setAmount] = useState('');
-  const [method, setMethod] = useState<PaymentMethod>('gcash');
+  // Walk-in payments are almost always cash, so there's no method picker.
+  const method: PaymentMethod = 'cash';
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -151,8 +135,8 @@ export default function RecordPayment() {
     : `Goes to ${confirmer} for confirmation`;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Record a payment" subtitle="For money received outside the app" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
+      <CloseHeader title="Record a payment" onClose={() => router.back()} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled">
 
         {!target || !cycle || membersQ.loading ? (
@@ -215,20 +199,8 @@ export default function RecordPayment() {
 
             {/* ---------------- How it was received ---------------- */}
             <View>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>How it was received</Text>
+              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Cash receipt</Text>
               <View style={[cardStyle, { padding: 13, gap: 13 }]}>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  {METHODS.map((m) => {
-                    const active = method === m.key;
-                    return (
-                      <Pressable key={m.key} onPress={() => { setMethod(m.key); setReference(''); }} style={{ flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 14, backgroundColor: active ? semantic.surface : semantic.surfaceAlt, borderWidth: 1.5, borderColor: active ? semantic.brandDark : 'transparent' }}>
-                        <m.icon size={19} color={active ? semantic.brandDark : semantic.textSecondary} strokeWidth={1.8} />
-                        <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: active ? semantic.dashCard : semantic.textSecondary, marginTop: 6 }}>{m.tileLabel}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-
                 <View>
                   <Text variant="overline" color="secondary" style={{ marginBottom: 6 }}>
                     {methodCfg.refLabel}{methodCfg.required ? <Text style={{ color: intent.danger.text }}> *</Text> : null}
@@ -257,9 +229,6 @@ export default function RecordPayment() {
             </View>
 
             {/* ---------------- Notices ---------------- */}
-            {methodCfg.warn ? (
-              <Notice tone="danger" title={method === 'cash' ? 'Cash has no external record' : 'No reference number for this entry'} body="Attach a photo of a signed slip or write down how it was received — without something, this posting rests on your word alone." />
-            ) : null}
 
             <Button label="Record payment" onPress={onSubmit} loading={saving} disabled={disabled} />
             <Text variant="caption" color="secondary" style={{ textAlign: 'center', marginTop: -8 }}>{barNote}</Text>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput, Alert } from 'react-native';
+import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, TextInput } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { RefreshCw, CheckCircle2 } from 'lucide-react-native';

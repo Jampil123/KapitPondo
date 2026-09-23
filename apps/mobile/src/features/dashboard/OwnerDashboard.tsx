@@ -1,16 +1,18 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, Alert, Image, Modal, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, Image, Modal, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { useRouter } from 'expo-router';
 import { useQuery, useAction } from '@/hooks/useApi';
 import {
   Users, AlertTriangle, SlidersHorizontal, CalendarClock,
-  Wallet, ScrollText, Receipt, CheckCircle2, Check, X, ArrowUpRight, ArrowDownRight,
+  Wallet, ScrollText, Receipt, CheckCircle2, Check, X, Clock3,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent, steel } from '@/theme/colors';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 
 
 const SOFT_SHADOW = {
@@ -19,11 +21,13 @@ const SOFT_SHADOW = {
 } as const;
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
-import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
+import { useSummary } from '@/features/reporting/reporting.hooks';
 import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
+import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
+import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
 import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
 import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
 import { listPendingMembers, listMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
@@ -81,18 +85,18 @@ function FundCard({ groupId }: { groupId: string }) {
       <View style={[glassPanel, { padding: 12, marginTop: 12 }]}>
         <View style={{ flexDirection: 'row', height: 7, borderRadius: 4, overflow: 'hidden', marginBottom: 10, backgroundColor: semantic.surfaceAlt }}>
           <View style={{ width: (cashPct + '%') as any, backgroundColor: steel[400] }} />
-          <View style={{ width: (lentPct + '%') as any, backgroundColor: '#E4A33C' }} />
+          <View style={{ width: (lentPct + '%') as any, backgroundColor: intent.danger.base }} />
         </View>
         <View style={{ gap: 4 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: steel[400] }} />
-            <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Cash on hand</Text>
-            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
+            <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>Cash on hand</Text>
+            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{formatPeso(cash)}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: '#E4A33C' }} />
-            <Text style={{ fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Out on loan</Text>
-            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
+            <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: intent.danger.base }} />
+            <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>Out on loan</Text>
+            <Text style={{ marginLeft: 'auto', fontSize: 12.5, lineHeight: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{formatPeso(onLoan)}</Text>
           </View>
         </View>
       </View>
@@ -104,8 +108,8 @@ function FundCard({ groupId }: { groupId: string }) {
 function Chip({ tone, children }: { tone: 'pass' | 'fail' | 'warn'; children: ReactNode }) {
   const t = tone === 'pass' ? intent.success : tone === 'fail' ? intent.danger : intent.warning;
   return (
-    <View style={{ backgroundColor: t.soft, paddingHorizontal: 8, paddingVertical: 4.5, borderRadius: 8 }}>
-      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{children}</Text>
+    <View style={{ backgroundColor: t.soft, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: t.text }}>{children}</Text>
     </View>
   );
 }
@@ -113,7 +117,8 @@ function Chip({ tone, children }: { tone: 'pass' | 'fail' | 'warn'; children: Re
 // Small, corner-anchored — a quick decision without leaving the dashboard.
 // Sits at the bottom-right of each DecisionCard, below the rest of its content.
 function QuickAction({ label, tone, Icon, onPress, disabled }: { label: string; tone: 'ok' | 'danger'; Icon: any; onPress: () => void; disabled?: boolean }) {
-  const t = tone === 'ok' ? intent.success : intent.danger;
+  // Approve uses the app's primary button color; reject stays a soft red.
+  const t = tone === 'ok' ? { soft: semantic.brandDark, text: '#fff' } : intent.danger;
   return (
     <Pressable
       onPress={onPress}
@@ -122,7 +127,7 @@ function QuickAction({ label, tone, Icon, onPress, disabled }: { label: string; 
       style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.soft, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 11, opacity: disabled ? 0.5 : 1 }}
     >
       <Icon size={12} color={t.text} strokeWidth={2.6} />
-      <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
+      <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: t.text }}>{label}</Text>
     </Pressable>
   );
 }
@@ -140,7 +145,7 @@ function DecisionHead({ type, name, sub, amount }: { type: string; name: string;
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
       <View style={{ flex: 1 }}>
         <Text variant="overline" color="muted">{type}</Text>
-        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4 }}>{name}</Text>
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, marginTop: 4 }}>{name}</Text>
         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{sub}</Text>
       </View>
       {amount ? <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{amount}</Text> : null}
@@ -199,7 +204,7 @@ function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { gr
         amount={formatPeso(loan.principal)}
       />
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{ flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
           {loading ? (
             <ActivityIndicator size="small" color={semantic.brand} />
           ) : elig ? (
@@ -493,7 +498,7 @@ function EmptyQueue({ decidedCount }: { decidedCount: number }) {
         <CheckCircle2 size={18} color={intent.success.text} />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Nothing waiting on you</Text>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>Nothing waiting on you</Text>
         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
           {decidedCount > 0 ? `${decidedCount} decision${decidedCount === 1 ? '' : 's'} made this cycle` : 'New requests will show up here'}
         </Text>
@@ -817,7 +822,7 @@ function ManageRow({ go }: { go: (r: string) => void }) {
             onPress={() => go(a.key)}
             style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, SOFT_SHADOW]}
           >
-            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
+            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
           </Pressable>
         ))}
@@ -835,44 +840,49 @@ function ManageRow({ go }: { go: (r: string) => void }) {
   );
 }
 
-/* ---------------- Recent transactions — group-wide, real ledger feed ---------------- */
-function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
-  return e.membership?.members?.full_name ?? null;
-}
+/* ---------------- Activity — what officers decided (audit log), not money movements ---------------- */
+const ACTIVITY_TONE: Record<string, { bg: string; fg: string }> = {
+  good: { bg: intent.success.soft, fg: intent.success.text },
+  bad: { bg: intent.danger.soft, fg: intent.danger.text },
+  neutral: { bg: semantic.surfaceAlt, fg: semantic.brandDark },
+};
 
-function RecentTransactions({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const ledger = useLedger(groupId, { limit: 5 });
-  const entries = ledger.data ?? [];
+function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => void }) {
+  const router = useRouter();
+  const log = useAuditLog(groupId, { limit: 5 });
+  const entries = log.data ?? [];
 
   return (
     <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: entries.length ? 6 : 20 }, SOFT_SHADOW]}>
-      {ledger.loading ? (
+      {log.loading && !log.data ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No transactions yet.</Text>
+        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No activity yet.</Text>
       ) : (
         <>
           {entries.map((e, i) => {
-            const credit = e.direction === 'credit';
-            const Icon = credit ? ArrowDownRight : ArrowUpRight;
-            const name = contributorName(e);
+            const d = describe(e);
+            const tone = ACTIVITY_TONE[d.toBad ? 'bad' : d.toGood ? 'good' : 'neutral'];
+            const Icon = d.toBad ? X : d.toGood ? Check : Clock3;
+            const who = e.actor?.full_name ? `${e.actor.full_name}${e.actor_role ? ` (${ROLE_LABEL[e.actor_role] ?? e.actor_role})` : ''}` : null;
             return (
-              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
+              <Pressable
+                key={e.id}
+                onPress={() => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}
+              >
+                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={16} color={tone.fg} strokeWidth={2.4} />
                 </View>
                 <View style={{ flex: 1, gap: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13 }}>{name ? `${e.entry_type.replace(/_/g, ' ')} · ${name}` : e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                  <Text variant="caption" color="secondary">{shortDate(e.posted_at)}</Text>
+                  <Text variant="label" style={{ fontSize: 13 }}>{d.title}</Text>
+                  <Text variant="caption" color="secondary">{who ? `${who} · ` : ''}{shortDate(e.created_at)}</Text>
                 </View>
-                <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? intent.success.text : semantic.textPrimary }}>
-                  {credit ? '+' : '-'}{formatPeso(e.amount)}
-                </Text>
-              </View>
+              </Pressable>
             );
           })}
-          <Pressable onPress={() => go('reports/my-transactions')} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
-            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See all transactions</Text>
+          <Pressable onPress={() => go('owner-activity')} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
+            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See all activity</Text>
           </Pressable>
         </>
       )}
@@ -883,7 +893,9 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (r: string) 
 export function OwnerHero({ groupId }: { groupId: string }) {
   return (
     <DashboardBand>
-      <FundCard groupId={groupId} />
+      <FoldTarget>
+        <FundCard groupId={groupId} />
+      </FoldTarget>
     </DashboardBand>
   );
 }
@@ -902,8 +914,8 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <ManageRow go={go} />
 
-      <SectionHead title="Recent transactions" />
-      <RecentTransactions groupId={groupId} go={go} />
+      <SectionHead title="Activity" />
+      <RecentActivity groupId={groupId} go={go} />
     </>
   );
 }

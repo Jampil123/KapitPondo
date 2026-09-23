@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Camera, Check, AlertTriangle, Copy, QrCode as QrCodeIcon, Hash } from 'lucide-react-native';

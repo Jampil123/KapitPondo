@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Alert } from 'react-native';
+import { View, ScrollView } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Wallet } from 'lucide-react-native';
@@ -116,7 +117,7 @@ export default function RequestLoan() {
             </View>
             {overCapacity ? (
               <Text variant="caption" style={{ color: intent.warning.text, marginTop: 4 }}>
-                This is more than the fund currently has on hand — the Owner may need to approve a smaller amount.
+                This is more than the fund currently has on hand — the Organizer may need to approve a smaller amount.
               </Text>
             ) : null}
           </View>
@@ -128,7 +129,7 @@ export default function RequestLoan() {
         <SectionHead title="Loan terms" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 14, overflow: 'hidden' }, CARD_SHADOW]}>
           <TermRow k="Principal / month" v={formatPeso(perMonth)} />
-          <TermRow k="Interest rate" v={hasCycleRate ? `${ratePct!.toFixed(2)}% / month` : 'Set by the Owner at approval'} muted={!hasCycleRate} />
+          <TermRow k="Interest rate" v={hasCycleRate ? `${ratePct!.toFixed(2)}% / month` : 'Set by the Organizer at approval'} muted={!hasCycleRate} />
           <TermRow k="Est. interest (month 1)" v={amortization ? formatPeso(amortization.firstMonthInterest) : '—'} muted={!amortization} />
           <TermRow k="Est. total repayable" v={amortization ? formatPeso(amortization.totalRepayable) : 'Depends on approved rate'} muted={!amortization} />
         </View>

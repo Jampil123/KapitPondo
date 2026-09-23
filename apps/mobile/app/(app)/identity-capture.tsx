@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';

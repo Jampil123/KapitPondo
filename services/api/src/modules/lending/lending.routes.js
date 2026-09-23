@@ -161,10 +161,10 @@ router.post(
       }
       const borrowerIsOwner = loan.membership?.role === 'owner';
       if (borrowerIsOwner && req.membership.role !== 'treasurer') {
-        return res.status(403).json({ error: 'The Owner cannot approve their own loan — the Treasurer reviews it instead' });
+        return res.status(403).json({ error: 'The Organizer cannot approve their own loan — the Treasurer reviews it instead' });
       }
       if (!borrowerIsOwner && req.membership.role !== 'owner') {
-        return res.status(403).json({ error: 'Only the Owner can decide on this loan' });
+        return res.status(403).json({ error: 'Only the Organizer can decide on this loan' });
       }
       const approvedLoan = await service.approveLoan({
         loanId: req.params.id,
@@ -238,10 +238,10 @@ router.post(
       }
       const borrowerIsOwner = target.membership?.role === 'owner';
       if (borrowerIsOwner && req.membership.role !== 'treasurer') {
-        return res.status(403).json({ error: 'The Owner cannot decide on their own loan — the Treasurer reviews it instead' });
+        return res.status(403).json({ error: 'The Organizer cannot decide on their own loan — the Treasurer reviews it instead' });
       }
       if (!borrowerIsOwner && req.membership.role !== 'owner') {
-        return res.status(403).json({ error: 'Only the Owner can decide on this loan' });
+        return res.status(403).json({ error: 'Only the Organizer can decide on this loan' });
       }
       const loan = await service.rejectLoan(req.params.id, req.body?.reason);
       await logAudit({

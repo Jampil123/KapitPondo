@@ -1,17 +1,20 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight, FileDown } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownRight, FileDown, Repeat, AlertTriangle, PiggyBank } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { semantic, intent } from '@/theme/colors';
+import { FilterTabs } from '@/components/shared/FilterTabs';
+import { GrowthChart, MONTH_SHORT } from '@/components/shared/GrowthChart';
+import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { buildTimeline, type PeriodKind } from '@/features/contributions/periods';
+import { buildTimeline } from '@/features/contributions/periods';
 import { useMyBalance, useFundSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useLoans } from '@/features/lending/lending.hooks';
 import { useMyPenalties } from '@/features/penalties/penalties.hooks';
@@ -30,46 +33,32 @@ function shortDate(iso: string | null | undefined) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-// Always the calendar month's own initial (J, F, M, ...) regardless of the
-// cycle's frequency — periodLabel() returns different text per frequency
-// (e.g. "Week of ..." for weekly, "Q1 2026" for quarterly), so slicing ITS
-// first character gave "W" or "Q" instead of a month letter for anything
-// other than a monthly cycle.
-const MONTH_INITIAL = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-function monthInitial(d: Date): string {
-  return MONTH_INITIAL[d.getMonth()];
-}
-
-function SectionHead({ title, aside }: { title: string; aside?: string }) {
+function GroupLabel({ title, aside }: { title: string; aside?: string }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 20, marginBottom: 9 }}>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
-      {aside ? <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{aside}</Text> : null}
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 20, marginBottom: 9, marginHorizontal: 2 }}>
+      <Text variant="overline" color="muted" style={{ letterSpacing: 0.8 }}>{title}</Text>
+      {aside ? <Text variant="caption" color="muted">{aside}</Text> : null}
     </View>
   );
 }
 
-function Split({ items }: { items: { k: string; v: string }[] }) {
+function BreakdownRow({ Icon, tone, title, sub, value, valueColor, last }: {
+  Icon: any; tone: IntentName; title: string; sub: string; value: string; valueColor?: string; last?: boolean;
+}) {
+  const t = intent[tone];
   return (
-    <View style={{ flexDirection: 'row', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-      {items.map((it, i) => (
-        <View key={it.k} style={{ flex: 1, paddingLeft: i > 0 ? 14 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: semantic.border }}>
-          <Text variant="overline" color="muted">{it.k}</Text>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }}>{it.v}</Text>
-        </View>
-      ))}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: t.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={17} color={t.text} strokeWidth={2.2} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{title}</Text>
+        <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>{sub}</Text>
+      </View>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: valueColor ?? semantic.textPrimary }}>{value}</Text>
     </View>
   );
 }
-
-const KIND_TONE: Record<PeriodKind, string> = {
-  paid: intent.success.base,
-  review: intent.info.base,
-  rejected: intent.danger.base,
-  late: intent.danger.base,
-  due: semantic.surfaceAlt,
-  upcoming: semantic.surfaceAlt,
-};
 
 const ACTION_COPY: Partial<Record<LedgerEntryType, string>> = {
   contribution: 'Monthly contribution',
@@ -90,12 +79,12 @@ function StatementRow({ e }: { e: LedgerEntry }) {
         <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{copy}</Text>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{copy}</Text>
         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
           {shortDate(e.posted_at)}{e.poster?.full_name ? ` · verified by ${e.poster.full_name}` : ''}
         </Text>
       </View>
-      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
+      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
         {credit ? '+' : '−'}{formatPeso(e.amount)}
       </Text>
     </View>
@@ -118,44 +107,66 @@ export default function Reports() {
     [contribs.data, membership?.id],
   );
   const timeline = useMemo(() => (cycle ? buildTimeline(cycle, myContribRows, heads) : []), [cycle, myContribRows, heads]);
-  const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
 
-  const posted = timeline.filter((p) => p.kind === 'paid');
-  const awaiting = timeline.filter((p) => p.kind === 'review');
-  const owed = timeline.filter((p) => p.kind !== 'paid' && p.kind !== 'review');
-  const postedTotal = posted.reduce((s, p) => s + p.amount, 0);
-  const awaitingTotal = awaiting.reduce((s, p) => s + p.amount, 0);
-  // A rejected period still has a row (buildTimeline keeps its own claimed
-  // amount on p.amount so the period-by-period bar can show what was actually
-  // submitted), but "still owed" needs to mean the real cycle rate, not
-  // whatever the rejected/mistaken attempt happened to say — otherwise a
-  // returned proof with a wrong or partial figure shows as owing that same
-  // wrong figure instead of the real amount due for the period.
-  const owedTotal = owed.length * expected;
-  const committedTotal = postedTotal + awaitingTotal + owedTotal;
+  const postedCount = timeline.filter((p) => p.kind === 'paid').length;
+  const postedTotal = timeline.filter((p) => p.kind === 'paid').reduce((s, p) => s + p.amount, 0);
 
   const balAll = useMyBalance(groupId!);
-  const capitalAllTime = Number(balAll.data?.contributions ?? 0);
-  const capital = period === 'cycle' ? postedTotal : capitalAllTime;
+  const capital = period === 'cycle' ? postedTotal : Number(balAll.data?.contributions ?? 0);
 
   const ledger = useLedger(groupId!, { membership_id: membership?.id });
   const entries = useMemo(() => {
     const mine = (ledger.data ?? []).filter((e) => e.membership_id === membership?.id);
-    return period === 'cycle' && cycle ? mine.filter((e) => e.cycle_id === cycle.id) : mine;
+    if (period !== 'cycle' || !cycle) return mine;
+    // Loan disbursements/repayments are posted without a cycle_id, so fall back to the posting date for those.
+    const start = new Date(cycle.start_date).getTime();
+    const end = cycle.end_date ? new Date(cycle.end_date).getTime() + 86400000 : Infinity;
+    return mine.filter((e) => {
+      if (e.cycle_id) return e.cycle_id === cycle.id;
+      const t = new Date(e.posted_at).getTime();
+      return t >= start && t < end;
+    });
   }, [ledger.data, membership?.id, period, cycle]);
 
+  const growth = useMemo(() => {
+    const contribs = entries.filter((e) => e.entry_type === 'contribution');
+    const first = period === 'cycle' && cycle
+      ? new Date(cycle.start_date)
+      : contribs.reduce<Date | null>((d, e) => { const t = new Date(e.posted_at); return !d || t < d ? t : d; }, null);
+    if (!first) return [];
+    const now = new Date();
+    const months: { key: number; label: string; value: number }[] = [];
+    for (let d = new Date(first.getFullYear(), first.getMonth(), 1); d <= now && months.length < 24; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+      months.push({ key: d.getFullYear() * 12 + d.getMonth(), label: MONTH_SHORT[d.getMonth()], value: 0 });
+    }
+    for (const e of contribs) {
+      const t = new Date(e.posted_at);
+      const m = months.find((x) => x.key === t.getFullYear() * 12 + t.getMonth());
+      if (m) m.value += Number(e.amount);
+    }
+    const thisMonth = months[months.length - 1]?.value ?? 0;
+    let run = 0;
+    return months.map((m) => ({ label: m.label, value: (run += m.value), thisMonth }));
+  }, [entries, period, cycle]);
+  const addedThisMonth = growth[growth.length - 1]?.thisMonth ?? 0;
+
+  // Straight from the loan itself, not the ledger — same math as the Loans page.
   const loans = useLoans(groupId!, {});
-  const outstandingLoan = (loans.data ?? [])
-    .filter((l) => l.membership_id === membership?.id && l.status === 'active')
-    .reduce((s, l) => s + Number(l.outstanding_balance), 0);
+  const activeLoans = (loans.data ?? []).filter((l) => l.membership_id === membership?.id && l.status === 'active');
+  const outstandingLoan = activeLoans.reduce((s, l) => s + Number(l.outstanding_balance), 0);
+  const borrowed = activeLoans.reduce((s, l) => s + Number(l.approved_principal ?? l.principal), 0);
+  const repaid = Math.max(0, borrowed - outstandingLoan);
 
   const penalties = useMyPenalties(groupId!, 'pending');
   const unsettledPenalty = (penalties.data ?? []).reduce((s, p) => s + Number(p.amount), 0);
 
   const fund = useFundSummary(groupId!);
   const totalHeads = Number(fund.data?.total_heads ?? 0);
-  const availableCash = Number(fund.data?.available_cash ?? 0);
-  const myShareEstimate = totalHeads > 0 ? availableCash * (heads / totalHeads) : 0;
+  // Whole fund = cash on hand + money out on loan (same total as the dashboard), split per head, times my heads.
+  const cash = Number(fund.data?.available_cash ?? 0);
+  const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
+  const perHead = totalHeads > 0 ? (cash + onLoan) / totalHeads : 0;
+  const myShareEstimate = perHead * heads;
 
   async function onExport() {
     setExporting(true);
@@ -173,149 +184,74 @@ export default function Reports() {
     }
   }
 
-  const loading = contribs.loading || balAll.loading || ledger.loading;
+  const loading = contribs.loading || balAll.loading;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="My reports" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
-        {/* ---------------- Summary ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, CARD_SHADOW]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>My money in the fund</Text>
-            <View style={{ backgroundColor: semantic.surfaceAlt, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
-              <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>{period === 'cycle' ? (cycle?.name ?? 'This cycle') : 'All time'}</Text>
-            </View>
-          </View>
-          {loading ? (
-            <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 8 }} />
-          ) : (
-            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(capital)}</Text>
-          )}
-          <Split items={
-            period === 'cycle'
-              ? [{ k: 'Periods posted', v: `${posted.length} of ${timeline.length || '—'}` }, { k: 'My heads', v: String(heads) }]
-              : [{ k: 'My heads', v: String(heads) }]
-          } />
-        </View>
-
         {/* ---------------- Period toggle ---------------- */}
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
-          {(['cycle', 'all'] as Period[]).map((p) => {
-            const active = period === p;
-            return (
-              <Pressable key={p} onPress={() => setPeriod(p)} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>
-                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{p === 'cycle' ? 'This cycle' : 'All time'}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <FilterTabs<Period>
+          options={[{ key: 'cycle', label: 'This cycle' }, { key: 'all', label: 'All time' }]}
+          value={period}
+          onChange={setPeriod}
+        />
 
-        {/* ---------------- Where my money sits ---------------- */}
-        {cycle && timeline.length > 0 ? (
-          <>
-            <SectionHead title="Where my money sits" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              <View style={{ flexDirection: 'row', height: 11, borderRadius: 6, overflow: 'hidden', marginBottom: 14 }}>
-                {postedTotal > 0 ? <View style={{ width: `${(postedTotal / committedTotal) * 100}%`, backgroundColor: intent.success.base }} /> : null}
-                {awaitingTotal > 0 ? <View style={{ width: `${(awaitingTotal / committedTotal) * 100}%`, backgroundColor: intent.info.base }} /> : null}
-                {owedTotal > 0 ? <View style={{ width: `${(owedTotal / committedTotal) * 100}%`, backgroundColor: semantic.surfaceAlt }} /> : null}
-              </View>
-              <View style={{ gap: 10 }}>
-                {[
-                  { color: intent.success.base, label: 'Posted to the ledger', v: postedTotal },
-                  { color: intent.info.base, label: 'Waiting to be verified', v: awaitingTotal },
-                  { color: semantic.textMuted, label: 'Still owed this cycle', v: owedTotal },
-                ].map((row) => (
-                  <View key={row.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                    <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: row.color }} />
-                    <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{row.label}</Text>
-                    <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(row.v)}</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={{ flexDirection: 'row', marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border }}>
-                <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_700Bold' }}>Committed this cycle</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(committedTotal)}</Text>
-              </View>
+        {/* ---------------- Contributed + growth chart ---------------- */}
+        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, marginTop: 14 }, CARD_SHADOW]}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <View>
+              <Text variant="overline" color="muted">Contributed</Text>
+              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8, marginTop: 2 }}>
+                {loading ? '…' : formatPeso(capital)}
+              </Text>
             </View>
-
-            {/* ---------------- Month by month ---------------- */}
-            <SectionHead title="Period by period" aside={`${formatPeso(cycle.contribution_amount)} × ${heads} expected`} />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              {/* Bars and labels are separate rows, each with their own fixed height —
-                  a bar at 100% filling one shared 90px box with its label stacked on
-                  top of it (via gap) has no room left for the label and overflows. */}
-              <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 5, height: 70 }}>
-                {timeline.map((p) => {
-                  // Resolved (paid/review) reads tallest. Late/rejected needs
-                  // attention, so it's raised ABOVE plain due/upcoming, not
-                  // buried under it — a returned proof shouldn't look less
-                  // significant on the chart than a period that isn't due yet.
-                  const heightPct =
-                    p.kind === 'paid' || p.kind === 'review' ? 100 :
-                    p.kind === 'late' || p.kind === 'rejected' ? 55 :
-                    p.kind === 'due' ? 30 : 15;
-                  return (
-                    <View key={p.index} style={{ flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                      <View style={{ width: '100%', height: `${heightPct}%`, minHeight: 4, borderRadius: 3, backgroundColor: KIND_TONE[p.kind] }} />
-                    </View>
-                  );
-                })}
+            {addedThisMonth > 0 ? (
+              <View style={{ backgroundColor: intent.success.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20, marginTop: 2 }}>
+                <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: intent.success.text }}>+{formatPeso(addedThisMonth)} this month</Text>
               </View>
-              <View style={{ flexDirection: 'row', gap: 5, marginTop: 6 }}>
-                {timeline.map((p, i) => {
-                  // Weekly/biweekly cycles have several bars per month — label
-                  // only the first so it reads O, N, D rather than O O O O N N.
-                  const newMonth = i === 0 || p.periodStart.getMonth() !== timeline[i - 1].periodStart.getMonth();
-                  return (
-                    <View key={p.index} style={{ flex: 1, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 8.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>
-                        {newMonth ? monthInitial(p.periodStart) : ''}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </View>
-          </>
-        ) : null}
-
-        {/* ---------------- If the cycle closed today ---------------- */}
-        <SectionHead title="If the cycle closed today" aside="Estimate" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-          <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-            <Text variant="body" color="secondary" style={{ fontSize: 12.5 }}>Your estimated share · {heads} of {totalHeads || '—'} heads</Text>
-            <Text style={{ marginLeft: 'auto', fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.dashCard, letterSpacing: -0.4 }}>{formatPeso(myShareEstimate)}</Text>
+            ) : null}
           </View>
-
-          {outstandingLoan > 0 || unsettledPenalty > 0 ? (
-            <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderColor: semantic.border, gap: 8 }}>
-              {outstandingLoan > 0 ? (
-                <View style={{ flexDirection: 'row' }}>
-                  <Text variant="caption" color="secondary">Loan still outstanding</Text>
-                  <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{formatPeso(outstandingLoan)}</Text>
-                </View>
-              ) : null}
-              {unsettledPenalty > 0 ? (
-                <View style={{ flexDirection: 'row' }}>
-                  <Text variant="caption" color="secondary">Unsettled penalty</Text>
-                  <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{formatPeso(unsettledPenalty)}</Text>
-                </View>
-              ) : null}
+          <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
+            {heads} head{heads === 1 ? '' : 's'}
+            {period === 'cycle' && timeline.length > 0 ? ` · ${postedCount} of ${timeline.length} periods posted` : ''}
+          </Text>
+          {growth.length > 0 ? (
+            <View style={{ marginTop: 14 }}>
+              <GrowthChart points={growth} />
             </View>
           ) : null}
+        </View>
 
-          <View style={{ marginTop: 12, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
-            <Text variant="caption" style={{ color: intent.warning.text, lineHeight: 17 }}>
-              Estimate only — it moves with the fund and isn't final until the Owner distributes.
-            </Text>
-          </View>
+        {/* ---------------- Loans, penalties, share ---------------- */}
+        <GroupLabel title="Breakdown" />
+        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+          <BreakdownRow
+            Icon={Repeat} tone={outstandingLoan > 0 ? 'danger' : 'neutral'}
+            title="Loan still owed"
+            sub={activeLoans.length > 0 ? `Borrowed ${formatPeso(borrowed)} · repaid ${formatPeso(repaid)}` : 'No active loan'}
+            value={formatPeso(outstandingLoan)}
+            valueColor={outstandingLoan > 0 ? intent.danger.text : semantic.textMuted}
+          />
+          <BreakdownRow
+            Icon={AlertTriangle} tone={unsettledPenalty > 0 ? 'danger' : 'neutral'}
+            title="Unsettled penalties"
+            sub={unsettledPenalty > 0 ? `${penalties.data?.length ?? 0} pending` : 'None'}
+            value={formatPeso(unsettledPenalty)}
+            valueColor={unsettledPenalty > 0 ? intent.danger.text : semantic.textMuted}
+          />
+          <BreakdownRow
+            Icon={PiggyBank} tone="success"
+            title="Estimated share"
+            sub={`${formatPeso(perHead)} per head × ${heads} head${heads === 1 ? '' : 's'}`}
+            value={formatPeso(myShareEstimate)}
+            last
+          />
         </View>
 
         {/* ---------------- My statement ---------------- */}
-        <SectionHead title="My statement"/>
+        <GroupLabel title="My statement" aside={entries.length ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : undefined} />
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 10 }} />
         ) : entries.length === 0 ? (
@@ -326,7 +262,7 @@ export default function Reports() {
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
             {entries.slice(0, 4).map((e) => <StatementRow key={e.id} e={e} />)}
             <Pressable onPress={() => router.push({ pathname: '/(app)/[groupId]/activity' as any, params: { groupId } })} style={{ paddingVertical: 13, alignItems: 'center' }}>
-              <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>
+              <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>
                 {entries.length > 4 ? `See all ${entries.length} entries` : 'See full activity'}
               </Text>
             </Pressable>
@@ -334,19 +270,13 @@ export default function Reports() {
         )}
 
         {/* ---------------- Export ---------------- */}
-        <SectionHead title="Download" />
         <Pressable
           onPress={onExport}
           disabled={exporting || entries.length === 0}
-          style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 13, opacity: exporting || entries.length === 0 ? 0.6 : 1 }, CARD_SHADOW]}
+          style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: semantic.border, opacity: exporting || entries.length === 0 ? 0.5 : 1 }}
         >
-          <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={20} color={semantic.brandDark} />}
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Statement CSV</Text>
-            <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{period === 'cycle' ? 'This cycle' : 'All time'} · {entries.length} entr{entries.length === 1 ? 'y' : 'ies'}, ready to open in Excel or Sheets</Text>
-          </View>
+          {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={17} color={semantic.brandDark} />}
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Download statement (CSV)</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

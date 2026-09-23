@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, Modal, Platform, Alert } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, Modal, Platform } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -7,15 +8,14 @@ import { Calendar } from 'lucide-react-native';
 import { DateTimePicker } from '@expo/ui/community/datetime-picker';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { toAmountString, formatPeso } from '@/lib/money';
 import { useQuery } from '@/hooks/useApi';
 import { listDistributions } from '@/api/distribution';
 import { selectActiveCycle } from '@/api/cycles';
-import { useCycles, useCycleProgress, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
-import { useFundSummary } from '@/features/reporting/reporting.hooks';
+import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
 
 function Label({ children }: { children: string }) {
   return <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 4 }}>{children}</Text>;
@@ -38,16 +38,6 @@ function formatDisplayDate(value: string): string {
   const d = parseIsoDate(value);
   return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
 }
-function countMonthlyPeriods(startValue: string, endValue: string): number {
-  const start = parseIsoDate(startValue);
-  const end = parseIsoDate(endValue);
-  if (!start || !end || end <= start) return 0;
-  const months = (end.getFullYear() - start.getFullYear()) * 12
-    + (end.getMonth() - start.getMonth())
-    + (end.getDate() >= start.getDate() ? 1 : 0);
-  return Math.max(1, months);
-}
-
 function DateInput({ label, value, onChange, minimumDate }: {
   label: string;
   value: string;
@@ -142,15 +132,12 @@ export default function ConfigureCycle() {
   const create = useCreateCycle(groupId!);
   const activate = useActivateCycle(groupId!);
   const close = useCloseCycle(groupId!);
-  const fund = useFundSummary(groupId!);
   const distributions = useQuery(() => listDistributions(groupId!), [groupId]);
 
   const allCycles = cycles.data ?? [];
   const primaryCycle = selectActiveCycle(allCycles) ?? allCycles.find((c) => c.status === 'draft') ?? null;
   const otherCycles = allCycles.filter((c) => c.id !== primaryCycle?.id);
   const latestCycle = allCycles[0] ?? null; // listCycles returns newest first
-  const progress = useCycleProgress(groupId!, primaryCycle?.id);
-  const heads = Number(fund.data?.total_heads ?? 0);
   const cycleDistribution = primaryCycle
     ? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id) ?? null
     : null;
@@ -166,10 +153,6 @@ export default function ConfigureCycle() {
   const [earlyTermPenalty, setEarlyTermPenalty] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
-  const perPeriod = amtNum * heads;
-  const periods = start.trim() && end.trim() ? countMonthlyPeriods(start, end) : 0;
-  const cycleTotal = periods > 0 ? perPeriod * periods : 0;
   const missing = [
     { label: 'name', ok: !!name.trim() },
     { label: 'start date', ok: !!start.trim() },
@@ -236,20 +219,20 @@ export default function ConfigureCycle() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Configure Cycle" subtitle="Organizer" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Configure Cycle" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 130, gap: 8 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Current cycle ---------------- */}
         {primaryCycle ? (
           <>
             <Text variant="overline" color="secondary" style={{ marginBottom: 10 }}>Current cycle</Text>
-            <View style={[cardStyle, { padding: 17 }]}>
+            <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text variant="h3" style={{ fontSize: 17 }}>{primaryCycle.name}</Text>
                   <Text variant="caption" color="secondary" style={{ marginTop: 4 }}>
-                    {formatPeso(primaryCycle.contribution_amount)} per head · {primaryCycle.frequency} · {heads} head{heads === 1 ? '' : 's'}
+                    {formatPeso(primaryCycle.contribution_amount)} per head · {primaryCycle.end_date ? `ends ${formatDisplayDate(primaryCycle.end_date)}` : 'no end date'}
                   </Text>
                 </View>
                 <StatusPill entity="cycle" value={primaryCycle.status} />
@@ -257,33 +240,13 @@ export default function ConfigureCycle() {
 
               {primaryCycle.status === 'draft' ? (
                 <View style={{ marginTop: 15 }}>
-                  <Text variant="caption" color="secondary" style={{ marginBottom: 10, lineHeight: 17 }}>
-                    Created in Setup because another cycle is still active. Activate it once that one closes.
-                  </Text>
                   <Button label="Activate this cycle" onPress={() => onActivate(primaryCycle.id)} loading={activate.loading} style={{ paddingVertical: 11 }} />
                 </View>
               ) : (
                 <>
-                  <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 15, marginBottom: 8 }}>
-                    <View style={{ width: `${Math.min(100, progress.data?.percent_collected ?? 0)}%`, height: '100%', borderRadius: 5, backgroundColor: semantic.brand }} />
-                  </View>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                    <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>
-                      {formatPeso(progress.data?.collected_total)} of {formatPeso(progress.data?.expected_total)} collected
-                    </Text>
-                    <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>
-                      {primaryCycle.end_date ? `Ends ${formatDisplayDate(primaryCycle.end_date)}` : 'Ongoing'}
-                    </Text>
-                  </View>
-
                   {/* ---------------- Closing ---------------- */}
-                  <View style={{ marginTop: 15, paddingTop: 14, borderTopWidth: 1, borderColor: semantic.border, gap: 11 }}>
-                    <View>
-                      <Text variant="label" style={{ color: semantic.brandDark }}>Close this cycle</Text>
-                      <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>
-                        Closing locks the cycle for good. Run the year-end distribution first so payouts are posted before you close.
-                      </Text>
-                    </View>
+                  <View style={{ marginTop: 15, paddingTop: 14, borderTopWidth: 1, borderColor: 'rgba(42,62,75,0.1)', gap: 11 }}>
+                    <Text variant="label" style={{ color: semantic.brandDark }}>Before closing</Text>
 
                     <View style={{ gap: 8 }}>
                       <Gate done={!!cycleDistribution && ['previewed', 'verified', 'finalized'].includes(cycleDistribution.status)} label="Year-end preview prepared" />
@@ -302,15 +265,6 @@ export default function ConfigureCycle() {
           </>
         ) : null}
 
-        <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start', backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13, marginTop: primaryCycle ? 14 : 0 }}>
-          <View style={{ width: 19, height: 19, borderRadius: 10, backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-            <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: '#fff' }}>i</Text>
-          </View>
-          <Text variant="caption" style={{ flex: 1, color: semantic.brandDark, lineHeight: 17, fontFamily: 'Poppins_600SemiBold' }}>
-            Only one cycle can run at a time.{primaryCycle?.status === 'active' ? ` The cycle you set up below starts after ${primaryCycle.name} closes.` : ''}
-          </Text>
-        </View>
-
         {/* ---------------- Other cycles ---------------- */}
         {otherCycles.length > 0 && (
           <View style={{ gap: 10, marginTop: 18 }}>
@@ -320,7 +274,7 @@ export default function ConfigureCycle() {
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                   <View style={{ flex: 1 }}>
                     <Text variant="label">{c.name}</Text>
-                    <Text variant="caption" color="secondary">{formatPeso(c.contribution_amount)} · {c.frequency}</Text>
+                    <Text variant="caption" color="secondary">{formatDisplayDate(c.start_date)}{c.end_date ? ` – ${formatDisplayDate(c.end_date)}` : ''}</Text>
                   </View>
                   <StatusPill entity="cycle" value={c.status} />
                 </View>
@@ -420,17 +374,6 @@ export default function ConfigureCycle() {
             </View>
           </View>
 
-          {/* ---------------- Live preview ---------------- */}
-          <View style={{ backgroundColor: semantic.dashCard, borderRadius: 20, padding: 18 }}>
-            <Text variant="overline" style={{ color: '#88A9B6', marginBottom: 6 }}>What this means for the group</Text>
-            <Row label="Expected per period (all heads pay)" value={amtNum ? formatPeso(perPeriod) : '—'} />
-            <Row label="Projected total for the cycle" value={amtNum && cycleTotal ? formatPeso(cycleTotal) : '—'} big />
-            <Text style={{ fontSize: 11, lineHeight: 15, color: '#7FA0AC', marginTop: 2 }}>
-              {amtNum && cycleTotal
-                ? `${periods} monthly contribution${periods === 1 ? '' : 's'}, start to end date`
-                : 'Add an end date to project the cycle total'}
-            </Text>
-          </View>
         </View>
       </ScrollView>
 
@@ -452,14 +395,3 @@ export default function ConfigureCycle() {
   );
 }
 
-function Row({ label, value, big }: { label: string; value: string; big?: boolean }) {
-  return (
-    <View style={{
-      flexDirection: 'row', alignItems: 'baseline', paddingVertical: 7,
-      borderTopWidth: big ? 1 : 0, borderColor: 'rgba(255,255,255,0.13)', marginTop: big ? 5 : 0, paddingTop: big ? 12 : 7,
-    }}>
-      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: '#A9C4CF' }}>{label}</Text>
-      <Text style={{ marginLeft: 'auto', fontFamily: 'Poppins_700Bold', fontVariant: ['tabular-nums'], fontSize: big ? 19 : 14, color: big ? '#8CDCB4' : '#fff' }}>{value}</Text>
-    </View>
-  );
-}

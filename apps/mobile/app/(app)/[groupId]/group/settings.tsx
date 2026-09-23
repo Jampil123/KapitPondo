@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -9,7 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
@@ -58,7 +59,7 @@ function StatusPill({ status }: { status: GcashStatus }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.soft, paddingVertical: 5, paddingHorizontal: 9, borderRadius: 20 }}>
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.text }} />
-      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
+      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: t.text }}>{label}</Text>
     </View>
   );
 }
@@ -67,7 +68,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 9, borderBottomWidth: 1, borderStyle: 'dashed', borderColor: semantic.border }}>
       <Text variant="caption" color="secondary">{label}</Text>
-      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'right', maxWidth: '62%' }}>{value}</Text>
+      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, textAlign: 'right', maxWidth: '62%' }}>{value}</Text>
     </View>
   );
 }
@@ -132,7 +133,7 @@ function HistoryList({ entries }: { entries: GcashHistoryEntry[] }) {
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 8 }}>
-                <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{HISTORY_LABEL[e.action]}</Text>
+                <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{HISTORY_LABEL[e.action]}</Text>
                 <Text variant="caption" color="muted">{formatDateTime(e.created_at)}</Text>
               </View>
               <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 15 }} numberOfLines={2}>
@@ -172,18 +173,18 @@ export default function GroupSettings() {
 
   if (role !== 'owner' && role !== 'treasurer') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Group settings" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+        <BandHeader title="Group settings" />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 }}>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>Only the Owner and Treasurer can view this page.</Text>
+          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>Only the Organizer and Treasurer can view this page.</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Payment channel" subtitle={group?.name ?? ''} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Payment channel" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
         <SectionHead title="Payment channel" />
@@ -193,7 +194,7 @@ export default function GroupSettings() {
               <Text style={{ fontSize: 15, fontFamily: 'Poppins_800ExtraBold', color: '#fff' }}>G</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>GCash number</Text>
+              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>GCash number</Text>
               <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>Where members send contributions</Text>
             </View>
             <StatusPill status={status} />
@@ -215,7 +216,7 @@ export default function GroupSettings() {
                 <ProposeForm groupId={groupId!} onSubmitted={afterMutation} />
               ) : (
                 <Text variant="body" color="secondary" style={{ textAlign: 'center', lineHeight: 19 }}>
-                  No GCash number has been submitted yet. Waiting for the <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>Treasurer</Text> to propose one.
+                  No GCash number has been submitted yet. Waiting for the <Text style={{ fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>Treasurer</Text> to propose one.
                 </Text>
               )
             ) : effectiveStatus === 'pending' ? (
@@ -224,13 +225,13 @@ export default function GroupSettings() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 11, marginBottom: 13 }}>
                     <Avatar name={treasurerName} uri={treasurer?.avatar_url} size={32} />
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>Submitted by {treasurerName}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>Submitted by {treasurerName}</Text>
                       <Text variant="caption" color="muted" style={{ marginTop: 1 }}>Treasurer · {formatDateTime(group?.treasurer_gcash_submitted_at ?? null)}</Text>
                     </View>
                   </View>
                 ) : (
                   <Banner tone="warning">
-                    <Text style={{ fontWeight: '700' }}>Waiting for Owner approval.</Text> Members won't see this number until it's approved.
+                    <Text style={{ fontFamily: 'Poppins_600SemiBold' }}>Waiting for Organizer approval.</Text> Members won't see this number until it's approved.
                   </Banner>
                 )}
 
@@ -249,7 +250,7 @@ export default function GroupSettings() {
             ) : effectiveStatus === 'approved' ? (
               <View>
                 <Banner tone="success">
-                  <Text style={{ fontWeight: '700' }}>Active.</Text> Members see this number{group?.treasurer_gcash_qr_url ? ' and QR' : ''} on the contribution page. Any change needs the Owner's approval again.
+                  <Text style={{ fontFamily: 'Poppins_600SemiBold' }}>Active.</Text> Members see this number{group?.treasurer_gcash_qr_url ? ' and QR' : ''} on the contribution page. Any change needs the Organizer's approval again.
                 </Banner>
                 <QrThumb path={group?.treasurer_gcash_qr_url} />
                 <DetailRow label="GCash number" value={formatGcashDigits(group?.treasurer_gcash_number ?? '')} />
@@ -263,8 +264,8 @@ export default function GroupSettings() {
             ) : (
               <View>
                 <View style={{ backgroundColor: intent.danger.soft, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text, marginBottom: 4 }}>
-                    {role === 'owner' ? 'You rejected this submission' : 'Rejected by Owner'}
+                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text, marginBottom: 4 }}>
+                    {role === 'owner' ? 'You rejected this submission' : 'Rejected by Organizer'}
                   </Text>
                   <Text style={{ fontSize: 12.5, color: semantic.textPrimary, lineHeight: 17 }}>
                     {group?.treasurer_gcash_rejection_reason ?? 'No reason was given.'}
@@ -296,7 +297,7 @@ export default function GroupSettings() {
 }
 
 function confirmCancel(groupId: string, onDone: () => void) {
-  Alert.alert('Withdraw submission?', "The Owner won't see it anymore. You can resubmit anytime.", [
+  Alert.alert('Withdraw submission?', "The Organizer won't see it anymore. You can resubmit anytime.", [
     { text: 'Keep it', style: 'cancel' },
     {
       text: 'Withdraw', style: 'destructive', onPress: async () => {
@@ -430,8 +431,8 @@ function ProposeForm({
       </Text>
 
       <Field
-        label="Note to Owner (optional)"
-        placeholder="Anything the Owner should know before approving..."
+        label="Note to Organizer (optional)"
+        placeholder="Anything the Organizer should know before approving..."
         value={note}
         onChangeText={setNote}
         multiline
@@ -439,7 +440,7 @@ function ProposeForm({
         leading={<MessageSquare size={18} color={semantic.textMuted} />}
       />
 
-      <Button label="Submit for Owner approval" onPress={onSubmit} loading={uploadingQr} style={{ marginTop: 8 }} />
+      <Button label="Submit for Organizer approval" onPress={onSubmit} loading={uploadingQr} style={{ marginTop: 8 }} />
       {onCancel ? <Button label="Cancel" variant="ghost" onPress={onCancel} style={{ marginTop: 8 }} /> : null}
     </View>
   );

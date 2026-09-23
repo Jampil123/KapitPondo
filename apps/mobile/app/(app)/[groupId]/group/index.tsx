@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
@@ -20,7 +21,7 @@ const CARD_SHADOW = {
   boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
 } as const;
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 const ROLE_DUTY: Record<string, string> = {
   owner: 'Approves members and loan requests, waives penalties, finalizes the year-end distribution',
   treasurer: 'Confirms contributions and repayments, releases approved loans',
@@ -46,7 +47,7 @@ function Rule({ k, v }: { k: string; v: string }) {
   return (
     <View style={{ flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderColor: semantic.border }}>
       <Text variant="body" color="secondary" style={{ fontSize: 12.5 }}>{k}</Text>
-      <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{v}</Text>
+      <Text style={{ marginLeft: 'auto', fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{v}</Text>
     </View>
   );
 }
@@ -60,11 +61,10 @@ export default function GroupOverview() {
   const officers = useQuery(() => listOfficers(groupId!), [groupId]);
   const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
   const leave = useAction(() => leaveGroup(groupId!));
-  const [showAllMembers, setShowAllMembers] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const members = directory.data ?? [];
-  const shownMembers = showAllMembers ? members : members.slice(0, 4);
+  const shownMembers = members.slice(0, 4);
 
   const totalHeads = members.reduce((sum, m) => sum + m.heads, 0);
   const ready = !directory.loading || members.length > 0;
@@ -118,13 +118,13 @@ export default function GroupOverview() {
                 <Avatar name={o.full_name ?? 'Officer'} uri={o.avatar_url} size={42} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{o.full_name ?? 'Unnamed'}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{o.full_name ?? 'Unnamed'}</Text>
                     <View style={{ backgroundColor: semantic.surfaceAlt, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 20 }}>
-                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>{ROLE_LABEL[o.role] ?? o.role}</Text>
+                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>{ROLE_LABEL[o.role] ?? o.role}</Text>
                     </View>
                     {o.verified ? (
                       <View style={{ backgroundColor: intent.success.soft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 }}>
-                        <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Verified</Text>
+                        <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: intent.success.text }}>Verified</Text>
                       </View>
                     ) : null}
                   </View>
@@ -136,7 +136,7 @@ export default function GroupOverview() {
 
           <Pressable onPress={() => go('chat/general')} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderTopWidth: 1, borderColor: semantic.border }}>
             <MessageCircle size={16} color={semantic.brandDark} />
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Open group chat</Text>
+            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Open group chat</Text>
           </Pressable>
         </View>
 
@@ -165,16 +165,16 @@ export default function GroupOverview() {
               {shownMembers.map((m, i) => (
                 <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
                   <Avatar name={m.full_name ?? 'Member'} uri={m.avatar_url} size={34} />
-                  <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>
+                  <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>
                     {m.full_name ?? 'Unnamed'}{m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
                   </Text>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
                 </View>
               ))}
               {members.length > 4 ? (
-                <Pressable onPress={() => setShowAllMembers((s) => !s)} style={{ paddingVertical: 13, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>
-                    {showAllMembers ? 'Show fewer' : `See all ${members.length} members`}
+                <Pressable onPress={() => go('members')} style={{ paddingVertical: 13, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>
+                    See all {members.length} members
                   </Text>
                 </Pressable>
               ) : null}
@@ -183,7 +183,7 @@ export default function GroupOverview() {
         </View>
 
         {/* ---------------- Cycle rules ---------------- */}
-        <SectionHead title="Cycle rules" aside="Set by the Owner" />
+        <SectionHead title="Cycle rules" aside="Set by the Organizer" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
           {cycle ? (
             <>
@@ -206,10 +206,10 @@ export default function GroupOverview() {
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }, CARD_SHADOW]}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: 1 }}>{group?.fund_code ?? '—'}</Text>
-            <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>The Owner approves every join request</Text>
+            <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>The Organizer approves every join request</Text>
           </View>
           <Pressable onPress={onCopyCode} style={{ backgroundColor: copied ? intent.success.soft : semantic.surfaceAlt, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10 }}>
-            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: copied ? intent.success.text : semantic.brandDark }}>{copied ? 'Copied' : 'Copy'}</Text>
+            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: copied ? intent.success.text : semantic.brandDark }}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
 
@@ -221,7 +221,7 @@ export default function GroupOverview() {
               <Text style={{ fontSize: 15 }}>👤</Text>
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>My heads</Text>
+              <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>My heads</Text>
               <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{membership?.heads ?? 1} head{(membership?.heads ?? 1) === 1 ? '' : 's'} · joined {shortDate(membership?.joined_at ?? null)}</Text>
             </View>
           </View>
@@ -235,9 +235,9 @@ export default function GroupOverview() {
               {leave.loading ? <ActivityIndicator size="small" color={intent.danger.text} /> : <LogOut size={17} color={intent.danger.text} />}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>Leave this group</Text>
+              <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.danger.text }}>Leave this group</Text>
               <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                {membership?.role === 'owner' ? 'Transfer ownership first — the Owner can’t leave' : 'Your capital is settled at cycle end'}
+                {membership?.role === 'owner' ? 'Hand over the Organizer role first — you can’t leave' : 'Your capital is settled at cycle end'}
               </Text>
             </View>
             {membership?.role !== 'owner' ? <ChevronRight size={16} color={semantic.textMuted} /> : null}

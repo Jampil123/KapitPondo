@@ -2,12 +2,13 @@ import { useMemo, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ArrowUpRight, Repeat, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
+  ArrowUpRight, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
   ArrowUpCircle,
-  PiggyBank,
-} from 'lucide-react-native';
+  PiggyBank, HandCoins } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { NAV_BG } from '@/components/shared/GroupSheetNav';
+import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { ENTRY_LABEL } from '@/features/activity/entryCopy';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -129,11 +130,6 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
     (balances.data ?? []).forEach((b) => m.set(b.membership_id, b.full_name ?? 'Member'));
     return m;
   }, [balances.data]);
-
-  // Excludes what I recorded myself — the Treasurer can't verify their own
-  // contribution/repayment (the Owner does, see "Needs your decision" on
-  // their dashboard), so it's not actionable here and would just be
-  // confusing to show as something to review.
   const contribRows: ProofRow[] = (pendingContribs.data ?? [])
     .filter((c: Contribution) => c.recorded_by !== member?.id)
     .map((c: Contribution) => ({
@@ -172,7 +168,7 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
           {rows.slice(0, 4).map((r, i) => (
             <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 11, padding: 14, borderBottomWidth: i < Math.min(rows.length, 4) - 1 ? 1 : 0, borderColor: semantic.border }}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{r.name}</Text>
+                <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{r.name}</Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
                   <Text variant="caption" color="secondary" numberOfLines={1}>{r.sub}</Text>
                   {r.late ? <Tag tone="late">Late</Tag> : null}
@@ -224,7 +220,7 @@ function OwnerLoanToDecide({ groupId, go }: { groupId: string; go: (r: string) =
             <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(loan.principal)}</Text>
           </View>
           <View style={{ marginTop: 10 }}>
-            <Tag tone="late">The Owner can't approve their own loan — you decide this one</Tag>
+            <Tag tone="late">The Organizer can't approve their own loan — you decide this one</Tag>
           </View>
           <Pressable onPress={() => go('loans/decisions')} style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark }}>
             <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Review request</Text>
@@ -264,7 +260,7 @@ function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{borrowerName(loan)}</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Approved by Owner · {shortDate(loan.approved_at)} · {loan.term_months} months</Text>
+                  <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Approved by Organizer · {shortDate(loan.approved_at)} · {loan.term_months} months</Text>
                 </View>
                 <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(loan.approved_principal ?? loan.principal)}</Text>
               </View>
@@ -350,7 +346,7 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
                     </Text>
                   </View>
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{info?.name ?? 'Member'}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{info?.name ?? 'Member'}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
                       <Text variant="caption" color="secondary">{info?.heads ?? 1} head{(info?.heads ?? 1) === 1 ? '' : 's'}</Text>
                       {r.is_late ? <Tag tone="late">Late</Tag> : null}
@@ -385,7 +381,7 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
 /* ---------------- Record grid ---------------- */
 const ACTIONS: { label: string; icon: any; route: string; params?: Record<string, string> }[] = [
   { label: 'Contribution', icon: ArrowUpCircle, route: 'contributions/confirm', params: { tab: 'record' } },
-  { label: 'Repayment', icon: Repeat, route: 'loans/record-repayment' },
+  { label: 'Repayment', icon: HandCoins, route: 'loans/record-repayment' },
   { label: 'Transactions', icon: ScrollText, route: 'reports/my-transactions' },
   { label: 'Group Ledger', icon: PiggyBank, route: 'reports/group-ledger' },
 ];
@@ -397,7 +393,7 @@ function contributorName(e: { membership: { members: { full_name: string } | nul
 
 const RECENT_TRANSACTIONS_LIMIT = 5;
 
-function RecentTransactions({ groupId, go }: { groupId: string; go: (route: string) => void }) {
+function RecentTransactions({ groupId, go }: { groupId: string; go: (route: string, extraParams?: Record<string, string>) => void }) {
   const ledger = useLedger(groupId, { limit: RECENT_TRANSACTIONS_LIMIT });
   const txns = ledger.data ?? [];
 
@@ -413,9 +409,13 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
             const credit = e.direction === 'credit';
             const Icon = credit ? ArrowDownRight : ArrowUpRight;
             const name = contributorName(e);
-            const detail = e.description ?? e.entry_type.replace(/_/g, ' ');
+            const detail = ENTRY_LABEL[e.entry_type] ?? e.description ?? e.entry_type.replace(/_/g, ' ');
             return (
-              <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+              <Pressable
+                key={e.id}
+                onPress={() => go('activity/[entryId]', { entryId: e.id, scope: 'group' })}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 12, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}
+              >
                 <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
                 </View>
@@ -424,8 +424,8 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
                     the right — the "Posted" tag that used to crowd this row
                     is dropped since every ledger entry here is, by
                     definition, already posted; it never conveyed anything. */}
-                <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13 }} numberOfLines={1}>{name ?? detail}</Text>
+                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                  <Text style={{ fontSize: 13, lineHeight: 18, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{name ?? detail}</Text>
                   <Text variant="caption" color="secondary" numberOfLines={1}>
                     {name ? `${detail} · ` : ''}{shortDate(e.posted_at)}
                   </Text>
@@ -433,11 +433,11 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
                 <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? intent.success.text : semantic.textPrimary }}>
                   {credit ? '+' : '-'}{formatPeso(e.amount)}
                 </Text>
-              </View>
+              </Pressable>
             );
           })}
-          <Pressable onPress={() => go('reports/group-ledger')} style={{ paddingVertical: 12, alignItems: 'center' }}>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>See all transactions</Text>
+          <Pressable onPress={() => go('reports/my-transactions')} style={{ paddingVertical: 12, alignItems: 'center' }}>
+            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>See all transactions</Text>
           </Pressable>
         </>
       )}
@@ -448,7 +448,9 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
 export function TreasurerHero({ groupId }: { groupId: string }) {
   return (
     <DashboardBand>
-      <CashCard groupId={groupId} />
+      <FoldTarget>
+        <CashCard groupId={groupId} />
+      </FoldTarget>
     </DashboardBand>
   );
 }
@@ -476,7 +478,7 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
             onPress={() => go(a.route, a.params)}
             style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
           >
-            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
+            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
           </Pressable>
         ))}

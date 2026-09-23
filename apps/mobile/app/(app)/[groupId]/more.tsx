@@ -6,7 +6,7 @@ import {
   UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ScrollText, FileText, Wallet,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
 import type { GroupRole } from '@/constants/roles';
@@ -90,8 +90,8 @@ export default function More() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="More" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="More" />
       <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 24, gap: 18 }}>
         {sectionsFor(role ?? 'member').map((section) => (
           <View key={section.title} style={{ gap: 6 }}>

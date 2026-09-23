@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, Image, Alert, ActivityIndicator, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';

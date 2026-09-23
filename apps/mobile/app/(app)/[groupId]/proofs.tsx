@@ -5,6 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Search, LayoutGrid, List, AlertTriangle, Check, Clock3, X, FileImage } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
+import { FilterChips } from '@/components/shared/FilterChips';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -254,20 +255,7 @@ export default function MyProofs() {
           />
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 14 }} contentContainerStyle={{ gap: 7 }}>
-          {FILTERS.map((f) => {
-            const active = filter === f.key;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={{ paddingVertical: 7, paddingHorizontal: 13, borderRadius: 18, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}
-              >
-                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{f.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterChips<Filter> options={FILTERS} value={filter} onChange={setFilter} style={{ marginTop: 14 }} />
 
         {rejectedCount > 0 ? (
           <Pressable onPress={() => setFilter('issue')} style={{ marginTop: 16, backgroundColor: intent.warning.soft, borderRadius: 18, padding: 14, flexDirection: 'row', gap: 11, alignItems: 'flex-start' }}>

@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect, type ReactNode } from 'react';
-import { View, ScrollView, Image, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, ScrollView, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -81,7 +82,10 @@ export default function Contribute() {
   // overdue with no backing row yet — the server only creates a 'late' row lazily,
   // and only when an officer (not the member) views the list, so a member can be
   // genuinely overdue with nothing in the database to point `id` at.
-  const { groupId, id: rowId, due: dueParam } = useLocalSearchParams<{ groupId: string; id?: string; due?: string }>();
+  const { groupId, id: rowId, due: dueParam, from } = useLocalSearchParams<{ groupId: string; id?: string; due?: string; from?: string }>();
+  // Reached from the contributions list itself, "View all my contributions" would just point back at the page the member
+  // came from — only worth showing when this screen was opened some other way (the dashboard's standing card, a shortcut).
+  const showViewAll = from !== 'contributions';
   const router = useRouter();
   const { membership, group } = useActiveGroup();
   const { cycle, loading: cycleLoading } = useActiveCycle(groupId!);
@@ -174,7 +178,7 @@ export default function Contribute() {
 
   async function onSubmit() {
     if (!cycle) return Alert.alert('No active cycle', 'There is no active cycle to contribute to yet.');
-    if (noOfficers) return Alert.alert('No officer assigned', 'This group has no treasurer or auditor to confirm payments yet. Contact the group owner before submitting.');
+    if (noOfficers) return Alert.alert('No officer assigned', 'This group has no treasurer or auditor to confirm payments yet. Contact the group organizer before submitting.');
     if (!hasTreasurerGcash) return Alert.alert('No GCash number set up', "The treasurer hasn't set up a verified GCash number yet. Check back once one has been approved before submitting.");
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid contribution amount.');
@@ -268,7 +272,7 @@ export default function Contribute() {
           icon={CalendarClock}
           tone="info"
           title="No active cycle yet"
-          body="This group doesn't have an active contribution cycle right now. Check back once the owner starts one."
+          body="This group doesn't have an active contribution cycle right now. Check back once the organizer starts one."
         />
       </SafeAreaView>
     );
@@ -282,7 +286,7 @@ export default function Contribute() {
           icon={Users}
           tone="warning"
           title="No officer assigned"
-          body="This group has no treasurer or auditor yet, so there's no one to confirm your payment. Contact the group owner before submitting."
+          body="This group has no treasurer or auditor yet, so there's no one to confirm your payment. Contact the group organizer before submitting."
         />
       </SafeAreaView>
     );
@@ -452,23 +456,25 @@ export default function Contribute() {
           )}
         </ScrollView>
 
-        <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, backgroundColor: semantic.background }}>
-          {state === 'review' ? (
-            <Button
-              label="View all my contributions"
-              variant="ghost"
-              onPress={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
-            />
-          ) : (
-            <Button
-              label={state === 'rejected' ? 'Resubmit for review' : 'Submit contribution'}
-              leading={state === 'rejected' ? <RotateCcw size={16} color="#fff" /> : undefined}
-              onPress={onSubmit}
-              loading={busy}
-              disabled={!proofUri}
-            />
-          )}
-        </View>
+        {(state !== 'review' || showViewAll) && (
+          <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, backgroundColor: semantic.background }}>
+            {state === 'review' ? (
+              <Button
+                label="View all my contributions"
+                variant="ghost"
+                onPress={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
+              />
+            ) : (
+              <Button
+                label={state === 'rejected' ? 'Resubmit for review' : 'Submit contribution'}
+                leading={state === 'rejected' ? <RotateCcw size={16} color="#fff" /> : undefined}
+                onPress={onSubmit}
+                loading={busy}
+                disabled={!proofUri}
+              />
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

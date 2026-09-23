@@ -16,7 +16,7 @@ const TYPE_LABEL: Record<AnnouncementType, string> = {
 const TYPE_TONE: Record<AnnouncementType, typeof intent[keyof typeof intent]> = {
   reminder: intent.warning, meeting: intent.info, cycle: intent.accent, urgent: intent.danger,
 };
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 function shortDate(iso: string) {
   const d = new Date(iso);

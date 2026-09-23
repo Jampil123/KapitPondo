@@ -144,7 +144,7 @@ router.post('/groups/:groupId/gcash/approve', requireAuth,
         await notify({
           memberId: submittedBy, groupId: req.params.groupId,
           type: 'gcash.approved', title: 'GCash number approved',
-          message: 'The Owner approved the GCash number. Members can now see it.',
+          message: 'The Organizer approved the GCash number. Members can now see it.',
         });
       }
       res.json({ group });

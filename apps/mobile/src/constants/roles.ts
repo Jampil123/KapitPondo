@@ -6,7 +6,7 @@ export const OFFICER_ROLES: GroupRole[] = ['owner', 'treasurer', 'auditor'];
 export type Capability =
   // membership
   | 'viewMembers'
-  | 'approveMembership'        // SPEC-DIVERGENCE: §1.1 = Owner only; API allows treasurer
+  | 'approveMembership'        // SPEC-DIVERGENCE: §1.1 = Organizer only; API allows treasurer
   | 'setMemberRole'
   | 'removeMember'
   | 'setHeads'                  // self-service only — anyone may set their OWN heads (see distributions.routes.js); this table can't express that ownership scoping, only the role gate
@@ -17,7 +17,7 @@ export type Capability =
   | 'approveContribution'      // SPEC-DIVERGENCE: §1.1 reserves approval to Auditor; API allows all officers
   // lending
   | 'applyLoan'
-  | 'approveLoan'              // approve+disburse fused; SPEC §1.2 wanted Owner-authorize vs Treasurer-disburse
+  | 'approveLoan'              // approve+disburse fused; SPEC §1.2 wanted Organizer-authorize vs Treasurer-disburse
   | 'recordRepayment'
   | 'viewLiquidity'
   // ledger

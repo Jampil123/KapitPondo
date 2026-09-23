@@ -1,4 +1,4 @@
-import { useContext, useState, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
@@ -8,7 +8,7 @@ import {
   Wallet, Layers, ChevronDown,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, DashboardFoldContext, BAND_GAP, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, FoldTarget, BAND_GAP, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -107,9 +107,9 @@ function StandingCard({ groupId }: { groupId: string }) {
     if (!entry || kind === 'paid') {
       router.push({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } });
     } else if (entry.row) {
-      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, id: entry.row.id } });
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, id: entry.row.id, from: 'dashboard' } });
     } else {
-      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, due: entry.dueDate.toISOString() } });
+      router.push({ pathname: '/(app)/[groupId]/contributions/contribute' as any, params: { groupId, due: entry.dueDate.toISOString(), from: 'dashboard' } });
     }
   }
 
@@ -321,12 +321,6 @@ function Collapsible({ open, progress, children }: { open: boolean; progress: An
   );
 }
 
-/** Tells the dashboard shell how tall the card that folds away on scroll is; the shell does the folding (see DashboardShell). */
-function FoldTarget({ children }: { children: ReactNode }) {
-  const fold = useContext(DashboardFoldContext);
-  return <View onLayout={(e) => fold?.reportFoldHeight(e.nativeEvent.layout.height)}>{children}</View>;
-}
-
 /** Capital + heads details revealed by PositionToggle; both are already-fetched real values. */
 function PositionPanel({ groupId }: { groupId: string }) {
   const router = useRouter();
@@ -527,10 +521,10 @@ export function MemberHero({ groupId }: { groupId: string }) {
     <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
       <FoldTarget>
         <StandingCard groupId={groupId} />
+        <Collapsible open={positionOpen} progress={progress}>
+          <PositionPanel groupId={groupId} />
+        </Collapsible>
       </FoldTarget>
-      <Collapsible open={positionOpen} progress={progress}>
-        <PositionPanel groupId={groupId} />
-      </Collapsible>
     </DashboardBand>
   );
 }

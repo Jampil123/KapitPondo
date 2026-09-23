@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Modal, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, Modal, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { ChevronRight, Check, AlertTriangle, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { FilterChips } from '@/components/shared/FilterChips';
 import { semantic, intent } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listMembers, listPendingMembers, setMemberRole, type GroupMember } from '@/api/groups';
@@ -19,7 +21,7 @@ const CARD_SHADOW = {
 type Tab = 'all' | 'officers' | 'members';
 type AppointRole = 'treasurer' | 'auditor';
 
-const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 const DUTY: Record<AppointRole, string[]> = {
   treasurer: [
@@ -30,7 +32,7 @@ const DUTY: Record<AppointRole, string[]> = {
   auditor: [
     'Confirms contributions and repayments, like other officers',
     'Verifies reversal requests before they’re finalized',
-    'Verifies the year-end distribution before the Owner finalizes it',
+    'Verifies the year-end distribution before the Organizer finalizes it',
   ],
 };
 
@@ -66,8 +68,8 @@ function Pill({ tone, children }: { tone: 'role' | 'heads' | 'warn' | 'pend'; ch
   } as const;
   const t = map[tone];
   return (
-    <View style={{ backgroundColor: t.bg, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 6 }}>
-      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: t.fg, letterSpacing: 0.3, textTransform: 'uppercase' }}>{children}</Text>
+    <View style={{ backgroundColor: t.bg, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+      <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: t.fg }}>{children}</Text>
     </View>
   );
 }
@@ -137,25 +139,16 @@ export default function MembersOfficers() {
   const loading = members.loading || pending.loading;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Members & officers" subtitle={`${roster.length} members · ${totalHeads} heads · ${officerCount} officers`} />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Members & officers" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Tabs ---------------- */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 7 }}>
-          {([
-            { key: 'all', label: 'All' },
-            { key: 'officers', label: 'Officers' },
-            { key: 'members', label: 'Members' },
-          ] as { key: Tab; label: string }[]).map((t) => {
-            const active = tab === t.key;
-            return (
-              <Pressable key={t.key} onPress={() => setTab(t.key)} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: active ? semantic.dashCard : semantic.surface, borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border }}>
-                <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{t.label}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterChips<Tab>
+          options={[{ key: 'all', label: 'All' }, { key: 'officers', label: 'Officers' }, { key: 'members', label: 'Members' }]}
+          value={tab}
+          onChange={setTab}
+        />
 
         {loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} /> : (
           <>
@@ -164,15 +157,15 @@ export default function MembersOfficers() {
                 <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>Officer slots</Text>
                 <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
-                    <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Owner</Text>
+                    <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Organizer</Text>
                     {owner ? (
                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                         <Avatar name={name(owner)} uri={owner?.members?.avatar_url} size={30} />
-                        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{name(owner)}</Text>
+                        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{name(owner)}</Text>
                       </View>
                     ) : <View style={{ flex: 1 }} />}
                     <View style={{ backgroundColor: semantic.surfaceAlt, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
-                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>You</Text>
+                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>You</Text>
                     </View>
                   </View>
 
@@ -182,14 +175,14 @@ export default function MembersOfficers() {
                       const eligibleCount = roster.filter((m) => m.members?.verification_status === 'verified').length;
                       return (
                         <Pressable key={role} onPress={() => setSheetRole(role)} style={{ backgroundColor: intent.danger.soft, padding: 14, flexDirection: 'row', gap: 12, alignItems: 'flex-start', borderBottomWidth: 1, borderColor: semantic.border }}>
-                          <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text, letterSpacing: 0.4, textTransform: 'uppercase', paddingTop: 1 }}>{ROLE_LABEL[role]}</Text>
+                          <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: intent.danger.text, letterSpacing: 0.4, textTransform: 'uppercase', paddingTop: 1 }}>{ROLE_LABEL[role]}</Text>
                           <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>Not appointed</Text>
+                            <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.danger.text }}>Not appointed</Text>
                             <Text variant="caption" color="secondary" style={{ marginTop: 4, lineHeight: 16 }}>
                               {role === 'auditor' ? 'Nothing can be verified until this is filled — payments will sit unposted.' : 'Nothing can be recorded until this is filled.'}
                             </Text>
                             <View style={{ marginTop: 9, backgroundColor: intent.danger.base, alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 }}>
-                              <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Appoint {ROLE_LABEL[role].toLowerCase()} · {eligibleCount} eligible</Text>
+                              <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>Appoint {ROLE_LABEL[role].toLowerCase()} · {eligibleCount} eligible</Text>
                             </View>
                           </View>
                         </Pressable>
@@ -197,10 +190,10 @@ export default function MembersOfficers() {
                     }
                     return (
                       <Pressable key={role} onPress={() => setSheetRole(role)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
-                        <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{ROLE_LABEL[role]}</Text>
+                        <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{ROLE_LABEL[role]}</Text>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                           <Avatar name={name(holder)} uri={holder?.members?.avatar_url} size={30} />
-                          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{name(holder)}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(holder)}</Text>
                         </View>
                         <ChevronRight size={16} color={semantic.textMuted} />
                       </Pressable>
@@ -212,7 +205,7 @@ export default function MembersOfficers() {
                       {control.pass ? <Check size={11} color={intent.success.text} strokeWidth={3} /> : <AlertTriangle size={11} color={intent.warning.text} />}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: control.pass ? intent.success.text : intent.warning.text }}>{control.t1}</Text>
+                      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_500Medium', color: control.pass ? intent.success.text : intent.warning.text }}>{control.t1}</Text>
                       <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>{control.t2}</Text>
                     </View>
                   </View>
@@ -236,8 +229,8 @@ export default function MembersOfficers() {
                     >
                       <AvatarBadge m={m} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
-                        <View style={{ flexDirection: 'row', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+                        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
+                        <View style={{ flexDirection: 'row', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
                           {m.role !== 'member' ? <Pill tone="role">{ROLE_LABEL[m.role]}</Pill> : null}
                           <Pill tone="heads">{`${m.heads} head${m.heads === 1 ? '' : 's'}`}</Pill>
                           {m.members?.verification_status !== 'verified' ? <Pill tone="warn">Unverified</Pill> : null}
@@ -290,13 +283,13 @@ export default function MembersOfficers() {
                             <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < eligible.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                               <AvatarBadge m={m} size={38} />
                               <View style={{ flex: 1, minWidth: 0 }}>
-                                <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
+                                <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
                                 <Text variant="caption" color={otherSeat ? undefined : 'secondary'} style={{ marginTop: 3, lineHeight: 15, color: otherSeat ? intent.warning.text : undefined }}>
                                   {otherSeat ? `Already ${ROLE_LABEL[otherSeat.role]} · allowed but reduces separation` : `Verified · ${m.heads} head${m.heads === 1 ? '' : 's'}`}
                                 </Text>
                               </View>
                               <Pressable onPress={() => onAppoint(m.member_id, sheetRole)} style={{ backgroundColor: semantic.dashCard, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10 }}>
-                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Appoint</Text>
+                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>Appoint</Text>
                               </Pressable>
                             </View>
                           );
@@ -311,7 +304,7 @@ export default function MembersOfficers() {
                               <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < arr.length - 1 || pendingRows.length > 0 ? 1 : 0, borderColor: semantic.border }}>
                                 <AvatarBadge m={m} size={38} />
                                 <View style={{ flex: 1 }}>
-                                  <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{name(m)}</Text>
+                                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{name(m)}</Text>
                                   <Text variant="caption" style={{ marginTop: 3, color: intent.warning.text }}>Account not verified — can't hold an officer role</Text>
                                 </View>
                               </View>
@@ -320,7 +313,7 @@ export default function MembersOfficers() {
                               <View key={r.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < pendingRows.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                                 <Avatar name={r.members?.full_name ?? 'Member'} uri={r.members?.avatar_url} size={38} />
                                 <View style={{ flex: 1 }}>
-                                  <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.members?.full_name ?? 'Unnamed'}</Text>
+                                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{r.members?.full_name ?? 'Unnamed'}</Text>
                                   <Text variant="caption" style={{ marginTop: 3, color: intent.warning.text }}>Membership still pending your approval</Text>
                                 </View>
                               </View>

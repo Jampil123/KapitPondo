@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { View, Alert, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
-import { Segmented } from '@/components/ui/Segmented';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { FilterTabs } from '@/components/shared/FilterTabs';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -47,8 +48,8 @@ export default function Penalties() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Penalties Review" subtitle="Organizer" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Penalties Review" />
       <View style={{ flex: 1, padding: 16, gap: 14 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: semantic.surfaceAlt, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14 }}>
           <View style={{ gap: 2 }}>
@@ -58,8 +59,8 @@ export default function Penalties() {
           <AlertTriangle size={22} color="#A87C2C" />
         </View>
 
-        <Segmented<Tab>
-          options={[{ key: 'active', label: 'Active', count: pending.data?.length ?? 0 }, { key: 'waived', label: 'Waived' }]}
+        <FilterTabs<Tab>
+          options={[{ key: 'active', label: 'Active', count: pending.data?.length || undefined }, { key: 'waived', label: 'Waived' }]}
           value={tab}
           onChange={setTab}
         />

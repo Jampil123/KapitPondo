@@ -78,7 +78,7 @@ router.post(
         action: 'verified', entityType: 'reversal_request', entityId: req.params.id,
         before: { status: 'pending_verification' }, after: { status: 'verified', notes: req.body?.notes ?? null },
       });
-      res.json({ message: 'Reversal verified — awaiting Owner approval', request });
+      res.json({ message: 'Reversal verified — awaiting Organizer approval', request });
     } catch (err) { next(err); }
   }
 );

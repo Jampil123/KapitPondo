@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, ActivityIndicator, Image, Modal } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Receipt, Check } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { PillTabs } from '@/components/ui/PillTabs';
-import { AppBar } from '@/components/shared/AppBar';
+import { PillFilters } from '@/components/shared/PillFilters';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useQuery } from '@/hooks/useApi';
@@ -49,9 +50,9 @@ function Fact({ label, value, tone }: { label?: string; value: string; tone?: 'l
   const bg = tone === 'late' ? intent.danger.soft : tone === 'warn' ? intent.warning.soft : semantic.surfaceAlt;
   const fg = tone === 'late' ? intent.danger.text : tone === 'warn' ? intent.warning.text : semantic.textSecondary;
   return (
-    <View style={{ backgroundColor: bg, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5 }}>
-      <Text style={{ fontSize: 11, fontFamily: 'Poppins_500Medium', color: fg }}>
-        {label ? `${label} ` : ''}<Text style={{ fontFamily: 'Poppins_700Bold', color: fg }}>{value}</Text>
+    <View style={{ backgroundColor: bg, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 1.5 }}>
+      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_400Regular', color: fg }}>
+        {label ? `${label} ` : ''}{value}
       </Text>
     </View>
   );
@@ -61,8 +62,8 @@ function Tag({ label, tone }: { label: string; tone: 'late' | 'due' | 'review' |
   const map = { late: intent.danger, due: intent.info, review: intent.warning, posted: intent.success } as const;
   const t = map[tone];
   return (
-    <View style={{ backgroundColor: t.soft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 }}>
-      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
+    <View style={{ backgroundColor: t.soft, paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20 }}>
+      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: t.text }}>{label}</Text>
     </View>
   );
 }
@@ -78,6 +79,9 @@ export default function ConfirmContributions() {
   const all = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const membersQ = useQuery(() => listMembers(groupId!), [groupId]);
   const roster: GroupMember[] = membersQ.data ?? [];
+  // "Never loaded yet", so a background refetch doesn't flash the spinner again.
+  const firstLoad = (membersQ.data == null && !membersQ.error) || (all.data == null && !all.error);
+  const periodWord = cycle?.frequency === 'weekly' ? 'week' : cycle?.frequency === 'quarterly' ? 'quarter' : 'month';
   const headsById = useMemo(() => new Map(roster.map((m) => [m.id, m.heads])), [roster]);
 
   const approve = useApproveContribution(groupId!);
@@ -122,7 +126,6 @@ export default function ConfirmContributions() {
     return { expected, collected, collectedCount, dueDate, label, totalMembers: roster.length, perMember };
   }, [cycle, roster, rows]);
 
-  const pct = summary && summary.expected > 0 ? Math.min(100, Math.round((summary.collected / summary.expected) * 100)) : 0;
   const notYetCount = summary ? summary.totalMembers - summary.collectedCount : 0;
 
   // ---- Record new: who still needs recording vs. already handled this period ----
@@ -162,37 +165,47 @@ export default function ConfirmContributions() {
   const [viewProof, setViewProof] = useState<Contribution | null>(null);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Contributions" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Contributions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Collection summary ---------------- */}
-        {cycle && summary ? (
-          <View style={{ paddingHorizontal: 2, marginBottom: 16 }}>
+        {firstLoad ? (
+          <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginBottom: 16, alignItems: 'center', justifyContent: 'center', minHeight: 110 }}>
+            <ActivityIndicator color={semantic.brand} />
+          </View>
+        ) : cycle && summary ? (
+          <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginBottom: 16 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Collected this {cycle.frequency === 'weekly' ? 'week' : 'period'}</Text>
+              <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>This {periodWord}</Text>
               {notYetCount > 0 ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: intent.warning.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
-                  <View style={{ width: 15, height: 15, borderRadius: 8, backgroundColor: intent.warning.base, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>!</Text>
-                  </View>
-                  <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.warning.text }}>{notYetCount} not yet paid</Text>
+                <View style={{ backgroundColor: intent.warning.soft, paddingVertical: 3, paddingHorizontal: 9, borderRadius: 20 }}>
+                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>{notYetCount} not yet paid</Text>
                 </View>
               ) : null}
             </View>
-            <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.dashCard, letterSpacing: -1, marginTop: 4 }}>
-              {formatPeso(summary.collected)} <Text style={{ fontSize: 15, color: semantic.textMuted, fontFamily: 'Poppins_700Bold' }}>of {formatPeso(summary.expected)}</Text>
-            </Text>
-            <Text variant="body" color="secondary" style={{ marginTop: 6, fontSize: 12.5 }}>
-              {summary.collectedCount} of {summary.totalMembers} members posted{summary.dueDate ? <Text style={{ fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}> · due {shortDate(summary.dueDate.toISOString())}</Text> : null}
-            </Text>
-            <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 12 }}>
-              <View style={{ height: '100%', width: `${pct}%`, borderRadius: 5, backgroundColor: semantic.brand }} />
+            <View style={{ flexDirection: 'row', marginTop: 10 }}>
+              {[
+                { k: 'Collected', v: summary.collected, color: intent.success.base },
+                { k: 'Expected', v: summary.expected, color: semantic.brand },
+                { k: 'Still to collect', v: Math.max(0, summary.expected - summary.collected), color: intent.warning.base },
+              ].map((x, i) => (
+                <View key={x.k} style={{ flex: 1, paddingLeft: i > 0 ? 12 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: 'rgba(42,62,75,0.1)' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <View style={{ width: 7, height: 7, borderRadius: 3, backgroundColor: x.color }} />
+                    <Text variant="overline" color="muted" numberOfLines={1}>{x.k}</Text>
+                  </View>
+                  <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1} adjustsFontSizeToFit>{formatPeso(x.v)}</Text>
+                </View>
+              ))}
             </View>
+            <Text variant="body" color="secondary" style={{ marginTop: 12, paddingTop: 10, borderTopWidth: 1, borderColor: 'rgba(42,62,75,0.1)', fontSize: 12.5 }}>
+              {summary.collectedCount} of {summary.totalMembers} members posted{summary.dueDate ? <Text> · due {shortDate(summary.dueDate.toISOString())}</Text> : null}
+            </Text>
           </View>
         ) : null}
 
-        <PillTabs<Tab>
+        <PillFilters<Tab>
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
@@ -226,14 +239,14 @@ export default function ConfirmContributions() {
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
                       <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={48} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="label" style={{ fontSize: 14.5 }} numberOfLines={1}>{nameOf(c)}</Text>
-                        <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
+                        <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{nameOf(c)}</Text>
+                        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard, marginTop: 2 }}>{formatPeso(c.amount)}</Text>
+                        <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>
                           {METHOD_LABEL[c.payment_method ?? ''] ?? 'Payment'} · {heads} head{heads === 1 ? '' : 's'} · sent {timeAgo(c.created_at)}
                         </Text>
                       </View>
-                      <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(c.amount)}</Text>
                     </View>
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, padding: 14, paddingBottom: 0 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 14, paddingBottom: 0 }}>
                       {c.external_reference ? <Fact label="Ref" value={c.external_reference} /> : <Fact value="No reference number" tone="warn" />}
                       <Fact label="Sent" value={shortDate(c.created_at)} />
                       {mismatch ? <Fact label="Amount differs · expected" value={formatPeso(expectedAmt)} tone="warn" /> : null}
@@ -253,7 +266,7 @@ export default function ConfirmContributions() {
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.danger.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
                       >
                         <X size={12} color={intent.danger.text} strokeWidth={2.6} />
-                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>Return</Text>
+                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>Return</Text>
                       </Pressable>
                       <Pressable
                         onPress={() => onApprove(c.id)}
@@ -261,7 +274,7 @@ export default function ConfirmContributions() {
                         style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.success.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
                       >
                         <Check size={12} color={intent.success.text} strokeWidth={2.6} />
-                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Confirm</Text>
+                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: intent.success.text }}>Confirm</Text>
                       </Pressable>
                     </View>
                   </View>
@@ -274,25 +287,27 @@ export default function ConfirmContributions() {
         {/* ================= RECORD NEW ================= */}
         {tab === 'record' && (
           <View style={{ marginTop: 16, gap: 16 }}>
-            {!cycle ? (
+            {firstLoad ? (
+              <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} />
+            ) : !cycle ? (
               <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No active cycle to record against.</Text>
             ) : (
               <>
                 {needsRecording.length > 0 ? (
                   <View>
-                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Who hasn&apos;t paid this period</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Who hasn&apos;t paid this {periodWord}</Text>
                     <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                       {needsRecording.map(({ m, entry }) => (
                         <Pressable key={m.id} onPress={() => goToRecordScreen(m)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
                           <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
+                            <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                               <Text variant="caption" color="secondary">{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
                               <Tag label={entry!.kind === 'late' ? 'Late' : 'Due'} tone={entry!.kind === 'late' ? 'late' : 'due'} />
                             </View>
                           </View>
-                          <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(entry!.amount)}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(entry!.amount)}</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -307,13 +322,13 @@ export default function ConfirmContributions() {
                         <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
                           <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />
                           <View style={{ flex: 1, minWidth: 0 }}>
-                            <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
+                            <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                               <Text variant="caption" color="secondary">{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
                               <Tag label={entry!.kind === 'review' ? 'Awaiting review' : 'Posted'} tone={entry!.kind === 'review' ? 'review' : 'posted'} />
                             </View>
                           </View>
-                          <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{formatPeso(entry!.amount)}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{formatPeso(entry!.amount)}</Text>
                         </View>
                       ))}
                     </View>
@@ -321,7 +336,7 @@ export default function ConfirmContributions() {
                 ) : null}
 
                 {needsRecording.length === 0 && alreadyHandled.length === 0 ? (
-                  <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No members to show for this period yet.</Text>
+                  <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No members to show for this {periodWord} yet.</Text>
                 ) : null}
               </>
             )}
@@ -345,7 +360,7 @@ export default function ConfirmContributions() {
                       <Text style={{ fontSize: 13, color: intent.info.text }}>₱</Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text variant="label" style={{ fontSize: 13, color: intent.info.text }} numberOfLines={1}>{nameOf(c)}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.info.text }} numberOfLines={1}>{nameOf(c)}</Text>
                       <Text variant="caption" style={{ marginTop: 2, color: intent.info.text, opacity: 0.75 }}>Recorded by you {timeAgo(c.created_at)}</Text>
                     </View>
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>{formatPeso(c.amount)}</Text>
@@ -371,19 +386,19 @@ export default function ConfirmContributions() {
                   <View key={c.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: intent.danger.base }, shadowToken.card]}>
                     {c.rejection_reason ? (
                       <View style={{ backgroundColor: intent.danger.soft, padding: 12, paddingBottom: 10 }}>
-                        <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: intent.danger.text, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>Returned {shortDate(c.updated_at)}</Text>
+                        <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>Returned {shortDate(c.updated_at)}</Text>
                         <Text style={{ fontSize: 12, lineHeight: 17, color: '#8E3227', fontFamily: 'Poppins_500Medium' }}>{c.rejection_reason}</Text>
                       </View>
                     ) : null}
                     <View style={{ flexDirection: 'row', gap: 12, padding: 13 }}>
                       <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={40} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{nameOf(c)}</Text>
+                        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{nameOf(c)}</Text>
                         <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
                           {c.is_walk_in ? 'Fix it and record it again from Record new' : 'Waiting on the member to resubmit'}
                         </Text>
                       </View>
-                      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{formatPeso(c.amount)}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{formatPeso(c.amount)}</Text>
                     </View>
                   </View>
                 ))}

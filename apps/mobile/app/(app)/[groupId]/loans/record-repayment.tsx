@@ -1,18 +1,20 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, ActivityIndicator, Image, Modal } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Receipt, FileText } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { PillTabs } from '@/components/ui/PillTabs';
+import { PillFilters } from '@/components/shared/PillFilters';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import type { Loan, LoanPayment } from '@/api/lending';
 import { useLoans, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { remainingInterest } from '@/features/lending/remainingInterest';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
 
@@ -108,8 +110,8 @@ export default function RecordRepayment() {
   const [viewProof, setViewProof] = useState<LoanPayment | null>(null);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Loan repayments" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Loan repayments" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
@@ -129,7 +131,7 @@ export default function RecordRepayment() {
           </View>
         </View>
 
-        <PillTabs<Tab>
+        <PillFilters<Tab>
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
@@ -155,7 +157,12 @@ export default function RecordRepayment() {
                 const outstanding = Number(loan?.outstanding_balance ?? 0);
                 const rate = Number(loan?.interest_rate ?? 0);
                 const amt = Number(p.amount);
-                const interest = Math.min(Math.round(outstanding * rate * 100) / 100, amt);
+                // Flat rate, split like one monthly installment — same rule as confirm_loan_repayment (migration 0063).
+                const loanAmount = Number(loan?.approved_principal ?? loan?.principal ?? 0);
+                const monthInterest = Math.round(loanAmount * rate * 100) / 100;
+                const monthly = loan?.term_months ? loanAmount / loan.term_months + monthInterest : 0;
+                const interestLeft = loan ? remainingInterest(loan, (repayments.data ?? []).filter((r) => r.loan_id === loan.id)) : 0;
+                const interest = monthly > 0 ? Math.min(Math.round((amt * monthInterest / monthly) * 100) / 100, interestLeft, amt) : 0;
                 const principal = Math.min(amt - interest, outstanding);
                 const balanceAfter = Math.max(outstanding - principal, 0);
                 const settles = balanceAfter <= 0.01;
@@ -170,21 +177,21 @@ export default function RecordRepayment() {
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
                       <Avatar name={repaymentName(p)} uri={p.loans?.membership?.members?.avatar_url} size={44} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="label" style={{ fontSize: 14.5 }} numberOfLines={1}>{repaymentName(p)}</Text>
-                        <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>Submitted {timeAgo(p.created_at)}</Text>
+                        <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{repaymentName(p)}</Text>
+                        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard, marginTop: 2 }}>{formatPeso(p.amount)}</Text>
+                        <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>Submitted {timeAgo(p.created_at)}</Text>
                       </View>
-                      <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(p.amount)}</Text>
                     </View>
 
                     {loan ? (
                       <View style={{ margin: 14, marginBottom: 0, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }}>
                         <Text variant="overline" color="muted" style={{ marginBottom: 6 }}>How this will be applied</Text>
                         <View style={{ flexDirection: 'row', paddingVertical: 2 }}>
-                          <Text variant="caption" color="secondary">Interest first</Text>
+                          <Text variant="caption" color="secondary">Interest</Text>
                           <Text style={{ marginLeft: 'auto', fontFamily: 'Poppins_700Bold', fontSize: 12.5, color: intent.warning.text }}>{formatPeso(interest)}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', paddingVertical: 2 }}>
-                          <Text variant="caption" color="secondary">Then principal</Text>
+                          <Text variant="caption" color="secondary">Principal</Text>
                           <Text style={{ marginLeft: 'auto', fontFamily: 'Poppins_700Bold', fontSize: 12.5, color: semantic.brandDark }}>{formatPeso(principal)}</Text>
                         </View>
                         <View style={{ flexDirection: 'row', paddingVertical: 4, marginTop: 4, borderTopWidth: 1, borderColor: semantic.border }}>
@@ -296,10 +303,10 @@ export default function RecordRepayment() {
                       <Text style={{ fontSize: 13, color: intent.info.text }}>₱</Text>
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text variant="label" style={{ fontSize: 13, color: intent.info.text }} numberOfLines={1}>{repaymentName(p)}</Text>
-                      <Text variant="caption" style={{ marginTop: 2, color: intent.info.text, opacity: 0.75 }}>Recorded by you {timeAgo(p.created_at)}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.info.text }} numberOfLines={2}>{repaymentName(p)}</Text>
+                      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text, marginTop: 1 }}>{formatPeso(p.amount)}</Text>
+                      <Text variant="caption" style={{ marginTop: 1, color: intent.info.text, opacity: 0.75 }}>Recorded by you {timeAgo(p.created_at)}</Text>
                     </View>
-                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>{formatPeso(p.amount)}</Text>
                   </View>
                 ))}
               </View>
@@ -329,12 +336,12 @@ export default function RecordRepayment() {
                     <View style={{ flexDirection: 'row', gap: 12, padding: 13 }}>
                       <Avatar name={repaymentName(p)} uri={p.loans?.membership?.members?.avatar_url} size={40} />
                       <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{repaymentName(p)}</Text>
-                        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
+                        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{repaymentName(p)}</Text>
+                        <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textMuted, marginTop: 1 }}>{formatPeso(p.amount)}</Text>
+                        <Text variant="caption" color="secondary" style={{ marginTop: 1 }}>
                           {p.is_walk_in ? 'Fix it and record it again from Record new' : 'Waiting on the member to resubmit'}
                         </Text>
                       </View>
-                      <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>{formatPeso(p.amount)}</Text>
                     </View>
                   </View>
                 ))}

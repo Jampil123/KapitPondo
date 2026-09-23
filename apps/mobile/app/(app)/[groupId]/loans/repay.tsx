@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,7 +12,8 @@ import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { buildContributionReference } from '@/lib/qrPh';
 import { useActiveGroup } from '@/context/GroupContext';
-import { useLoans, useSubmitRepayment } from '@/features/lending/lending.hooks';
+import { useLoans, useLoan, useRepayments, useSubmitRepayment } from '@/features/lending/lending.hooks';
+import { remainingInterest } from '@/features/lending/remainingInterest';
 import { useLoanProofScan, confirmLoanSubmitDespiteDuplicate } from '@/features/lending/useProofScan';
 import { expectedMonthlyDue } from '@/features/lending/expectedMonthlyDue';
 import {
@@ -37,6 +39,9 @@ export default function Repay() {
   // own loan (the API rejects submitting for anyone else's anyway).
   const activeLoan = (loans.data ?? []).find((l) => l.membership_id === membership?.id) ?? null;
   const submit = useSubmitRepayment(groupId!);
+  // One at a time: a repayment still under review has to be settled before the next can be sent.
+  const pending = useRepayments(groupId!, 'submitted');
+  const underReview = !!activeLoan && (pending.data ?? []).some((p) => p.loan_id === activeLoan.id);
 
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
   const [amountEdit, setAmountEdit] = useState<string | null>(null);
@@ -47,7 +52,10 @@ export default function Repay() {
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
-  const suggestedAmount = expectedMonthlyDue(activeLoan);
+  // Needs the loan's own payments to know how much interest is still to come (flat rate, see remainingInterest).
+  const detail = useLoan(groupId!, activeLoan?.id);
+  const interestLeft = remainingInterest(activeLoan, detail.data?.payments ?? []);
+  const suggestedAmount = expectedMonthlyDue(activeLoan, interestLeft);
 
   // The loan loads asynchronously, so show its expected payment until the user types their own amount.
   const amount = amountEdit ?? (suggestedAmount > 0 ? suggestedAmount.toFixed(2) : '');
@@ -161,6 +169,18 @@ export default function Repay() {
     );
   }
 
+  if (underReview && !receipt) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
+        <CloseHeader title="Repay loan" onClose={close} />
+        <BlockedState icon={Clock3} tone="info" title="A repayment is under review" body="You can send the next one once an officer confirms or returns it." />
+        <View style={{ padding: 16 }}>
+          <Button label="View my repayments" onPress={() => router.replace({ pathname: '/(app)/[groupId]/loans/repayments' as any, params: { groupId } })} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   const busy = submit.loading || uploading;
 
   return (
@@ -169,11 +189,11 @@ export default function Repay() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
           <AmountBlock
-            label={suggestedAmount >= outstanding ? 'Amount due' : "This month's payment"}
+            label={suggestedAmount >= outstanding + interestLeft ? 'Amount due' : "This month's payment"}
             amount={suggestedAmount}
             badge={<Badge tone="primary" label="Active loan" Icon={Repeat} />}
             meta={`${activeLoan.purpose ?? 'Loan'} · ${activeLoan.term_months} month${activeLoan.term_months === 1 ? '' : 's'}`}
-            note={`${formatPeso(outstanding)} left to repay`}
+            note={`${formatPeso(outstanding + interestLeft)} left to repay`}
             copied={copiedField === 'amount'}
             onCopy={() => copyValue('amount', suggestedAmount.toFixed(2))}
           />

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Layers, Minus, Plus, Lock } from 'lucide-react-native';

@@ -40,8 +40,9 @@ function RootNavigator() {
     <View style={{ flex: 1 }}>
       <Stack screenOptions={{ animation: Platform.OS === "web" ? "none" : "default" }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(app)" options={{ headerShown: false }} />
+        {/* No slide between signed-in and signed-out: the page being left would show while it animates away. */}
+        <Stack.Screen name="(auth)" options={{ headerShown: false, animation: "none" }} />
+        <Stack.Screen name="(app)" options={{ headerShown: false, animation: "none" }} />
       </Stack>
       {signingOut ? (
         <View style={StyleSheet.absoluteFill}>

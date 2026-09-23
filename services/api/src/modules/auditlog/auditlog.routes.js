@@ -48,7 +48,7 @@ router.post(
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         entityType: entity_type, entityId: entity_id, note, label,
       });
-      res.status(201).json({ message: 'Flagged for the Owner' });
+      res.status(201).json({ message: 'Flagged for the Organizer' });
     } catch (err) { next(err); }
   }
 );

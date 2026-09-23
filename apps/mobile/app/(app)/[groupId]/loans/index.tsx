@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, Clock3, AlertTriangle, Coins, Repeat, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { Check, Clock3, AlertTriangle, Coins, Repeat, ChevronDown, ChevronUp, ChevronRight, ListChecks } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -12,6 +13,7 @@ import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLoans, useLoan, useMemberLoanEligibility, useCancelLoan } from '@/features/lending/lending.hooks';
+import { remainingInterest } from '@/features/lending/remainingInterest';
 import type { Loan, LoanPayment } from '@/api/lending';
 
 const CARD_SHADOW = {
@@ -35,19 +37,6 @@ function Badge({ tone, label, Icon }: { tone: IntentName; label: string; Icon: a
         <Icon size={9} color="#fff" strokeWidth={2.6} />
       </View>
       <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
-    </View>
-  );
-}
-
-function Split({ items }: { items: { k: string; v: string }[] }) {
-  return (
-    <View style={{ flexDirection: 'row', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-      {items.map((it, i) => (
-        <View key={it.k} style={{ flex: 1, paddingLeft: i > 0 ? 14 : 0, borderLeftWidth: i > 0 ? 1 : 0, borderColor: semantic.border }}>
-          <Text variant="overline" color="muted">{it.k}</Text>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }}>{it.v}</Text>
-        </View>
-      ))}
     </View>
   );
 }
@@ -102,23 +91,22 @@ function Tracker({ steps }: { steps: { title: string; sub: string; done: boolean
   );
 }
 
-function PaymentRow({ p }: { p: LoanPayment }) {
+function PaymentRow({ p, onPress, last }: { p: LoanPayment; onPress: () => void; last: boolean }) {
   return (
-    <View style={{ paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, gap: 4 }}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text variant="label" style={{ fontSize: 13.5 }}>{formatPeso(p.amount)}</Text>
-        <StatusBadge entity="loan" value={p.status} />
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ flex: 1, gap: 3 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(p.amount)}</Text>
+          <StatusBadge entity="loanPayment" value={p.status} />
+        </View>
+        <Text variant="caption" color="secondary">
+          {p.status === 'paid' || p.status === 'approved'
+            ? `Principal ${formatPeso(p.principal_portion)} · Interest ${formatPeso(p.interest_portion)}`
+            : `Sent ${shortDate(p.created_at)}`}
+        </Text>
       </View>
-      <Text variant="caption" color="secondary">
-        Principal {formatPeso(p.principal_portion)} · Interest {formatPeso(p.interest_portion)}
-      </Text>
-      <Text variant="caption" color="muted">
-        {p.auto_confirmed
-          ? `Paid automatically via ${p.gateway_provider ?? 'payment gateway'}`
-          : `Recorded by ${p.recorder?.full_name ?? 'an officer'}${p.verifier ? `, verified by ${p.verifier.full_name}` : ''}`}
-        {shortDate(p.paid_date) ? ` · ${shortDate(p.paid_date)}` : ''}
-      </Text>
-    </View>
+      <ChevronRight size={16} color={semantic.textMuted} />
+    </Pressable>
   );
 }
 
@@ -138,7 +126,7 @@ function PastLoanRow({ loan }: { loan: Loan }) {
 const ELIGIBILITY_CHECKS: { key: string; passTitle: string; failTitle: string; sub: string }[] = [
   { key: 'Member is not verified', passTitle: 'Account verified', failTitle: 'Account not verified', sub: 'Submit a valid ID from your profile. Usually reviewed within a couple of days.' },
   { key: 'Member already has an active loan', passTitle: 'No active loan', failTitle: 'You already have an active loan', sub: 'Settle your current loan before requesting another.' },
-  { key: 'Member has an unresolved late-contribution penalty', passTitle: 'No unresolved penalty', failTitle: 'An unresolved late-payment penalty', sub: 'Settle the overdue contribution behind it — the Owner reviews the penalty separately.' },
+  { key: 'Member has an unresolved late-contribution penalty', passTitle: 'No unresolved penalty', failTitle: 'An unresolved late-payment penalty', sub: 'Settle the overdue contribution behind it — the Organizer reviews the penalty separately.' },
 ];
 
 export default function LoansOverview() {
@@ -229,11 +217,11 @@ export default function LoansOverview() {
   // real ₱1,820 (30%).
   const principal = Number(activeLoan?.approved_principal ?? activeLoan?.principal ?? 0);
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
+  const interestLeft = remainingInterest(activeLoan, payments);
+  // A repayment waiting on an officer blocks the next one until it's settled.
+  const underReview = payments.some((p) => p.status === 'submitted');
   const repaidAmount = Math.max(0, principal - outstanding);
   const repaidPct = principal > 0 ? Math.min(100, Math.round((repaidAmount / principal) * 100)) : 0;
-  const interestToDate = payments
-    .filter((p) => p.status === 'approved' || p.status === 'paid')
-    .reduce((s, p) => s + Number(p.interest_portion), 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
@@ -248,24 +236,28 @@ export default function LoansOverview() {
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Still to repay</Text>
                 <Badge tone="primary" label="Active" Icon={Repeat} />
               </View>
-              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(outstanding)}</Text>
-              <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18 }}>
-                Borrowed <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(principal)}</Text> on {shortDate(activeLoan.disbursed_at ?? activeLoan.applied_at)}
-                {' '}· {activeLoan.term_months} month{activeLoan.term_months === 1 ? '' : 's'}
-                {activeLoan.interest_rate ? ` · ${(Number(activeLoan.interest_rate) * 100).toFixed(1)}% monthly interest` : ''}
-              </Text>
-
+              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(outstanding + interestLeft)}</Text>
               <View style={{ marginTop: 15 }}>
                 <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
                   <View style={{ height: '100%', width: (repaidPct + '%') as any, borderRadius: 5, backgroundColor: intent.success.base }} />
                 </View>
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-                  <Text variant="caption" color="secondary">Repaid <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(repaidAmount)}</Text></Text>
-                  <Text variant="caption" color="secondary"><Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{repaidPct}%</Text> complete</Text>
+                  <Text variant="caption" color="secondary">Repaid <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(repaidAmount)}</Text> of {formatPeso(principal)}</Text>
+                  <Text variant="caption" style={{ fontWeight: '700', color: semantic.textPrimary }}>{repaidPct}%</Text>
                 </View>
               </View>
 
-              <Split items={[{ k: 'Principal left', v: formatPeso(outstanding) }, { k: 'Interest paid to date', v: formatPeso(interestToDate) }]} />
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 14 }}>
+                {[
+                  shortDate(activeLoan.disbursed_at ?? activeLoan.applied_at),
+                  `${activeLoan.term_months} month${activeLoan.term_months === 1 ? '' : 's'}`,
+                  activeLoan.interest_rate ? `${+(Number(activeLoan.interest_rate) * 100).toFixed(2)}% / mo` : '',
+                ].filter(Boolean).map((chip) => (
+                  <View key={chip} style={{ backgroundColor: semantic.surfaceAlt, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
+                    <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{chip}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
 
             {/* Expected monthly payment — same flat-rate convention as the
@@ -297,7 +289,11 @@ export default function LoansOverview() {
               );
             })() : null}
 
-            <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} style={{ marginTop: 14 }} />
+            {underReview ? (
+              <Button label="View my repayments" leading={<ListChecks size={16} color="#fff" />} onPress={() => go('loans/repayments', { from: 'loans' })} style={{ marginTop: 14 }} />
+            ) : (
+              <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} style={{ marginTop: 14 }} />
+            )}
 
             <SectionHead title="Repayment history" aside={`${payments.length} made`} />
             {payments.length === 0 ? (
@@ -306,7 +302,7 @@ export default function LoansOverview() {
               </View>
             ) : (
               <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-                {payments.map((p) => <PaymentRow key={p.id} p={p} />)}
+                {payments.map((p, i) => <PaymentRow key={p.id} p={p} last={i === payments.length - 1} onPress={() => go('loans/repayments/[paymentId]', { paymentId: p.id })} />)}
               </View>
             )}
           </>
@@ -318,7 +314,7 @@ export default function LoansOverview() {
             <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Requested</Text>
-                <Badge tone="info" label="With the Owner" Icon={Clock3} />
+                <Badge tone="info" label="With the Organizer" Icon={Clock3} />
               </View>
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(pendingLoan.principal)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
@@ -330,7 +326,7 @@ export default function LoansOverview() {
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
               <Tracker steps={[
                 { title: 'You sent the request', sub: shortDate(pendingLoan.applied_at), done: true },
-                { title: 'Owner is deciding', sub: 'Reviews the amount against your record and the fund’s cash', done: false, now: true },
+                { title: 'Organizer is deciding', sub: 'Reviews the amount against your record and the fund’s cash', done: false, now: true },
                 { title: 'Treasurer releases the money', sub: 'Sent outside the app, with a reference number', done: false },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
               ]} />
@@ -340,8 +336,8 @@ export default function LoansOverview() {
               <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 18 }}>
                 Estimated principal per month: <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{formatPeso(Number(pendingLoan.principal) / pendingLoan.term_months)}</Text>
                 {hasCycleRate
-                  ? <> — interest estimated at this cycle's <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{cycleRatePct!.toFixed(2)}%</Text> monthly rate, confirmed by the Owner at approval.</>
-                  : ' — interest is added once the Owner sets the rate.'}
+                  ? <> — interest estimated at this cycle's <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{cycleRatePct!.toFixed(2)}%</Text> monthly rate, confirmed by the Organizer at approval.</>
+                  : ' — interest is added once the Organizer sets the rate.'}
               </Text>
             </View>
 
@@ -363,7 +359,7 @@ export default function LoansOverview() {
               </View>
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                Approved by <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{approvedLoan.approver?.full_name ?? 'the Owner'}</Text> on {shortDate(approvedLoan.approved_at)}
+                Approved by <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{approvedLoan.approver?.full_name ?? 'the Organizer'}</Text> on {shortDate(approvedLoan.approved_at)}
                 {approvedLoan.approved_principal && Number(approvedLoan.approved_principal) < Number(approvedLoan.principal) ? ' · partial amount' : ''}
               </Text>
             </View>
@@ -372,7 +368,7 @@ export default function LoansOverview() {
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
               <Tracker steps={[
                 { title: 'You sent the request', sub: shortDate(approvedLoan.applied_at), done: true },
-                { title: 'Owner approved', sub: `${shortDate(approvedLoan.approved_at)} · ${formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)} approved`, done: true },
+                { title: 'Organizer approved', sub: `${shortDate(approvedLoan.approved_at)} · ${formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)} approved`, done: true },
                 { title: 'Treasurer is releasing the money', sub: 'Sent outside the app, with a reference number recorded', done: false, now: true },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
               ]} />
@@ -396,8 +392,8 @@ export default function LoansOverview() {
 
             <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
               {hasCycleRate
-                ? `Interest: ${cycleRatePct!.toFixed(2)}% per month. The Owner makes the final decision and may reduce the amount.`
-                : 'The Owner sets the interest rate, makes the final decision and may reduce the amount.'}
+                ? `Interest: ${cycleRatePct!.toFixed(2)}% per month. The Organizer makes the final decision and may reduce the amount.`
+                : 'The Organizer sets the interest rate, makes the final decision and may reduce the amount.'}
             </Text>
 
             <Button label="Request a loan" leading={<Coins size={18} color="#fff" />} onPress={() => go('loans/request')} style={{ marginTop: 18 }} />

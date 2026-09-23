@@ -6,6 +6,7 @@ import {
   ScrollText, FileText, BarChart3, Receipt, X, AlertTriangle,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken, intent } from '@/theme/colors';
@@ -24,7 +25,7 @@ import type { Contribution } from '@/api/contributions';
 import type { LoanPayment } from '@/api/lending';
 import type { ReversalRequest } from '@/api/ledger';
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Owner', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
+const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
 function timeAgo(iso: string): string {
   const then = new Date(iso).getTime();
@@ -559,7 +560,7 @@ function VerificationQueue({ groupId }: { groupId: string }) {
                   {[
                     { label: 'Initiated', done: true },
                     { label: 'You verify', done: false, now: true },
-                    { label: 'Owner finalizes', done: false },
+                    { label: 'Organizer finalizes', done: false },
                   ].map((s, i) => (
                     <View key={s.label} style={{ flex: 1, alignItems: 'center' }}>
                       <View style={{
@@ -645,11 +646,11 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
 
   return (
     <>
-      <SectionHead title="Year-end preview" aside="Owner is waiting" tone="hot" />
+      <SectionHead title="Year-end preview" aside="Organizer is waiting" tone="hot" />
       <View style={{ backgroundColor: semantic.dashCard, borderRadius: 18, padding: 16 }}>
         <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Verify the distribution figures</Text>
         <Text style={{ fontSize: 12, lineHeight: 17, color: '#A9C4CF', marginTop: 6 }}>
-          The Treasurer prepared this preview. Nothing is paid out until you verify and the Owner finalizes.
+          The Treasurer prepared this preview. Nothing is paid out until you verify and the Organizer finalizes.
         </Text>
 
         <View style={{ marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(255,255,255,0.13)', flexDirection: 'row', justifyContent: 'space-between' }}>
@@ -660,7 +661,7 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
         <View style={{ marginTop: 14, gap: 9 }}>
           <Gate done label={`Preview prepared by Treasurer · ${shortDate(current.created_at)}`} />
           <Gate done={false} now label="Your verification" />
-          <Gate done={false} label="Owner finalizes — becomes permanent" />
+          <Gate done={false} label="Organizer finalizes — becomes permanent" />
         </View>
 
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
@@ -812,7 +813,7 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
             onPress={() => go(a.route)}
             style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
           >
-            <a.icon size={26} color={semantic.brandDark} strokeWidth={1.8} />
+            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
           </Pressable>
         ))}

@@ -18,7 +18,7 @@ export const HELP_SECTIONS: HelpSection[] = [
       },
       {
         q: 'How do I join a group?',
-        a: 'Ask your group\'s Owner or Treasurer for its join code, then use "Join a group by code" from Profile. Your request goes in as Pending until an officer approves it — you\'ll be added as a Member once they do.',
+        a: 'Ask your group\'s Organizer or Treasurer for its join code, then use "Join a group by code" from Profile. Your request goes in as Pending until an officer approves it — you\'ll be added as a Member once they do.',
       },
       {
         q: 'What can I do before my identity is verified?',
@@ -48,7 +48,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     items: [
       {
         q: 'How do I request a loan?',
-        a: 'From your group, go to Loans and submit a request with the amount and purpose. Loan authorization is decided by the group Owner; once approved, disbursement is recorded separately by the Treasurer — the same segregation of duties used for every other trust-bearing action.',
+        a: 'From your group, go to Loans and submit a request with the amount and purpose. Loan authorization is decided by the group Organizer; once approved, disbursement is recorded separately by the Treasurer — the same segregation of duties used for every other trust-bearing action.',
       },
       {
         q: 'Why do I need to be verified to request a loan?',
@@ -61,7 +61,7 @@ export const HELP_SECTIONS: HelpSection[] = [
     items: [
       {
         q: 'What does each group role do?',
-        a: 'Owner — governance, lending decisions, and finalizing cycles. Treasurer — records money movement (contributions, repayments, disbursements). Auditor — verifies and approves the Treasurer\'s postings and proofs. Member — joins, contributes, and requests or repays loans.',
+        a: 'Organizer — governance, lending decisions, and finalizing cycles. Treasurer — records money movement (contributions, repayments, disbursements). Auditor — verifies and approves the Treasurer\'s postings and proofs. Member — joins, contributes, and requests or repays loans.',
       },
       {
         q: 'Why can\'t the Treasurer also approve their own postings?',

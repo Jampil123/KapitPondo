@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator, Alert, Modal } from 'react-native';
+import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator, Modal } from 'react-native';
+import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Search, Rows3, LayoutGrid, X, Receipt, Flag } from 'lucide-react-native';
@@ -174,7 +175,7 @@ export default function ReviewProofs() {
                   <View style={{ flex: 1 }}>
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>These reached the ledger with nothing attached</Text>
                     <Text style={{ fontSize: 11.5, lineHeight: 16, color: '#A85A4C', fontFamily: 'Poppins_500Medium', marginTop: 3 }}>
-                      Ask the officer who recorded it to supply one, or flag the entry for the Owner.
+                      Ask the officer who recorded it to supply one, or flag the entry for the Organizer.
                     </Text>
                   </View>
                 </View>
@@ -275,7 +276,7 @@ export default function ReviewProofs() {
         )}
 
         <Text variant="caption" color="muted" style={{ lineHeight: 16, paddingHorizontal: 2, marginTop: 18 }}>
-          Proofs are read-only. Flagging one records a concern and notifies the Owner — it doesn&apos;t change the ledger, which can only be corrected by a reversing entry.
+          Proofs are read-only. Flagging one records a concern and notifies the Organizer — it doesn&apos;t change the ledger, which can only be corrected by a reversing entry.
         </Text>
       </ScrollView>
 
@@ -303,7 +304,7 @@ export default function ReviewProofs() {
       <ReasonPrompt
         visible={!!flagTarget}
         title={flagTarget ? `Flag "${flagTarget.title}"?` : 'Flag posting'}
-        placeholder="What's the concern? (visible to the Owner)"
+        placeholder="What's the concern? (visible to the Organizer)"
         confirmLabel="Flag"
         destructive
         onCancel={() => setFlagTarget(null)}

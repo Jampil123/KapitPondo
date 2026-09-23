@@ -46,7 +46,7 @@ export default function JoinGroup() {
           </View>
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 8 }}>Request Sent</Text>
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 32 }}>
-            The group owner will review your request.
+            The group organizer will review your request.
           </Text>
           <View style={{ alignSelf: 'stretch' }}>
             <Button label="Back to Home" onPress={() => router.replace('/(app)/groups')} />

@@ -170,7 +170,7 @@ export function buildMemberRecordMarkdown(data: MemberRecordResponse): string {
     '- This document reflects records approved as of the generated date and time above.',
     '- Pending or rejected entries are listed for reference but excluded from totals.',
     '- All amounts are in Philippine Pesos (PHP).',
-    '- For discrepancies, contact your Group Owner or Auditor.',
+    '- For discrepancies, contact your Group Organizer or Auditor.',
     '',
     '## Document Verification',
     '',
