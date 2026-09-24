@@ -42,12 +42,16 @@ export interface Loan {
   disbursed_at: string | null;
   rejection_reason: string | null;
   created_at: string;
+  /** Which of the borrower's heads this loan is for — 1 is the member themselves (migration 0065). */
+  head_no: number;
+  /** The name the borrower gave that head, if any. Always null for head 1. */
+  head_name: string | null;
   /** Who made the lending decision (approve/reject) — not necessarily who disbursed it. */
   approver: { full_name: string } | null;
   /** Who actually released the funds — a separate step/actor from approval (see disburseLoan()). Null until disbursed. */
   disburser: { full_name: string } | null;
   /** Who the loan actually belongs to (the borrower) — not who approved it. `role` tells whether the borrower is the Owner (no-self-approval rule — the Treasurer decides those instead). */
-  membership: { member_id: string; role: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
+  membership: { member_id: string; role: string; heads?: number; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
 
 export interface LoanEligibility {
@@ -62,6 +66,31 @@ export interface MemberLoanEligibility {
   eligible: boolean;
   reasons: string[];
   available_cash: Money;
+  heads: number;
+  /** One per head, in order — loan_id is set when that head already has a loan in progress. */
+  slots: HeadSlot[];
+}
+
+export interface HeadSlot {
+  head_no: number;
+  /** Null for head 1 (the member) or a head that hasn't been named. */
+  name: string | null;
+  loan_id: string | null;
+  loan_status: LoanStatus | null;
+}
+
+/** Member-safe row from listBorrowers() — no rate, balance or repayments. */
+export interface Borrower {
+  loan_id: string;
+  membership_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  heads: number;
+  head_no: number;
+  head_name: string | null;
+  amount: Money;
+  status: 'approved' | 'active';
+  disbursed_at: string | null;
 }
 
 export interface LoanPayment {
@@ -116,6 +145,8 @@ export interface ApplyLoanInput {
   principal: string; // clean decimal string
   term_months: number;
   purpose?: string;
+  /** Which head the loan is for; defaults to 1 (the member themselves). */
+  head_no?: number;
 }
 
 /** POST — apply for a loan (status: pending). Interest is set later at approval. */
@@ -147,6 +178,18 @@ export function getLoanEligibility(groupId: string, loanId: string) {
 /** GET — member-safe: am I eligible to request a loan right now, and how much cash does the fund have. Same 3 checks as getLoanEligibility, before any loan exists. */
 export function getMemberLoanEligibility(groupId: string) {
   return api.get<MemberLoanEligibility>(`/api/groups/${groupId}/loans/eligibility`);
+}
+
+/** GET — member-safe list of who's borrowing right now (approved or active loans). */
+export async function listBorrowers(groupId: string) {
+  const res = await api.get<{ borrowers: Borrower[] }>(`/api/groups/${groupId}/loans/borrowers`);
+  return res.borrowers;
+}
+
+/** "Head 2 · Pedro", or "Head 2" if unnamed. Head 1 reads as "You" / the member's own name, passed in. */
+export function headLabel(headNo: number, headName: string | null | undefined, selfLabel = 'You') {
+  if (headNo === 1) return selfLabel;
+  return headName ? `Head ${headNo} · ${headName}` : `Head ${headNo}`;
 }
 
 /** POST — the borrower withdraws their own request. Only works while status is still 'pending'. */

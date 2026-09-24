@@ -21,7 +21,7 @@ router.post(
       if (req.member.verification_status !== 'verified') {
         return res.status(403).json({ error: 'Only verified members can request a loan' });
       }
-      const { principal, term_months, purpose } = req.body;
+      const { principal, term_months, purpose, head_no } = req.body;
       if (principal == null || term_months == null) {
         return res.status(400).json({ error: 'principal and term_months are required' });
       }
@@ -31,6 +31,7 @@ router.post(
         principal,
         termMonths: term_months,
         purpose,
+        headNo: head_no,
       });
       res.status(201).json({ loan });
     } catch (err) {
@@ -73,7 +74,22 @@ router.get(
     try {
       const { eligible, reasons } = await service.checkEligibilityForMembership(req.membership.id);
       const availableCash = await service.availableCash(req.params.groupId);
-      res.json({ eligible, reasons, available_cash: availableCash });
+      const { heads, slots } = await service.headSlots(req.membership.id);
+      res.json({ eligible, reasons, available_cash: availableCash, heads, slots });
+    } catch (err) { next(err); }
+  }
+);
+
+// Member-safe "who's borrowing" list — name, head, amount, status only.
+// Registered before /loans/:id for the same reason as /eligibility above.
+router.get(
+  '/groups/:groupId/loans/borrowers',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const borrowers = await service.listBorrowers(req.params.groupId);
+      res.json({ borrowers });
     } catch (err) { next(err); }
   }
 );

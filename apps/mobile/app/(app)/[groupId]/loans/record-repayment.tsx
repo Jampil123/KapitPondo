@@ -12,14 +12,16 @@ import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
-import type { Loan, LoanPayment } from '@/api/lending';
+import { headLabel, type Loan, type LoanPayment } from '@/api/lending';
 import { useLoans, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
 
 function loanName(l: Loan): string {
-  return l.membership?.members?.full_name ?? 'Member';
+  const name = l.membership?.members?.full_name ?? 'Member';
+  // One loan per head — say which head when it isn't the member's own.
+  return l.head_no > 1 ? `${name} · ${headLabel(l.head_no, l.head_name)}` : name;
 }
 function repaymentName(p: LoanPayment): string {
   return p.loans?.membership?.members?.full_name ?? 'Member';

@@ -32,6 +32,42 @@ router.patch(
   }
 );
 
+// Read a membership's head names — anyone in the group (same visibility as
+// the member directory, which already lists heads).
+router.get(
+  '/groups/:groupId/memberships/:id/head-names',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const names = await service.getHeadNames({ groupId: req.params.groupId, membershipId: req.params.id });
+      res.json({ names });
+    } catch (err) { next(err); }
+  }
+);
+
+// Name the extra heads a member carries (heads 2..n) — self-service, own
+// membership only. Body: { names: { "2": "Pedro", "3": "" } }; a blank name
+// clears it back to plain "Head 3".
+router.put(
+  '/groups/:groupId/memberships/:id/head-names',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      if (req.params.id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only name your own heads' });
+      }
+      const { names } = req.body ?? {};
+      if (!names || typeof names !== 'object' || Array.isArray(names)) {
+        return res.status(400).json({ error: 'names must be an object of head number to name' });
+      }
+      const saved = await service.setHeadNames({ membershipId: req.params.id, names });
+      res.json({ names: saved });
+    } catch (err) { next(err); }
+  }
+);
+
 // Preview a year-end distribution (owner or treasurer)
 router.post(
   '/groups/:groupId/distributions/preview',

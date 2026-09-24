@@ -105,17 +105,23 @@ function ActionRow({ entry, frequency, onPress }: { entry: PeriodEntry; frequenc
 function PostedRow({ entry, onPress }: { entry: PeriodEntry; onPress: () => void }) {
   const row = entry.row!;
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
       <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
         <Check size={17} color={intent.success.text} strokeWidth={2.2} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{row.approver?.full_name ? `Verified ${shortDate(row.paid_date)} by ${row.approver.full_name}` : `Posted ${shortDate(row.paid_date)}`}</Text>
-        <View style={{ backgroundColor: intent.success.soft, alignSelf: 'flex-start', paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20, marginTop: 3 }}>
+        <Text style={{ fontSize: 12.5, lineHeight: 18, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>
+          {row.approver?.full_name ? 'Verified ' : 'Posted '}
+          <Text style={{ fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{shortDate(row.paid_date)}</Text>
+          {row.approver?.full_name ? ` by ${row.approver.full_name}` : ''}
+        </Text>
+      </View>
+      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+        <View style={{ backgroundColor: intent.success.soft, paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20 }}>
           <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: intent.success.text }}>Posted</Text>
         </View>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{formatPeso(row.amount)}</Text>
       </View>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(row.amount)}</Text>
       <ChevronRight size={16} color={semantic.textMuted} />
     </Pressable>
   );
@@ -124,7 +130,7 @@ function PostedRow({ entry, onPress }: { entry: PeriodEntry; onPress: () => void
 function UpcomingRow({ entry, frequency, onPress }: { entry: PeriodEntry; frequency: string; onPress?: () => void }) {
   const label = periodLabel(entry.periodStart, frequency);
   const content = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, opacity: onPress ? 1 : 0.55 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border, opacity: onPress ? 1 : 0.55 }}>
       <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: entry.kind === 'due' ? semantic.surfaceAlt : '#F2F7F9', alignItems: 'center', justifyContent: 'center' }}>
         <Clock size={16} color={entry.kind === 'due' ? semantic.brandDark : semantic.textMuted} strokeWidth={2} />
       </View>
@@ -218,8 +224,8 @@ export default function ContributionsOverview() {
       <BandHeader title="My contributions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: nextPayable ? 110 : 40 }}>
 
-        {/* ---------------- Summary (transparent, no card) ---------------- */}
-        <View style={{ paddingHorizontal: 2 }}>
+        {/* ---------------- Summary ---------------- */}
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
             <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Contributed so far</Text>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: badgeTone.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
@@ -282,7 +288,7 @@ export default function ContributionsOverview() {
             {showGroup('posted') && posted.length > 0 && (
               <>
                 <GroupLabel title="Posted to the ledger" />
-                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                <View>
                   {posted.map((entry) => <PostedRow key={entry.index} entry={entry} onPress={() => openPosted(entry)} />)}
                 </View>
               </>
@@ -291,7 +297,7 @@ export default function ContributionsOverview() {
             {showGroup('upcoming') && upcoming.length > 0 && (
               <>
                 <GroupLabel title="Upcoming" />
-                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                <View>
                   {upcoming.map((entry) => (
                     <UpcomingRow key={entry.index} entry={entry} frequency={cycle.frequency} onPress={entry.kind === 'due' ? () => openEntry(entry) : undefined} />
                   ))}

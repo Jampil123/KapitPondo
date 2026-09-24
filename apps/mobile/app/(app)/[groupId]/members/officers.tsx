@@ -8,7 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
-import { semantic, intent } from '@/theme/colors';
+import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listMembers, listPendingMembers, setMemberRole, type GroupMember } from '@/api/groups';
 import type { GroupRole } from '@/constants/roles';
@@ -155,7 +155,7 @@ export default function MembersOfficers() {
             {tab !== 'members' ? (
               <>
                 <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>Officer slots</Text>
-                <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
                     <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Organizer</Text>
                     {owner ? (
@@ -214,9 +214,9 @@ export default function MembersOfficers() {
             ) : null}
 
             <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>People</Text>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+            <View>
               {filteredPeople.length === 0 ? (
-                <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No one matches this filter.</Text>
+                <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No one matches this filter.</Text>
               ) : (
                 filteredPeople.map((m, i) => {
                   const locked = m.role === 'owner';
@@ -225,7 +225,7 @@ export default function MembersOfficers() {
                       key={m.member_id}
                       disabled={locked}
                       onPress={() => onPressPerson(m)}
-                      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < filteredPeople.length - 1 ? 1 : 0, borderColor: semantic.border }}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: i < filteredPeople.length - 1 ? 1 : 0, borderColor: semantic.border }}
                     >
                       <AvatarBadge m={m} />
                       <View style={{ flex: 1, minWidth: 0 }}>

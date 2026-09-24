@@ -11,14 +11,10 @@ import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { semantic, intent, steel } from '@/theme/colors';
+import { semantic, intent, steel, shadowToken } from '@/theme/colors';
 import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 
 
-const SOFT_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.04, shadowRadius: 10, shadowOffset: { width: 0, height: 2 },
-  elevation: 1, boxShadow: '0px 2px 10px rgba(42,62,75,0.04)',
-} as const;
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useSummary } from '@/features/reporting/reporting.hooks';
@@ -134,7 +130,7 @@ function QuickAction({ label, tone, Icon, onPress, disabled }: { label: string; 
 
 function DecisionCard({ children, onPress }: { children: ReactNode; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, SOFT_SHADOW]}>
+    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.soft]}>
       {children}
     </Pressable>
   );
@@ -493,7 +489,7 @@ function TreasurerRepaymentCard({ groupId, payment, onPress, onChanged }: { grou
 
 function EmptyQueue({ decidedCount }: { decidedCount: number }) {
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, SOFT_SHADOW]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.soft]}>
       <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
         <CheckCircle2 size={18} color={intent.success.text} />
       </View>
@@ -572,7 +568,7 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
       <SectionHead title="Pending Actions" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} hot={total > 0} />
 
       {loading ? (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, SOFT_SHADOW]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
           <ActivityIndicator color={semantic.brand} />
         </View>
       ) : total === 0 ? (
@@ -674,7 +670,7 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string) => 
   return (
     <>
       <SectionHead title="This month's collection" aside={summary.latestDue ? `Due ${shortDate(summary.latestDue)}` : undefined} />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 17 }, SOFT_SHADOW]}>
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 17 }, shadowToken.soft]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 11 }}>
           <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>
             {formatPeso(summary.collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(summary.expected)}</Text>
@@ -820,7 +816,7 @@ function ManageRow({ go }: { go: (r: string) => void }) {
           <Pressable
             key={a.key}
             onPress={() => go(a.key)}
-            style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, SOFT_SHADOW]}
+            style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
           >
             <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
@@ -853,11 +849,11 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
   const entries = log.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: entries.length ? 6 : 20 }, SOFT_SHADOW]}>
+    <View>
       {log.loading && !log.data ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No activity yet.</Text>
+        <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No activity yet.</Text>
       ) : (
         <>
           {entries.map((e, i) => {
@@ -869,7 +865,7 @@ function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => v
               <Pressable
                 key={e.id}
                 onPress={() => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}
               >
                 <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={16} color={tone.fg} strokeWidth={2.4} />

@@ -190,12 +190,12 @@ export default function MemberBalances() {
             <Text variant="body" color="secondary">No one matches this filter.</Text>
           </View>
         ) : (
-          <View style={{ gap: 12, marginTop: 14 }}>
-            {filtered.map((r) => {
+          <View style={{ marginTop: 8 }}>
+            {filtered.map((r, i) => {
               const behind = r.behindCount > 0;
               const unverified = r.m.members?.verification_status !== 'verified';
               return (
-                <View key={r.m.id} style={[{ flexDirection: 'row', gap: 12, padding: 14, backgroundColor: semantic.surface, borderRadius: 16 }, shadowToken.card]}>
+                <View key={r.m.id} style={{ flexDirection: 'row', gap: 12, paddingVertical: 14, paddingHorizontal: 2, borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                   <View style={{ marginTop: 2 }}>
                     <Avatar name={name(r.m)} uri={r.m.members?.avatar_url} size={44} />
                   </View>

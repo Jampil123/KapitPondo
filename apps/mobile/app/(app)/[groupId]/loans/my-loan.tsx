@@ -1,27 +1,27 @@
-import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, Clock3, AlertTriangle, Coins, Repeat, ChevronDown, ChevronUp, ChevronRight, ListChecks } from 'lucide-react-native';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
+import { Check, Clock3, Repeat, ChevronRight, ListChecks } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { semantic, intent, type IntentName } from '@/theme/colors';
+import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useLoans, useLoan, useMemberLoanEligibility, useCancelLoan } from '@/features/lending/lending.hooks';
+import { useLoans, useLoan, useCancelLoan } from '@/features/lending/lending.hooks';
+import { Badge } from '@/features/lending/LoanBits';
 import { remainingInterest } from '@/features/lending/remainingInterest';
-import type { Loan, LoanPayment } from '@/api/lending';
+import type { LoanPayment } from '@/api/lending';
 
 const CARD_SHADOW = {
   shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
   boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
 } as const;
 
-type PageState = 'active' | 'pending' | 'release' | 'can' | 'blocked';
+type PageState = 'active' | 'pending' | 'release';
 
 function shortDate(iso: string | null | undefined) {
   if (!iso) return '';
@@ -29,38 +29,11 @@ function shortDate(iso: string | null | undefined) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function Badge({ tone, label, Icon }: { tone: IntentName; label: string; Icon: any }) {
-  const t = intent[tone];
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.soft, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 }}>
-      <View style={{ width: 15, height: 15, borderRadius: 8, backgroundColor: t.strong, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon size={9} color="#fff" strokeWidth={2.6} />
-      </View>
-      <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
-    </View>
-  );
-}
-
 function SectionHead({ title, aside }: { title: string; aside?: string }) {
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 20, marginBottom: 9 }}>
       <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
       {aside ? <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{aside}</Text> : null}
-    </View>
-  );
-}
-
-function ChecklistRow({ pass, title, sub }: { pass: boolean; title: string; sub: string }) {
-  const tone = pass ? intent.success : intent.danger;
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 11, paddingVertical: 9, borderBottomWidth: 1, borderColor: semantic.border }}>
-      <View style={{ width: 20, height: 20, borderRadius: 10, backgroundColor: tone.soft, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
-        {pass ? <Check size={11} color={tone.text} strokeWidth={3} /> : <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: tone.text }}>!</Text>}
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: pass ? semantic.textPrimary : intent.danger.text }}>{title}</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 16 }}>{sub}</Text>
-      </View>
     </View>
   );
 }
@@ -93,7 +66,7 @@ function Tracker({ steps }: { steps: { title: string; sub: string; done: boolean
 
 function PaymentRow({ p, onPress, last }: { p: LoanPayment; onPress: () => void; last: boolean }) {
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 4, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
       <View style={{ flex: 1, gap: 3 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(p.amount)}</Text>
@@ -110,60 +83,44 @@ function PaymentRow({ p, onPress, last }: { p: LoanPayment; onPress: () => void;
   );
 }
 
-function PastLoanRow({ loan }: { loan: Loan }) {
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
-      <View style={{ gap: 2 }}>
-        <Text variant="label" style={{ fontSize: 13.5 }}>{formatPeso(loan.principal)}</Text>
-        <Text variant="caption" color="secondary">{loan.purpose ?? 'Loan'}</Text>
-      </View>
-      <StatusBadge entity="loan" value={loan.status} />
-    </View>
-  );
-}
 
-// key must exactly match a string in the eligibility API's `reasons` array.
-const ELIGIBILITY_CHECKS: { key: string; passTitle: string; failTitle: string; sub: string }[] = [
-  { key: 'Member is not verified', passTitle: 'Account verified', failTitle: 'Account not verified', sub: 'Submit a valid ID from your profile. Usually reviewed within a couple of days.' },
-  { key: 'Member already has an active loan', passTitle: 'No active loan', failTitle: 'You already have an active loan', sub: 'Settle your current loan before requesting another.' },
-  { key: 'Member has an unresolved late-contribution penalty', passTitle: 'No unresolved penalty', failTitle: 'An unresolved late-payment penalty', sub: 'Settle the overdue contribution behind it — the Organizer reviews the penalty separately.' },
-];
-
-export default function LoansOverview() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+/**
+ * One of my loans — opened from the Loans hub (loans/index.tsx) with its
+ * `loanId`. Without one it falls back to the old single-loan behaviour
+ * (active, else pending, else approved).
+ */
+export default function MyLoan() {
+  const { groupId, loanId } = useLocalSearchParams<{ groupId: string; loanId?: string }>();
   const router = useRouter();
   const { membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
   const allLoans = useLoans(groupId!, {});
   const cancel = useCancelLoan(groupId!);
-  const [showPast, setShowPast] = useState(false);
 
   // listLoans only self-scopes server-side when role === 'member' — for
   // owner/treasurer/auditor it returns the whole group's loans, so filter here
   // to guarantee this page only ever shows the caller's own loans.
   const rows = (allLoans.data ?? []).filter((l) => l.membership_id === membership?.id);
-  const activeLoan = rows.find((l) => l.status === 'active') ?? null;
-  const pendingLoan = rows.find((l) => l.status === 'pending') ?? null;
-  const approvedLoan = rows.find((l) => l.status === 'approved') ?? null;
-  const pastLoans = useMemo(() => rows.filter((l) => ['paid', 'rejected', 'cancelled'].includes(l.status)), [rows]);
+  // Narrowed to the one loan the hub opened, so everything below works as before.
+  const pool = loanId ? rows.filter((l) => l.id === loanId) : rows;
+  const activeLoan = pool.find((l) => l.status === 'active') ?? null;
+  const pendingLoan = pool.find((l) => l.status === 'pending') ?? null;
+  const approvedLoan = pool.find((l) => l.status === 'approved') ?? null;
   const currentLoan = activeLoan ?? pendingLoan ?? approvedLoan;
 
   const detail = useLoan(groupId!, currentLoan?.id);
   const payments = detail.data?.payments ?? [];
-  const eligibility = useMemberLoanEligibility(groupId!);
 
-  const state: PageState =
+  const state: PageState | null =
     activeLoan ? 'active' :
     pendingLoan ? 'pending' :
-    approvedLoan ? 'release' :
-    eligibility.data?.eligible ? 'can' : 'blocked';
+    approvedLoan ? 'release' : null;
 
   // "Never loaded yet", not `.loading`: a background or realtime refetch keeps the previous data, and swapping the
   // whole page for the spinner (with a different header) on every one of those made the title flicker.
   const loading =
     (allLoans.data === null && !allLoans.error) ||
-    (!!currentLoan && detail.data === null && !detail.error) ||
-    (!currentLoan && eligibility.data === null && !eligibility.error);
+    (!!currentLoan && detail.data === null && !detail.error);
 
   const go = (route: string, extraParams?: Record<string, string>) =>
     router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...extraParams } });
@@ -185,8 +142,6 @@ export default function LoansOverview() {
     active: 'My loan',
     pending: 'My loan request',
     release: 'My loan request',
-    can: 'Loans',
-    blocked: 'Loans',
   };
 
   if (loading) {
@@ -197,6 +152,10 @@ export default function LoansOverview() {
       </SafeAreaView>
     );
   }
+
+  // Eligibility, requesting and past loans all live on the Loans hub now —
+  // this page is only one loan in progress.
+  if (!state) return <Redirect href={{ pathname: '/(app)/[groupId]/loans', params: { groupId } } as any} />;
 
   // The cycle can configure a default monthly rate (set at cycle creation,
   // cycles/configure.tsx) — the Owner can still adjust it per loan at
@@ -227,6 +186,15 @@ export default function LoansOverview() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title={TITLES[state]} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+
+        {currentLoan ? (
+          <Text variant="caption" color="secondary" style={{ paddingHorizontal: 4, marginBottom: 6 }}>
+            Borrower: <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>
+              {currentLoan.head_no === 1 ? 'You' : currentLoan.head_name ?? `Head ${currentLoan.head_no}`}
+            </Text>
+            {currentLoan.head_no > 1 ? ` · Head ${currentLoan.head_no}` : ''}
+          </Text>
+        ) : null}
 
         {/* ---------------- Active loan ---------------- */}
         {state === 'active' && activeLoan && (
@@ -273,7 +241,7 @@ export default function LoansOverview() {
               return (
                 <>
                   <SectionHead title="Expected monthly payment" />
-                  <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+                  <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
                     {[
                       ['Principal / month', formatPeso(monthlyPrincipal)],
                       ['Interest / month', formatPeso(monthlyInterest)],
@@ -292,16 +260,14 @@ export default function LoansOverview() {
             {underReview ? (
               <Button label="View my repayments" leading={<ListChecks size={16} color="#fff" />} onPress={() => go('loans/repayments', { from: 'loans' })} style={{ marginTop: 14 }} />
             ) : (
-              <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay')} style={{ marginTop: 14 }} />
+              <Button label="Make a repayment" leading={<Repeat size={16} color="#fff" />} onPress={() => go('loans/repay', { loanId: activeLoan.id })} style={{ marginTop: 14 }} />
             )}
 
             <SectionHead title="Repayment history" aside={`${payments.length} made`} />
             {payments.length === 0 ? (
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
-                <Text variant="body" color="muted">No repayments recorded yet.</Text>
-              </View>
+              <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 4 }}>No repayments recorded yet.</Text>
             ) : (
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+              <View>
                 {payments.map((p, i) => <PaymentRow key={p.id} p={p} last={i === payments.length - 1} onPress={() => go('loans/repayments/[paymentId]', { paymentId: p.id })} />)}
               </View>
             )}
@@ -374,66 +340,6 @@ export default function LoansOverview() {
               ]} />
             </View>
           </>
-        )}
-
-        {/* ---------------- Can request ---------------- */}
-        {state === 'can' && (
-          <>
-            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Available to you</Text>
-                <Badge tone="success" label="Eligible" Icon={Check} />
-              </View>
-              <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8, marginTop: 6 }}>
-                Up to {formatPeso(eligibility.data?.available_cash ?? 0)}
-              </Text>
-              <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>Limited by the fund's cash on hand today</Text>
-            </View>
-
-            <Text variant="caption" color="secondary" style={{ marginTop: 14, lineHeight: 17 }}>
-              {hasCycleRate
-                ? `Interest: ${cycleRatePct!.toFixed(2)}% per month. The Organizer makes the final decision and may reduce the amount.`
-                : 'The Organizer sets the interest rate, makes the final decision and may reduce the amount.'}
-            </Text>
-
-            <Button label="Request a loan" leading={<Coins size={18} color="#fff" />} onPress={() => go('loans/request')} style={{ marginTop: 18 }} />
-          </>
-        )}
-
-        {/* ---------------- Not eligible ---------------- */}
-        {state === 'blocked' && (
-          <>
-            <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Loan requests</Text>
-                <Badge tone="warning" label="Locked" Icon={AlertTriangle} />
-              </View>
-              <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 6 }}>Not available yet</Text>
-              <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                {eligibility.data?.reasons.length ?? 0} thing{(eligibility.data?.reasons.length ?? 0) === 1 ? '' : 's'} need sorting before you can borrow
-              </Text>
-            </View>
-
-            <SectionHead title="What's blocking you" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, paddingHorizontal: 16, paddingTop: 4 }, CARD_SHADOW]}>
-              {ELIGIBILITY_CHECKS.map((c) => {
-                const failed = eligibility.data?.reasons.includes(c.key) ?? false;
-                return <ChecklistRow key={c.key} pass={!failed} title={failed ? c.failTitle : c.passTitle} sub={c.sub} />;
-              })}
-            </View>
-
-          </>
-        )}
-
-        {/* ---------------- Past loans — always visible ---------------- */}
-        {pastLoans.length > 0 && (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden', marginTop: 20 }, CARD_SHADOW]}>
-            <Pressable onPress={() => setShowPast((v) => !v)} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, paddingHorizontal: 16 }}>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>Past loans ({pastLoans.length})</Text>
-              {showPast ? <ChevronUp size={18} color={semantic.textMuted} /> : <ChevronDown size={18} color={semantic.textMuted} />}
-            </Pressable>
-            {showPast && pastLoans.map((loan) => <PastLoanRow key={loan.id} loan={loan} />)}
-          </View>
         )}
 
       </ScrollView>

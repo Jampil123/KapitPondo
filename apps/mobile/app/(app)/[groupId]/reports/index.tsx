@@ -8,7 +8,7 @@ import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterTabs } from '@/components/shared/FilterTabs';
 import { GrowthChart, MONTH_SHORT } from '@/components/shared/GrowthChart';
-import { semantic, intent, type IntentName } from '@/theme/colors';
+import { semantic, intent, type IntentName, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -20,10 +20,6 @@ import { useLoans } from '@/features/lending/lending.hooks';
 import { useMyPenalties } from '@/features/penalties/penalties.hooks';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
-  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
-} as const;
 
 type Period = 'cycle' | 'all';
 
@@ -74,7 +70,7 @@ function StatementRow({ e }: { e: LedgerEntry }) {
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
   const copy = ACTION_COPY[e.entry_type] ?? (e.description ?? e.entry_type.replace(/_/g, ' '));
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
       </View>
@@ -199,7 +195,7 @@ export default function Reports() {
         />
 
         {/* ---------------- Contributed + growth chart ---------------- */}
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, marginTop: 14 }, CARD_SHADOW]}>
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginTop: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View>
               <Text variant="overline" color="muted">Contributed</Text>
@@ -226,7 +222,7 @@ export default function Reports() {
 
         {/* ---------------- Loans, penalties, share ---------------- */}
         <GroupLabel title="Breakdown" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
           <BreakdownRow
             Icon={Repeat} tone={outstandingLoan > 0 ? 'danger' : 'neutral'}
             title="Loan still owed"
@@ -255,11 +251,9 @@ export default function Reports() {
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 10 }} />
         ) : entries.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
-            <Text variant="body" color="muted">No entries yet.</Text>
-          </View>
+          <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No entries yet.</Text>
         ) : (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+          <View>
             {entries.slice(0, 4).map((e) => <StatementRow key={e.id} e={e} />)}
             <Pressable onPress={() => router.push({ pathname: '/(app)/[groupId]/activity' as any, params: { groupId } })} style={{ paddingVertical: 13, alignItems: 'center' }}>
               <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>

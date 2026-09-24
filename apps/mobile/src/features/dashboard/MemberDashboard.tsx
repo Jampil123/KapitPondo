@@ -20,11 +20,6 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 import { cyclePeriods, buildTimeline } from '@/features/contributions/periods';
 import type { Contribution } from '@/api/contributions';
 
-const CARD_BG = '#F5F9FA';
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.045, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2,
-  boxShadow: '0px 4px 14px rgba(42,62,75,0.045)',
-} as const;
 
 function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: string; onAsidePress?: () => void }) {
   return (
@@ -420,7 +415,7 @@ function FundComposition({ groupId }: { groupId: string }) {
 
   if (fund.loading) {
     return (
-      <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: 17, alignItems: 'center' }, CARD_SHADOW]}>
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 17, alignItems: 'center' }, shadowToken.soft]}>
         <ActivityIndicator color={semantic.brand} />
       </View>
     );
@@ -433,7 +428,7 @@ function FundComposition({ groupId }: { groupId: string }) {
   const lentPct = total > 0 ? 100 - cashPct : 0;
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 }, CARD_SHADOW]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 14 }, shadowToken.soft]}>
       <FundRing cash={cash} onLoan={onLoan} cashPct={cashPct} />
 
       <View style={{ flex: 1, minWidth: 0 }}>
@@ -463,18 +458,18 @@ function RecentActivity({ groupId, onSeeAll, onOpen }: { groupId: string; onSeeA
   const entries = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: CARD_BG, borderRadius: 20, padding: entries.length ? 6 : 20 }, CARD_SHADOW]}>
+    <View>
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No recent activity yet.</Text>
+        <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No recent activity yet.</Text>
       ) : (
         <>
           {entries.map((e, i) => {
             const credit = e.direction === 'credit';
             const Icon = credit ? ArrowDownRight : ArrowUpRight;
             return (
-              <Pressable key={e.id} onPress={() => onOpen(e.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 8, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+              <Pressable key={e.id} onPress={() => onOpen(e.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                 <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
                 </View>
@@ -544,7 +539,7 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
           <Pressable
             key={a.label}
             onPress={() => go(a.route)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: CARD_BG, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, CARD_SHADOW]}
+            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
           >
             <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 10, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>

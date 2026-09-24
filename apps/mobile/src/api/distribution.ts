@@ -66,6 +66,20 @@ export function setHeads(groupId: string, membershipId: string, heads: number) {
   );
 }
 
+export interface HeadName { head_no: number; name: string }
+
+/** GET — names given to a membership's extra heads (2..n). Head 1 is the member themselves. */
+export async function getHeadNames(groupId: string, membershipId: string) {
+  const res = await api.get<{ names: HeadName[] }>(`/api/groups/${groupId}/memberships/${membershipId}/head-names`);
+  return res.names;
+}
+
+/** PUT — name your own extra heads. `{ 2: 'Pedro', 3: '' }` — a blank clears it. */
+export async function setHeadNames(groupId: string, membershipId: string, names: Record<number, string>) {
+  const res = await api.put<{ names: HeadName[] }>(`/api/groups/${groupId}/memberships/${membershipId}/head-names`, { names });
+  return res.names;
+}
+
 /** POST — build a year-end preview (status: previewed) + allocations. */
 export function previewDistribution(groupId: string, period: string) {
   return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/preview`, { period });

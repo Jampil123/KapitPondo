@@ -164,6 +164,22 @@ async function setHeads({ groupId, membershipId, heads }) {
     }
   }
 
+  // Each head is a loan slot (migration 0065) — a head can't be removed while
+  // it still has a loan in progress.
+  const { data: openLoans, error: lErr } = await supabase
+    .from('loans')
+    .select('head_no')
+    .eq('membership_id', membershipId)
+    .in('status', ['pending', 'approved', 'active']);
+  if (lErr) throw lErr;
+  const highestOpenHead = Math.max(0, ...(openLoans ?? []).map((l) => l.head_no));
+  if (Number(heads) < highestOpenHead) {
+    throw Object.assign(
+      new Error(`Head ${highestOpenHead} still has a loan in progress. Settle it before lowering your heads.`),
+      { status: 409 },
+    );
+  }
+
   const { data: before } = await supabase
     .from('memberships').select('heads').eq('id', membershipId).maybeSingle();
 
@@ -174,10 +190,61 @@ async function setHeads({ groupId, membershipId, heads }) {
     .select()
     .single();
   if (error) throw error;
+
+  // Names for heads that no longer exist would resurface if heads went back up.
+  await supabase.from('membership_head_names').delete().eq('membership_id', membershipId).gt('head_no', Number(heads));
+
   return { membership: data, previousHeads: before?.heads ?? null };
 }
 
+async function getHeadNames({ groupId, membershipId }) {
+  const { data: membership, error: mErr } = await supabase
+    .from('memberships').select('id').eq('id', membershipId).eq('group_id', groupId).maybeSingle();
+  if (mErr) throw mErr;
+  if (!membership) throw Object.assign(new Error('Membership not found in this group'), { status: 404 });
+  const { data, error } = await supabase
+    .from('membership_head_names').select('head_no, name').eq('membership_id', membershipId).order('head_no');
+  if (error) throw error;
+  return data;
+}
+
+// Names for heads 2..heads (head 1 is the member themselves). Blank clears.
+async function setHeadNames({ membershipId, names }) {
+  const { data: membership, error: mErr } = await supabase
+    .from('memberships').select('heads').eq('id', membershipId).single();
+  if (mErr) throw mErr;
+
+  const upserts = [];
+  const clears = [];
+  for (const [key, raw] of Object.entries(names)) {
+    const headNo = Number(key);
+    if (!Number.isInteger(headNo) || headNo < 2 || headNo > membership.heads) {
+      throw Object.assign(new Error(`Head ${key} doesn't exist — you have ${membership.heads} head${membership.heads === 1 ? '' : 's'}`), { status: 400 });
+    }
+    const name = typeof raw === 'string' ? raw.trim() : '';
+    if (name.length > 80) throw Object.assign(new Error('Names can be at most 80 characters'), { status: 400 });
+    if (name) upserts.push({ membership_id: membershipId, head_no: headNo, name, updated_at: new Date().toISOString() });
+    else clears.push(headNo);
+  }
+
+  if (upserts.length) {
+    const { error } = await supabase.from('membership_head_names').upsert(upserts, { onConflict: 'membership_id,head_no' });
+    if (error) throw error;
+  }
+  if (clears.length) {
+    const { error } = await supabase.from('membership_head_names').delete().eq('membership_id', membershipId).in('head_no', clears);
+    if (error) throw error;
+  }
+
+  const { data, error } = await supabase
+    .from('membership_head_names').select('head_no, name').eq('membership_id', membershipId).order('head_no');
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
+  getHeadNames,
+  setHeadNames,
   previewDistribution,
   verifyDistribution,
   listDistributions,

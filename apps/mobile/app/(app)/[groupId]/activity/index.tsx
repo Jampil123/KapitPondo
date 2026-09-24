@@ -13,10 +13,6 @@ import { useLedger } from '@/features/reporting/reporting.hooks';
 import { ENTRY_LABEL } from '@/features/activity/entryCopy';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
-  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
-} as const;
 
 type Filter = 'all' | 'contribution' | 'loan' | 'penalty';
 
@@ -45,18 +41,18 @@ function ActivityRow({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16 }}
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2 }}
     >
       <View style={{ width: 38, height: 38, borderRadius: 12, backgroundColor: credit ? '#E2F0E8' : '#F7E5E5', alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={18} color={credit ? '#3E8E66' : '#C25C5E'} />
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{copy}</Text>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{copy}</Text>
         <Text variant="caption" color="secondary">
           {e.poster?.full_name ? `by ${e.poster.full_name} · ` : ''}{shortDate(e.posted_at)}
         </Text>
       </View>
-      <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13.5, color: credit ? '#3E8E66' : '#C25C5E' }}>
+      <Text style={{ fontFamily: 'Poppins_600SemiBold', fontSize: 13, color: credit ? '#3E8E66' : '#C25C5E' }}>
         {credit ? '+' : '-'}{formatPeso(e.amount)}
       </Text>
     </Pressable>
@@ -83,12 +79,10 @@ export default function ActivityFeed() {
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />
         ) : filtered.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
-            <Text variant="body" color="muted">Nothing here yet.</Text>
-          </View>
+          <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>Nothing here yet.</Text>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} style={{ marginHorizontal: -4 }} contentContainerStyle={{ paddingTop: 4, paddingBottom: 24, paddingHorizontal: 4 }}>
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+            <View>
             {filtered.map((e, i) => (
               <View key={e.id} style={{ borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                 <ActivityRow e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id } })} />

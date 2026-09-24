@@ -21,6 +21,7 @@ export default function GroupLayout() {
           >
             <Stack.Screen name="contributions/contribute" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/repay" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="loans/request" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="contributions/record" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/record" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="activity/[entryId]" options={{ animation: 'slide_from_bottom' }} />

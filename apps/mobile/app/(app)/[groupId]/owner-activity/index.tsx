@@ -6,7 +6,7 @@ import { Check, X, Clock3, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
-import { semantic, intent, shadowToken } from '@/theme/colors';
+import { semantic, intent } from '@/theme/colors';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
 import type { AuditLogEntry } from '@/api/auditLog';
@@ -49,7 +49,7 @@ function ActivityRow({ e, last, onPress }: { e: AuditLogEntry; last: boolean; on
   const tone = TONE[d.toBad ? 'bad' : d.toGood ? 'good' : 'neutral'];
   const who = e.actor?.full_name ? `${e.actor.full_name}${e.actor_role ? ` (${ROLE_LABEL[e.actor_role] ?? e.actor_role})` : ''}` : 'Someone';
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
         <tone.Icon size={16} color={tone.fg} strokeWidth={2.4} />
       </View>
@@ -107,7 +107,7 @@ export default function OwnerActivity() {
           days.map((list) => (
             <View key={list[0].id}>
               <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{dayLabel(list[0].created_at)}</Text>
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+              <View>
                 {list.map((e, i) => (
                   <ActivityRow
                     key={e.id} e={e} last={i === list.length - 1}

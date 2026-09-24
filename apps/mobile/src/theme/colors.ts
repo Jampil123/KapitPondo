@@ -53,6 +53,7 @@ export const semantic = {
   background: '#F7FBFD',  // profile page and subpage background
   surface: '#FFFFFF',
   surfaceAlt: '#EAF2F6',
+  card: '#F5F9FA',        // dashboard-style card fill
   border: '#E4EDF2',
   borderStrong: '#D6E6EF',
 
@@ -71,6 +72,7 @@ export const semantic = {
 // shadow* + elevation = iOS/Android; boxShadow = web.
 export const shadowToken = {
   card: { shadowColor: '#2A3E4B', shadowOpacity: 0.07, shadowRadius: 20, shadowOffset: { width: 0, height: 6 }, elevation: 4, boxShadow: '0px 6px 20px rgba(42,62,75,0.07)' },
+  soft: { shadowColor: '#2A3E4B', shadowOpacity: 0.045, shadowRadius: 14, shadowOffset: { width: 0, height: 4 }, elevation: 2, boxShadow: '0px 4px 14px rgba(42,62,75,0.045)' },
   button: { shadowColor: '#7FA6B8', shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 6, boxShadow: '0px 8px 18px rgba(127,166,184,0.32)' },
 } as const;
 

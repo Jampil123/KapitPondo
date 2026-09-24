@@ -13,6 +13,7 @@ import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/
 import { ENTRY_LABEL } from '@/features/activity/entryCopy';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { parseApiDate } from '@/lib/cycle';
 import { useAuth } from '@/context/AuthContext';
 import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
@@ -25,6 +26,14 @@ function shortDate(iso: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
+}
+
+/** "15th" — day of month only, built by hand so it doesn't depend on the device's Intl support. */
+function dayOnly(iso: string) {
+  const d = parseApiDate(iso).getDate();
+  if (isNaN(d)) return '';
+  const suffix = d % 100 >= 11 && d % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][d % 10] ?? 'th';
+  return `${d}${suffix}`;
 }
 
 function SectionHead({ title, aside, tone }: { title: string; aside?: string; tone?: 'hot' | 'calm' }) {
@@ -106,7 +115,7 @@ function Tag({ tone, children }: { tone: 'late' | 'ok'; children: ReactNode }) {
 
 function EmptyRow({ title, sub }: { title: string; sub: string }) {
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.soft]}>
       <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
         <CheckCircle2 size={18} color={intent.success.text} />
       </View>
@@ -159,7 +168,7 @@ function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: P
   }
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.soft]}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text variant="overline" color="muted">{row.kind === 'contribution' ? 'Contribution' : 'Loan repayment'}</Text>
@@ -257,7 +266,7 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
       <SectionHead title="Payment Verifications" aside={loading ? undefined : rows.length > 0 ? `${rows.length} waiting` : 'All clear'} tone={rows.length > 0 ? 'hot' : 'calm'} />
 
       {loading ? (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
           <ActivityIndicator color={semantic.brand} />
         </View>
       ) : rows.length === 0 ? (
@@ -296,7 +305,7 @@ function OwnerLoanToDecide({ groupId, go }: { groupId: string; go: (r: string) =
     <>
       <SectionHead title="Organizer's loan request" aside={`${loans.length} pending`} tone="hot" />
       {loans.map((loan) => (
-        <View key={loan.id} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.card]}>
+        <View key={loan.id} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.soft]}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{borrowerName(loan)}</Text>
@@ -325,7 +334,7 @@ function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }
 
   if (approvedLoans.loading) {
     return (
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.card]}>
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
         <ActivityIndicator color={semantic.brand} />
       </View>
     );
@@ -341,7 +350,7 @@ function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }
         {loans.slice(0, 2).map((loan) => {
           const covered = cash >= Number(loan.principal);
           return (
-            <View key={loan.id} style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.card]}>
+            <View key={loan.id} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.soft]}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{borrowerName(loan)}</Text>
@@ -407,8 +416,8 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
 
   return (
     <>
-      <SectionHead title="This month's collection" aside={currentDue ? `Due ${shortDate(currentDue)}` : undefined} />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 17 }, shadowToken.card]}>
+      <SectionHead title="This month's collection" aside={currentDue ? `Due ${dayOnly(currentDue)}` : undefined} />
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 17 }, shadowToken.soft]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
           <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>
             {formatPeso(collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(expected)}</Text>
@@ -483,7 +492,7 @@ function RecentTransactions({ groupId, go }: { groupId: string; go: (route: stri
   const txns = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: txns.length ? 6 : 20, overflow: 'hidden' }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: txns.length ? 6 : 20, overflow: 'hidden' }, shadowToken.soft]}>
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : txns.length === 0 ? (
@@ -561,7 +570,7 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
           <Pressable
             key={a.label}
             onPress={() => go(a.route, a.params)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
+            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
           >
             <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>

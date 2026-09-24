@@ -292,7 +292,7 @@ function Tag({ tone, children }: { tone: 'age' | 'ok'; children: React.ReactNode
 
 function QueueCard({ aged, children }: { aged?: boolean; children: React.ReactNode }) {
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, marginBottom: 10, borderLeftWidth: aged ? 4 : 0, borderLeftColor: intent.warning.base }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 18, marginBottom: 10, borderLeftWidth: aged ? 4 : 0, borderLeftColor: intent.warning.base }, shadowToken.soft]}>
       {children}
     </View>
   );
@@ -439,11 +439,11 @@ function VerificationQueue({ groupId }: { groupId: string }) {
       </ScrollView>
 
       {loading ? (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 24, alignItems: 'center' }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
           <ActivityIndicator color={semantic.brand} />
         </View>
       ) : total === 0 ? (
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.soft]}>
           <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
             <CheckCircle2 size={18} color={intent.success.text} />
           </View>
@@ -721,7 +721,7 @@ function VerificationRecord({ groupId }: { groupId: string }) {
   return (
     <>
       <SectionHead title="My verification record" />
-      <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, shadowToken.card]}>
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 16 }, shadowToken.soft]}>
         {loading ? (
           <ActivityIndicator color={semantic.brand} />
         ) : (
@@ -746,7 +746,7 @@ function RecentVerifications({ groupId }: { groupId: string }) {
   const txns = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: txns.length ? 6 : 20 }, shadowToken.card]}>
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: txns.length ? 6 : 20 }, shadowToken.soft]}>
       {ledger.loading ? (
         <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
       ) : txns.length === 0 ? (
@@ -813,7 +813,7 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
           <Pressable
             key={a.route}
             onPress={() => go(a.route)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.surface, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.card]}
+            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
           >
             <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
             <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>

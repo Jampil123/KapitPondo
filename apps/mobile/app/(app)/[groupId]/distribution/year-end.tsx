@@ -19,7 +19,6 @@ import {
   useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useFinalizeDistribution, useCancelDistribution,
 } from '@/features/distribution/distribution.hooks';
 
-const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -44,21 +43,33 @@ function StatusPill({ status }: { status: string | null }) {
   );
 }
 
-function Gate({ state, label, sub }: { state: 'done' | 'now' | 'wait'; label: string; sub?: string }) {
+type GateState = 'done' | 'now' | 'wait';
+
+/** Horizontal stepper — each step's circle joined to the next by a line that turns green once reached. */
+function Gates({ steps }: { steps: { state: GateState; label: string; sub?: string }[] }) {
+  const reached = (idx: number) => steps[idx] && steps[idx].state !== 'wait';
   return (
-    <View style={{ flexDirection: 'row', gap: 12 }}>
-      <View style={{
-        width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: state === 'done' ? intent.success.base : state === 'now' ? '#2FA8FF' : semantic.surfaceAlt,
-      }}>
-        {state === 'done' ? <Check size={12} color="#fff" strokeWidth={3} /> : (
-          <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: state === 'now' ? '#052A47' : semantic.textMuted }}>{state === 'now' ? '•' : '·'}</Text>
-        )}
-      </View>
-      <View style={{ flex: 1, paddingBottom: 2 }}>
-        <Text variant="label" style={{ fontSize: 13.5, color: state === 'wait' ? semantic.textMuted : semantic.textPrimary }}>{label}</Text>
-        {sub ? <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 16 }}>{sub}</Text> : null}
-      </View>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+      {steps.map((st, idx) => (
+        <View key={st.label} style={{ flex: 1, alignItems: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' }}>
+            <View style={{ flex: 1, height: 2, backgroundColor: idx === 0 ? 'transparent' : reached(idx) ? intent.success.base : semantic.border }} />
+            <View style={{
+              width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+              backgroundColor: st.state === 'done' ? intent.success.base : st.state === 'now' ? '#2FA8FF' : semantic.surfaceAlt,
+            }}>
+              {st.state === 'done' ? <Check size={12} color="#fff" strokeWidth={3} /> : (
+                <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: st.state === 'now' ? '#fff' : semantic.textMuted }}>{idx + 1}</Text>
+              )}
+            </View>
+            <View style={{ flex: 1, height: 2, backgroundColor: idx === steps.length - 1 ? 'transparent' : reached(idx + 1) ? intent.success.base : semantic.border }} />
+          </View>
+          <Text style={{ marginTop: 8, paddingHorizontal: 4, textAlign: 'center', fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_500Medium', color: st.state === 'wait' ? semantic.textMuted : semantic.textPrimary }}>
+            {st.label}
+          </Text>
+          {st.sub ? <Text variant="caption" color="secondary" style={{ marginTop: 2, textAlign: 'center', fontSize: 10.5 }}>{st.sub}</Text> : null}
+        </View>
+      ))}
     </View>
   );
 }
@@ -186,7 +197,7 @@ export default function YearEnd() {
         </View>
 
         {/* ---------------- Build / rebuild preview ---------------- */}
-        <View style={[cardStyle, { padding: 14, gap: 10, marginTop: 18 }]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 14, gap: 10, marginTop: 18 }, shadowToken.soft]}>
           <Text variant="overline" color="secondary">Period</Text>
           <TextInput value={period} onChangeText={setPeriod} placeholder="2026" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, fontFamily: 'Poppins_500Medium', fontSize: 15, color: semantic.textPrimary }} />
           <Button label={current && !finalized ? 'Rebuild preview' : 'Build preview'} variant="ghost" onPress={onPreview} loading={preview.loading} />
@@ -195,28 +206,16 @@ export default function YearEnd() {
         {current ? (
           <>
             {/* ---------------- Approval chain ---------------- */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 22, marginBottom: 10 }}>
+            <View style={{ alignItems: 'center', marginTop: 22, marginBottom: 12 }}>
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>
                 {finalized ? 'Approval trail' : 'Before you can finalize'}
               </Text>
             </View>
-            <View style={[cardStyle, { padding: 16, gap: 16 }]}>
-              <Gate
-                state="done"
-                label="Preview prepared"
-                sub={`Built ${shortDate(current.created_at)}`}
-              />
-              <Gate
-                state={verified || finalized ? 'done' : 'now'}
-                label="Auditor verifies the figures"
-                sub={verified || finalized ? `Verified ${shortDate(current.verified_at)}` : undefined}
-              />
-              <Gate
-                state={finalized ? 'done' : verified ? 'now' : 'wait'}
-                label="Organizer finalizes"
-                sub={finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined}
-              />
-            </View>
+            <Gates steps={[
+              { state: 'done', label: 'Preview prepared', sub: `Built ${shortDate(current.created_at)}` },
+              { state: verified || finalized ? 'done' : 'now', label: 'Auditor verifies', sub: verified || finalized ? `Verified ${shortDate(current.verified_at)}` : undefined },
+              { state: finalized ? 'done' : verified ? 'now' : 'wait', label: 'Organizer finalizes', sub: finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined },
+            ]} />
 
             {/* ---------------- Fund changed warning ---------------- */}
             {fundChanged ? (
@@ -248,17 +247,17 @@ export default function YearEnd() {
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>What each member receives</Text>
               <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{allocations.length} members</Text>
             </View>
-            <View style={[cardStyle, { padding: 6 }]}>
+            <View>
               {detail.loading ? (
                 <ActivityIndicator color={semantic.brand} style={{ margin: 20 }} />
               ) : allocations.length === 0 ? (
-                <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No allocations on this preview.</Text>
+                <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No allocations on this preview.</Text>
               ) : (
                 allocations.map((a, i) => {
                   const name = a.memberships?.members?.full_name ?? 'Member';
                   const heads = a.memberships?.heads ?? 0;
                   return (
-                    <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < allocations.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                    <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < allocations.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                       <Avatar name={name} uri={a.memberships?.members?.avatar_url} size={38} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{name}</Text>

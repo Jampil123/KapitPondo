@@ -10,10 +10,12 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useLoans, useLiquidity, useDisburseLoan } from '@/features/lending/lending.hooks';
-import type { Loan } from '@/api/lending';
+import { headLabel, type Loan } from '@/api/lending';
 
 function loanName(l: Loan): string {
-  return l.membership?.members?.full_name ?? 'Member';
+  const name = l.membership?.members?.full_name ?? 'Member';
+  // One loan per head — say which head when it isn't the member's own.
+  return l.head_no > 1 ? `${name} · ${headLabel(l.head_no, l.head_name)}` : name;
 }
 function shortDate(iso: string | null): string {
   if (!iso) return '—';

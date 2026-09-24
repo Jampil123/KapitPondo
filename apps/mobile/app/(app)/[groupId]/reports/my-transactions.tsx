@@ -136,7 +136,7 @@ export default function MyTransactions() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Transactions" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 20, padding: 18 }, shadowToken.card]}>
+        <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
           {ledger.loading ? (
             <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
           ) : (

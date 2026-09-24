@@ -8,7 +8,7 @@ import { MessageCircle, LogOut, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { semantic, intent } from '@/theme/colors';
+import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -16,10 +16,6 @@ import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useQuery, useAction } from '@/hooks/useApi';
 import { listOfficers, listMemberDirectory, leaveGroup } from '@/api/groups';
 
-const CARD_SHADOW = {
-  shadowColor: '#2A3E4B', shadowOpacity: 0.06, shadowRadius: 16, shadowOffset: { width: 0, height: 5 }, elevation: 3,
-  boxShadow: '0px 5px 16px rgba(42,62,75,0.06)',
-} as const;
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 const ROLE_DUTY: Record<string, string> = {
@@ -107,14 +103,14 @@ export default function GroupOverview() {
 
         {/* ---------------- Officers ---------------- */}
         <SectionHead first title="Officers" aside={`${officers.data?.officers.length ?? 0} appointed`} />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+        <View>
           {officers.loading ? (
             <ActivityIndicator color={semantic.brand} style={{ margin: 20 }} />
           ) : (officers.data?.officers.length ?? 0) === 0 ? (
             <Text variant="body" color="muted" style={{ padding: 20, textAlign: 'center' }}>No officers assigned yet.</Text>
           ) : (
             officers.data!.officers.map((o, i) => (
-              <View key={`${o.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
+              <View key={`${o.role}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
                 <Avatar name={o.full_name ?? 'Officer'} uri={o.avatar_url} size={42} />
                 <View style={{ flex: 1, minWidth: 0 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -155,7 +151,7 @@ export default function GroupOverview() {
 
         {/* ---------------- Members ---------------- */}
         <SectionHead title="Members" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+        <View>
           {directory.loading ? (
             <ActivityIndicator color={semantic.brand} style={{ margin: 20 }} />
           ) : members.length === 0 ? (
@@ -163,7 +159,7 @@ export default function GroupOverview() {
           ) : (
             <>
               {shownMembers.map((m, i) => (
-                <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+                <View key={`${m.member_id}-${i}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
                   <Avatar name={m.full_name ?? 'Member'} uri={m.avatar_url} size={34} />
                   <Text style={{ flex: 1, fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>
                     {m.full_name ?? 'Unnamed'}{m.member_id === member?.id ? <Text style={{ color: semantic.brandDark }}> · you</Text> : null}
@@ -184,7 +180,7 @@ export default function GroupOverview() {
 
         {/* ---------------- Cycle rules ---------------- */}
         <SectionHead title="Cycle rules" aside="Set by the Organizer" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 16 }, shadowToken.soft]}>
           {cycle ? (
             <>
               <Rule k={`Contribution · ${cycle.frequency}`} v={formatPeso(cycle.contribution_amount) + ' per head'} />
@@ -203,7 +199,7 @@ export default function GroupOverview() {
 
         {/* ---------------- Invite someone ---------------- */}
         <SectionHead title="Invite someone" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }, CARD_SHADOW]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12 }, shadowToken.soft]}>
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: 1 }}>{group?.fund_code ?? '—'}</Text>
             <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>The Organizer approves every join request</Text>
@@ -215,8 +211,8 @@ export default function GroupOverview() {
 
         {/* ---------------- My membership ---------------- */}
         <SectionHead title="My membership" />
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
+        <View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
             <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ fontSize: 15 }}>👤</Text>
             </View>
@@ -229,7 +225,7 @@ export default function GroupOverview() {
           <Pressable
             onPress={onLeave}
             disabled={leave.loading || membership?.role === 'owner'}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 13, padding: 14, opacity: membership?.role === 'owner' ? 0.5 : 1 }}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12, paddingHorizontal: 2, opacity: membership?.role === 'owner' ? 0.5 : 1 }}
           >
             <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: intent.danger.soft, alignItems: 'center', justifyContent: 'center' }}>
               {leave.loading ? <ActivityIndicator size="small" color={intent.danger.text} /> : <LogOut size={17} color={intent.danger.text} />}

@@ -21,7 +21,6 @@ function Label({ children }: { children: string }) {
   return <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 4 }}>{children}</Text>;
 }
 const inputStyle = { backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 52, fontFamily: 'Poppins_400Regular', fontSize: 14, color: semantic.textPrimary };
-const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
 function parseIsoDate(value: string): Date | null {
   if (!value.trim()) return null;
@@ -305,16 +304,16 @@ export default function ConfigureCycle() {
               </View>
               <Text variant="h3" style={{ fontSize: 14 }}>The basics</Text>
             </View>
-            <View style={[cardStyle, { padding: 4 }]}>
-              <View style={{ padding: 13 }}>
+            <View>
+              <View style={{ paddingBottom: 13 }}>
                 <Label>Cycle name</Label>
                 <TextInput value={name} onChangeText={setName} placeholder="e.g. 2027 Cycle" placeholderTextColor={semantic.textMuted} style={inputStyle} />
               </View>
-              <View style={{ flexDirection: 'row', paddingHorizontal: 13, gap: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}><DateInput label="Start date" value={start} onChange={setStart} /></View>
                 <View style={{ flex: 1 }}><DateInput label="End date" value={end} onChange={setEnd} minimumDate={parseIsoDate(start) ?? undefined} /></View>
               </View>
-              <Text variant="caption" color="secondary" style={{ paddingHorizontal: 13, paddingBottom: 13, lineHeight: 16 }}>
+              <Text variant="caption" color="secondary" style={{ lineHeight: 16 }}>
                 Contributions are collected monthly.
               </Text>
             </View>
@@ -328,7 +327,7 @@ export default function ConfigureCycle() {
               </View>
               <Text variant="h3" style={{ fontSize: 14 }}>Contributions</Text>
             </View>
-            <View style={[cardStyle, { padding: 13, gap: 13 }]}>
+            <View style={{ gap: 13 }}>
               <View>
                 <Label>Amount per head</Label>
                 <TextInput value={amount} onChangeText={setAmount} keyboardType="numeric" placeholder="₱1,000" placeholderTextColor={semantic.textMuted} style={inputStyle} />
@@ -352,7 +351,7 @@ export default function ConfigureCycle() {
               </View>
               <Text variant="h3" style={{ fontSize: 14 }}>Lending</Text>
             </View>
-            <View style={[cardStyle, { padding: 13, gap: 13 }]}>
+            <View style={{ gap: 13 }}>
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}><Label>Interest % / month</Label><TextInput value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" placeholder="e.g. 2" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
                 <View style={{ flex: 1 }}><Label>Minimum loan</Label><TextInput value={minLoan} onChangeText={setMinLoan} keyboardType="numeric" placeholder="₱1,000" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
@@ -368,7 +367,7 @@ export default function ConfigureCycle() {
               </View>
               <Text variant="h3" style={{ fontSize: 14 }}>Leaving early</Text>
             </View>
-            <View style={[cardStyle, { padding: 13 }]}>
+            <View>
               <Label>Early-termination penalty (₱)</Label>
               <TextInput value={earlyTermPenalty} onChangeText={setEarlyTermPenalty} keyboardType="numeric" placeholder="e.g. 500" placeholderTextColor={semantic.textMuted} style={inputStyle} />
             </View>

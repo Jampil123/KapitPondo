@@ -17,7 +17,10 @@ import { listMembers, type GroupMember } from '@/api/groups';
 import { type Contribution } from '@/api/contributions';
 import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { buildTimeline, currentPeriodIndex, periodLabel, type PeriodEntry } from '@/features/contributions/periods';
+import { currentPeriodIndex, cyclePeriods, periodLabel } from '@/features/contributions/periods';
+import { computePeriodSummary } from '@/features/contributions/periodSummary';
+import { CollectionSummaryCard } from '@/features/contributions/CollectionSummaryCard';
+import { PeriodSwitcher } from '@/features/contributions/PeriodSwitcher';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
 
@@ -106,27 +109,25 @@ export default function ConfirmContributions() {
   const awaitingRows = rows.filter((c) => c.status === 'submitted' && c.recorded_by === member?.id);
   const returnedRows = rows.filter((c) => c.status === 'rejected' && c.recorded_by === member?.id);
 
-  // ---- Collection summary for the active cycle's current period ----
-  const summary = useMemo(() => {
-    if (!cycle || roster.length === 0) return null;
-    const idx = currentPeriodIndex(cycle);
-    const totalHeads = roster.reduce((s, m) => s + m.heads, 0);
-    const expected = totalHeads * Number(cycle.contribution_amount);
-    let collected = 0, collectedCount = 0, dueDate: Date | null = null, label = '';
-    const perMember = new Map<string, PeriodEntry | null>();
-    for (const m of roster) {
-      const memberRows = rows.filter((c) => c.membership_id === m.id);
-      const timeline = buildTimeline(cycle, memberRows, m.heads);
-      const entry = idx !== null ? (timeline[idx] ?? null) : (timeline[timeline.length - 1] ?? null);
-      perMember.set(m.id, entry);
-      if (!entry) continue;
-      if (!dueDate) { dueDate = entry.dueDate; label = periodLabel(entry.periodStart, cycle.frequency, true); }
-      if (entry.kind === 'paid') { collected += entry.amount; collectedCount++; }
-    }
-    return { expected, collected, collectedCount, dueDate, label, totalMembers: roster.length, perMember };
-  }, [cycle, roster, rows]);
+  // ---- Collection summary for the current period ----
+  const currentIdx = cycle ? currentPeriodIndex(cycle) : null;
+  const summary = useMemo(
+    () => (cycle && roster.length ? computePeriodSummary(cycle, roster, rows, currentIdx) : null),
+    [cycle, roster, rows, currentIdx],
+  );
 
-  const notYetCount = summary ? summary.totalMembers - summary.collectedCount : 0;
+  // ---- Month switcher: stepping to an earlier period opens it on its own page ----
+  // The switcher remembers where it was left, so pressing ‹ again after coming
+  // back opens the period before that one.
+  const periods = useMemo(() => (cycle ? cyclePeriods(cycle) : []), [cycle]);
+  const [pickedIdx, setPickedIdx] = useState<number | null>(null);
+  const shownIdx = pickedIdx ?? currentIdx;
+  const switcherLabel = cycle && shownIdx !== null && periods[shownIdx] ? periodLabel(periods[shownIdx], cycle.frequency) : '';
+  function openPeriod(next: number) {
+    if (next === currentIdx) { setPickedIdx(null); return; }
+    setPickedIdx(next);
+    router.push({ pathname: '/(app)/[groupId]/contributions/period' as any, params: { groupId, idx: String(next) } });
+  }
 
   // ---- Record new: who still needs recording vs. already handled this period ----
   const needsRecording = useMemo(() => {
@@ -175,22 +176,18 @@ export default function ConfirmContributions() {
             <ActivityIndicator color={semantic.brand} />
           </View>
         ) : cycle && summary ? (
-          <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginBottom: 16 }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
-              <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Collected this {periodWord}</Text>
-              {notYetCount > 0 ? (
-                <View style={{ backgroundColor: intent.warning.soft, paddingVertical: 3, paddingHorizontal: 9, borderRadius: 20 }}>
-                  <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>{notYetCount} not yet paid</Text>
-                </View>
-              ) : null}
-            </View>
-            <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4, marginTop: 4 }}>
-              {formatPeso(summary.collected)} <Text style={{ fontSize: 13, color: semantic.textMuted, fontFamily: 'Poppins_500Medium' }}>of {formatPeso(summary.expected)}</Text>
-            </Text>
-            <Text variant="body" color="secondary" style={{ marginTop: 6, fontSize: 12.5 }}>
-              {summary.collectedCount} of {summary.totalMembers} members posted{summary.dueDate ? <Text> · due {shortDate(summary.dueDate.toISOString())}</Text> : null}
-            </Text>
-          </View>
+          <CollectionSummaryCard summary={summary} periodWord={periodWord} isPast={false} />
+        ) : null}
+        {!firstLoad && cycle && shownIdx !== null && currentIdx !== null ? (
+          <PeriodSwitcher
+            label={switcherLabel}
+            isPast={shownIdx < currentIdx}
+            onPrev={() => openPeriod(shownIdx - 1)}
+            onNext={() => openPeriod(shownIdx + 1)}
+            onReset={() => setPickedIdx(null)}
+            prevBlocked={shownIdx <= 0 ? `This is the first ${periodWord} of the cycle.` : null}
+            nextBlocked={shownIdx >= currentIdx ? `The next ${periodWord} hasn't started yet.` : null}
+          />
         ) : null}
 
         <PillFilters<Tab>

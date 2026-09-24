@@ -25,6 +25,8 @@ import {
   finalizeDistribution,
   cancelDistribution,
   setHeads,
+  getHeadNames,
+  setHeadNames,
 } from '../../api/distribution';
 
 export function useDistributions(groupId: string) {
@@ -69,4 +71,17 @@ export function useCancelDistribution(groupId: string) {
 /** setHeads(membershipId, heads) — self-service; a member/officer adjusts their OWN share before preview. Server rejects membershipId that isn't the caller's own. */
 export function useSetHeads(groupId: string) {
   return useAction((membershipId: string, heads: number) => setHeads(groupId, membershipId, heads));
+}
+/** Names for a membership's extra heads (2..n). */
+export function useHeadNames(groupId: string, membershipId?: string) {
+  const fn = useCallback(
+    () => (membershipId ? getHeadNames(groupId, membershipId) : Promise.resolve([])),
+    [groupId, membershipId],
+  );
+  return useQuery(fn, [groupId, membershipId]);
+}
+
+/** save(membershipId, { 2: 'Pedro' }) — own membership only; blank clears a name. */
+export function useSetHeadNames(groupId: string) {
+  return useAction((membershipId: string, names: Record<number, string>) => setHeadNames(groupId, membershipId, names));
 }

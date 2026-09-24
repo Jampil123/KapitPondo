@@ -24,6 +24,7 @@ import {
   getLiquidity,
   getLoanEligibility,
   getMemberLoanEligibility,
+  listBorrowers,
   cancelLoan,
   approveLoan,
   disburseLoan,
@@ -100,6 +101,12 @@ export function useMemberLoanEligibility(groupId: string) {
     // elsewhere in the group changes it without necessarily touching `loans`.
     { table: 'ledger_entries', filter: `group_id=eq.${groupId}` },
   ]);
+}
+
+/** Who's borrowing right now — member-safe (name, head, amount, status). */
+export function useBorrowers(groupId: string) {
+  const fn = useCallback(() => listBorrowers(groupId), [groupId]);
+  return useQuery(fn, [groupId], { table: 'loans', filter: `group_id=eq.${groupId}` });
 }
 
 /** The borrower withdraws their own still-pending request. */

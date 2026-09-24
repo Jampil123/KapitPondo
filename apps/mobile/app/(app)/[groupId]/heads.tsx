@@ -11,7 +11,7 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useSetHeads } from '@/features/distribution/distribution.hooks';
+import { useSetHeads, useHeadNames, useSetHeadNames } from '@/features/distribution/distribution.hooks';
 import { isHeadsEditable } from '@/features/contributions/periods';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
@@ -36,6 +36,24 @@ export default function Heads() {
   useEffect(() => { if (membership) setLocalHeads(membership.heads); }, [membership?.heads]);
   const [draft, setDraft] = useState(heads);
   useEffect(() => setDraft(heads), [heads]);
+
+  // Names for heads 2..n — who each extra head is. Head 1 is the member.
+  const savedNames = useHeadNames(groupId!, membership?.id);
+  const saveNames = useSetHeadNames(groupId!);
+  const [nameDraft, setNameDraft] = useState<Record<number, string>>({});
+  useEffect(() => {
+    setNameDraft(Object.fromEntries((savedNames.data ?? []).map((n) => [n.head_no, n.name])));
+  }, [savedNames.data]);
+  const extraHeads = Array.from({ length: Math.max(0, heads - 1) }, (_, i) => i + 2);
+  const namesDirty = extraHeads.some((h) => (nameDraft[h] ?? '').trim() !== ((savedNames.data ?? []).find((n) => n.head_no === h)?.name ?? ''));
+
+  async function onSaveNames() {
+    if (!membership) return;
+    const payload = Object.fromEntries(extraHeads.map((h) => [h, (nameDraft[h] ?? '').trim()]));
+    const ok = await saveNames.run(membership.id, payload);
+    if (ok !== undefined) savedNames.refetch();
+    else if (saveNames.error) Alert.alert('Could not save names', saveNames.error.message);
+  }
 
   const dirty = draft !== heads;
   const expected = cycle ? Number(cycle.contribution_amount) * heads : null;
@@ -116,6 +134,40 @@ export default function Heads() {
           />
           {setHeads.loading ? <ActivityIndicator color={semantic.brand} /> : null}
         </View>
+
+        {extraHeads.length > 0 ? (
+          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 10 }, shadowToken.card]}>
+            <View>
+              <Text variant="h3" style={{ fontSize: 15 }}>Who you carry</Text>
+              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Each head can have its own loan.</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={{ width: 58, fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Head 1</Text>
+              <Text variant="body" color="muted" style={{ flex: 1 }}>You</Text>
+            </View>
+            {extraHeads.map((h) => (
+              <View key={h} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ width: 58, fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Head {h}</Text>
+                <TextInput
+                  value={nameDraft[h] ?? ''}
+                  onChangeText={(t) => setNameDraft((d) => ({ ...d, [h]: t }))}
+                  placeholder="Name"
+                  placeholderTextColor={semantic.textMuted}
+                  maxLength={80}
+                  style={{
+                    flex: 1, backgroundColor: semantic.surfaceAlt, borderRadius: 12, height: 42, paddingHorizontal: 12,
+                    fontFamily: 'Poppins_500Medium', fontSize: 13.5, color: semantic.textPrimary,
+                  }}
+                />
+              </View>
+            ))}
+            <Button
+              label={saveNames.loading ? 'Saving…' : 'Save names'}
+              onPress={onSaveNames}
+              disabled={!namesDirty || saveNames.loading}
+            />
+          </View>
+        ) : null}
       </ScrollView>
     </SafeAreaView>
   );

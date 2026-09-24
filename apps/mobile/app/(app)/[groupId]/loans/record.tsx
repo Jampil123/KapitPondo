@@ -14,7 +14,7 @@ import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
-import type { PaymentMethod } from '@/api/lending';
+import { headLabel, type PaymentMethod } from '@/api/lending';
 import { useLoan, useSubmitRepayment } from '@/features/lending/lending.hooks';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
@@ -139,6 +139,7 @@ export default function RecordLoanRepayment() {
               <Avatar name={loan.membership?.members?.full_name ?? 'Member'} uri={loan.membership?.members?.avatar_url} size={48} />
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{loan.membership?.members?.full_name ?? 'Member'}</Text>
+                {loan.head_no > 1 ? <Text variant="caption" color="secondary">{headLabel(loan.head_no, loan.head_name)}</Text> : null}
                 <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
                   {formatPeso(outstanding)} outstanding{isSelf ? ' · you' : ''}
                 </Text>

@@ -72,7 +72,7 @@ export default function RepaymentStatus() {
           label="Submitted"
           amount={current.amount}
           badge={<Badge tone="info" label="Under review" Icon={Clock3} />}
-          meta={<>Sent <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}</>}
+          meta={<>Sent <Text style={{ fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}</>}
           note={loan?.purpose ?? undefined}
         />
 
@@ -90,13 +90,13 @@ export default function RepaymentStatus() {
                   backgroundColor: s.done ? intent.success.base : s.now ? intent.info.base : semantic.surfaceAlt,
                 }}>
                   {s.done ? <Check size={11} color="#fff" strokeWidth={3} /> : (
-                    <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: s.now ? '#fff' : semantic.textMuted }}>{i + 1}</Text>
+                    <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: s.now ? '#fff' : semantic.textMuted }}>{i + 1}</Text>
                   )}
                 </View>
                 {i < arr.length - 1 ? <View style={{ width: 2, flex: 1, minHeight: 22, backgroundColor: s.done ? intent.success.base : semantic.border, marginTop: 2 }} /> : null}
               </View>
               <View style={{ flex: 1, paddingBottom: 16 }}>
-                <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: s.now ? intent.info.text : s.done ? semantic.textPrimary : semantic.textMuted }}>{s.title}</Text>
+                <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: s.now ? intent.info.text : s.done ? semantic.textPrimary : semantic.textMuted }}>{s.title}</Text>
                 <Text variant="caption" color="secondary" style={{ marginTop: 2, lineHeight: 16 }}>{s.sub}</Text>
               </View>
             </View>

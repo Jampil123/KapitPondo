@@ -5,9 +5,24 @@
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 const { withSignedProof } = require('../../lib/proofUrl');
+const { loadHeadNames, attachHeadNames } = require('../../lib/headNames');
+
+const OPEN_STATUSES = ['pending', 'approved', 'active'];
 
 // Member applies — no interest rate here; the officer sets it at approval.
+// Each head is its own loan slot (migration 0065): the loan is filed against
+// one of the member's heads, which must exist and not already have a loan in
+// progress. The unique index loans_one_open_per_head backs this up if two
+// requests race.
 async function applyForLoan(input) {
+  const headNo = input.headNo == null ? 1 : Number(input.headNo);
+  const { heads, slots } = await headSlots(input.membershipId);
+  if (!Number.isInteger(headNo) || headNo < 1 || headNo > heads) {
+    throw Object.assign(new Error(`Pick a head between 1 and ${heads}`), { status: 400 });
+  }
+  if (slots.find((s) => s.head_no === headNo)?.loan_id) {
+    throw Object.assign(new Error(`Head ${headNo} already has a loan in progress`), { status: 409 });
+  }
   const { data, error } = await supabase
     .from('loans')
     .insert({
@@ -16,12 +31,62 @@ async function applyForLoan(input) {
       principal: input.principal,
       term_months: input.termMonths,
       purpose: input.purpose,
+      head_no: headNo,
       status: 'pending',
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) {
+    if (error.code === '23505') throw Object.assign(new Error(`Head ${headNo} already has a loan in progress`), { status: 409 });
+    throw error;
+  }
   return data;
+}
+
+// Every head of a membership and the loan (if any) currently occupying it.
+async function headSlots(membershipId) {
+  const { data: membership, error: mErr } = await supabase
+    .from('memberships').select('heads').eq('id', membershipId).single();
+  if (mErr) throw mErr;
+  const { data: open, error: lErr } = await supabase
+    .from('loans').select('id, head_no, status')
+    .eq('membership_id', membershipId)
+    .in('status', OPEN_STATUSES);
+  if (lErr) throw lErr;
+  const names = await loadHeadNames([membershipId]);
+  const heads = Math.max(1, membership.heads ?? 1);
+  const slots = Array.from({ length: heads }, (_, i) => {
+    const headNo = i + 1;
+    const loan = (open ?? []).find((l) => l.head_no === headNo) ?? null;
+    return { head_no: headNo, name: names.get(`${membershipId}:${headNo}`) ?? null, loan_id: loan?.id ?? null, loan_status: loan?.status ?? null };
+  });
+  return { heads, slots };
+}
+
+// Member-safe list of who's borrowing right now — name, head, amount and
+// status only. No rate, balance or repayment detail; loan releases are
+// already public by name in the group ledger.
+async function listBorrowers(groupId) {
+  const { data, error } = await supabase
+    .from('loans')
+    .select('id, membership_id, head_no, principal, approved_principal, status, disbursed_at, applied_at, membership:memberships!membership_id(heads, members!member_id(full_name, avatar_url))')
+    .eq('group_id', groupId)
+    .in('status', ['approved', 'active'])
+    .order('applied_at', { ascending: false });
+  if (error) throw error;
+  await attachHeadNames(data ?? []);
+  return (data ?? []).map((l) => ({
+    loan_id: l.id,
+    membership_id: l.membership_id,
+    full_name: l.membership?.members?.full_name ?? null,
+    avatar_url: l.membership?.members?.avatar_url ?? null,
+    heads: l.membership?.heads ?? 1,
+    head_no: l.head_no,
+    head_name: l.head_name,
+    amount: l.approved_principal ?? l.principal,
+    status: l.status,
+    disbursed_at: l.disbursed_at,
+  }));
 }
 
 async function listLoans({ groupId, membershipId, role, status }) {
@@ -30,22 +95,22 @@ async function listLoans({ groupId, membershipId, role, status }) {
   // actually belongs to (the borrower) — officer review screens need the
   // latter to show whose request this is, not just who decided it.
   let q = supabase.from('loans')
-    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name, avatar_url))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, heads, members!member_id(full_name, avatar_url))')
     .eq('group_id', groupId);
   if (role === 'member') q = q.eq('membership_id', membershipId); // members see only their own
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+  return attachHeadNames(data ?? []);
 }
 
 async function getLoan(id) {
   const { data, error } = await supabase
     .from('loans')
-    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, members!member_id(full_name, avatar_url))')
+    .select('*, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(member_id, role, heads, members!member_id(full_name, avatar_url))')
     .eq('id', id).single();
   if (error) throw error;
-  return data;
+  return attachHeadNames(data);
 }
 
 async function getLoanPayments(loanId) {
@@ -85,15 +150,13 @@ async function checkEligibilityForMembership(membershipId, excludeLoanId = null)
     reasons.push('Member is not verified');
   }
 
-  let activeQ = supabase
-    .from('loans')
-    .select('id')
-    .eq('membership_id', membershipId)
-    .in('status', ['approved', 'active']);
-  if (excludeLoanId) activeQ = activeQ.neq('id', excludeLoanId);
-  const { data: activeLoans, error: lErr } = await activeQ;
-  if (lErr) throw lErr;
-  if (activeLoans?.length) reasons.push('Member already has an active loan');
+  // One loan per head (migration 0065). Deciding on an existing loan never
+  // trips this — that loan already holds its own slot, and the unique index
+  // keeps any other loan off it — so it only gates a NEW request.
+  if (!excludeLoanId) {
+    const { slots } = await headSlots(membershipId);
+    if (slots.every((s) => s.loan_id)) reasons.push('Every head already has a loan in progress');
+  }
 
   // A `contributions` row with status 'late' is a PERMANENT historical marker
   // (see penalties.service.js) — it never gets updated once the member catches
@@ -331,6 +394,8 @@ async function rejectLoan(loanId, reason) {
 
 module.exports = {
   applyForLoan,
+  headSlots,
+  listBorrowers,
   listLoans,
   getLoan,
   getLoanPayments,

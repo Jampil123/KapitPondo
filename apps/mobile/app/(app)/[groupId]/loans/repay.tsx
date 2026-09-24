@@ -30,14 +30,16 @@ type Receipt = {
 };
 
 export default function Repay() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { groupId, loanId } = useLocalSearchParams<{ groupId: string; loanId?: string }>();
   const router = useRouter();
   const { group, membership } = useActiveGroup();
   const loans = useLoans(groupId!, { status: 'active' });
   // listLoans only self-scopes server-side when role === 'member' — filter
   // here so an officer's own Member-tab submission only ever targets THEIR
   // own loan (the API rejects submitting for anyone else's anyway).
-  const activeLoan = (loans.data ?? []).find((l) => l.membership_id === membership?.id) ?? null;
+  // A member can have one loan per head — repay the one they opened (loanId),
+  // else their first active one.
+  const activeLoan = (loans.data ?? []).find((l) => l.membership_id === membership?.id && (!loanId || l.id === loanId)) ?? null;
   const submit = useSubmitRepayment(groupId!);
   // One at a time: a repayment still under review has to be settled before the next can be sent.
   const pending = useRepayments(groupId!, 'submitted');
