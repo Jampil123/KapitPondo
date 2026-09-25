@@ -23,10 +23,29 @@ export interface AuditLogEntry {
   created_at: string;
   category: AuditCategory;
   actor: { full_name: string | null } | null;
+  /** What the row is about, in the app's words (server-side, lib/auditSubjects.js). */
+  subject?: AuditSubject | null;
 }
+
+export interface AuditSubject {
+  /** Whose record: payer, borrower... */
+  name: string | null;
+  /** "LE-1043" — the posting this record produced. */
+  entry_ref: string | null;
+  /** "LN-0147" */
+  loan_ref: string | null;
+  /** Reversal requests: the reversing posting, once finalized. */
+  reversing_entry_ref: string | null;
+  /** Flags / findings: "FL-07", "AF-03". */
+  ref: string | null;
+}
+
+/** Audit trail filter chips — groups of actions (see KINDS in auditlog.service.js). */
+export type AuditKind = 'recorded' | 'verifications' | 'flags' | 'reversals';
 
 export interface AuditLogFilters extends Record<string, string | number | undefined> {
   category?: AuditCategory | 'all';
+  kind?: AuditKind;
   search?: string;
   /** ISO timestamp — entries strictly before this, for "load older" pagination. */
   before?: string;
@@ -39,13 +58,23 @@ export async function listAuditLog(groupId: string, filters: AuditLogFilters = {
   return res.entries;
 }
 
+/** GET — the whole trail for a date range (ISO, both optional) for the exported audit report; `truncated` when it hit the server cap. */
+export function exportAuditLog(groupId: string, range: { from?: string; to?: string } = {}) {
+  return api.get<{ entries: AuditLogEntry[]; truncated: boolean }>(`/api/groups/${groupId}/audit-log/export`, range);
+}
+
 /** What a posting "is" for flag/ask-proof — matches audit_log.entity_type for the real modules that carry proof. */
 export type ProofEntityType = 'contribution' | 'expense' | 'loan_payment';
 
+/** Anything the Auditor can flag: proof-carrying postings, plus loans (application or release) and reversal requests. */
+export type FlaggableEntityType = ProofEntityType | 'loan' | 'loan_disbursement' | 'reversal_request';
+
 export interface FlagPostingInput {
-  entity_type: ProofEntityType;
+  entity_type: FlaggableEntityType;
   entity_id: string;
-  /** Optional note explaining the concern — goes to the Owner. */
+  /** Short headline, e.g. "Amount doesn't match proof" — becomes the flag's title. */
+  reason?: string;
+  /** Optional detail explaining the concern — goes to the Owner. */
   note?: string;
   /** Short human-readable description (e.g. "Contribution · Ana Reyes · ₱4,500") for the Owner's notification. */
   label?: string;

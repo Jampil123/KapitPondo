@@ -33,6 +33,7 @@ async function createContribution(input) {
       // contributions/confirm.tsx: Pending vs Awaiting Auditor) and the
       // wording differs ("Auditor verifies" vs "officer confirms").
       is_walk_in: input.isWalkIn ?? false,
+      penalty_applied: input.penaltyApplied ?? 0,
       status: 'submitted',
     })
     .select()

@@ -169,7 +169,7 @@ export default function RecordRepayment() {
                 const balanceAfter = Math.max(outstanding - principal, 0);
                 const settles = balanceAfter <= 0.01;
                 return (
-                  <View key={p.id} style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card, settles ? { borderLeftWidth: 4, borderLeftColor: intent.success.base } : undefined]}>
+                  <View key={p.id} style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft, settles ? { borderLeftWidth: 4, borderLeftColor: intent.success.base } : undefined]}>
                     {settles ? (
                       <View style={{ backgroundColor: intent.success.soft, padding: 12, paddingBottom: 10 }}>
                         <Text variant="label" style={{ fontSize: 12, color: intent.success.text }}>This settles the loan</Text>
@@ -231,7 +231,7 @@ export default function RecordRepayment() {
             ) : (
               <View>
                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Active loans</Text>
-                <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
+                <View style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden' }, shadowToken.soft]}>
                   {activeLoans.map((l) => {
                     const outstanding = Number(l.outstanding_balance ?? 0);
                     // TC-040: outstanding_balance is seeded from approved_principal
@@ -265,7 +265,7 @@ export default function RecordRepayment() {
             {settledLoans.length > 0 ? (
               <View>
                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Settled</Text>
-                <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
+                <View style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden' }, shadowToken.soft]}>
                   {settledLoans.map((l, i) => (
                     <View key={l.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: i < settledLoans.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                       <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={38} />
@@ -328,7 +328,7 @@ export default function RecordRepayment() {
             ) : (
               <View style={{ gap: 10 }}>
                 {returnedRows.map((p) => (
-                  <View key={p.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: intent.danger.base }, shadowToken.card]}>
+                  <View key={p.id} style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: intent.danger.base }, shadowToken.soft]}>
                     {p.rejection_reason ? (
                       <View style={{ backgroundColor: intent.danger.soft, padding: 12, paddingBottom: 10 }}>
                         <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: intent.danger.text, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>Returned {shortDate(p.updated_at)}</Text>

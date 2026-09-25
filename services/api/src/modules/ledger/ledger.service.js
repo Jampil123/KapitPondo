@@ -60,6 +60,29 @@ async function getReversalRequest(id) {
   return data;
 }
 
+// Why the caller may not verify/reject this reversal, or null if they may. The
+// Auditor reviews reversals, but never a correction to their own transaction;
+// when the entry is the Auditor's own, another officer who didn't request the
+// reversal reviews it instead so it can't sit unreviewed.
+async function reversalReviewBlock({ requestId, groupId, memberId, membershipId, role }) {
+  const request = await getReversalRequest(requestId);
+  if (request.group_id !== groupId) return 'Reversal request does not belong to this group';
+  const entry = await getEntry(request.entry_id);
+  if (entry.membership_id && entry.membership_id === membershipId) {
+    return 'You cannot review a correction to your own transaction';
+  }
+  if (role === 'auditor') return null;
+
+  let entryRole = null;
+  if (entry.membership_id) {
+    const { data } = await supabase.from('memberships').select('role').eq('id', entry.membership_id).maybeSingle();
+    entryRole = data?.role ?? null;
+  }
+  if (entryRole !== 'auditor') return 'Only the Auditor reviews reversals';
+  if (request.initiated_by === memberId) return 'You cannot review a correction you requested';
+  return null;
+}
+
 async function verifyReversal({ requestId, verifiedBy, notes }) {
   const { data, error } = await supabase
     .from('ledger_reversal_requests')
@@ -154,11 +177,60 @@ async function postAdjustment({ groupId, membershipId, direction, amount, reason
   return data;
 }
 
+// Ledger source_type -> the entity type flags and the audit trail use for that record.
+const SOURCE_ENTITY = { contribution: 'contribution', loan_payment: 'loan_payment', loan: 'loan_disbursement', expense: 'expense' };
+
+/**
+ * One posting for the officers' entry page: the entry, a summary of the
+ * record behind it (who recorded/verified, channel, reference...), the entry
+ * that reversed it if any, and the audit trail on both (oldest first).
+ */
+async function entryDetail({ groupId, entryId }) {
+  const { recordSummaries } = require('../flags/flags.service');
+  const { withSubjects } = require('../../lib/auditSubjects');
+  const { data: entry, error } = await supabase
+    .from('ledger_entries')
+    .select('*, poster:members!posted_by(full_name), membership:memberships!membership_id(member_id, members!member_id(full_name, avatar_url))')
+    .eq('id', entryId).eq('group_id', groupId).maybeSingle();
+  if (error) throw error;
+  if (!entry) return null;
+
+  const entityType = SOURCE_ENTITY[entry.source_type] ?? null;
+  const records = entityType && entry.source_id ? await recordSummaries([{ entity_type: entityType, entity_id: entry.source_id }]) : new Map();
+
+  const [{ data: reversedBy, error: rErr }, { data: requests, error: qErr }] = await Promise.all([
+    supabase.from('ledger_entries').select('id, entry_no, posted_at').eq('reverses_entry_id', entryId).maybeSingle(),
+    supabase.from('ledger_reversal_requests').select('id').eq('entry_id', entryId),
+  ]);
+  if (rErr) throw rErr;
+  if (qErr) throw qErr;
+
+  const trailIds = [entry.id, entry.source_id, ...(requests ?? []).map((r) => r.id)].filter(Boolean);
+  const { data: history, error: hErr } = await supabase
+    .from('audit_log')
+    .select('*, actor:members!actor_id(full_name)')
+    .eq('group_id', groupId)
+    .in('entity_id', trailIds)
+    .order('created_at', { ascending: true })
+    .limit(100);
+  if (hErr) throw hErr;
+
+  return {
+    entry,
+    entity_type: entityType,
+    record: entry.source_id ? records.get(entry.source_id) ?? null : null,
+    reversed_by: reversedBy ?? null,
+    history: await withSubjects(history),
+  };
+}
+
 module.exports = {
+  entryDetail,
   getEntry,
   initiateReversal,
   listReversalRequests,
   getReversalRequest,
+  reversalReviewBlock,
   verifyReversal,
   rejectReversal,
   finalizeReversal,

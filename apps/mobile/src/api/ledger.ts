@@ -17,6 +17,8 @@
  */
 import { api } from './client';
 import type { Money } from '../lib/money';
+import type { AuditLogEntry, FlaggableEntityType } from './auditLog';
+import type { FlaggedRecord } from './flags';
 
 export type LedgerDirection = 'credit' | 'debit';
 
@@ -44,6 +46,10 @@ export interface LedgerEntry {
   description: string | null;
   posted_at: string;
   posted_by: string;
+  /** Per-group posting number (migration 0072) — shown as LE-1043 via entryRef(). */
+  entry_no?: number;
+  /** Set on a reversing entry: the entry it cancels. */
+  reverses_entry_id?: string | null;
   /** The officer who posted this entry (always the approver — see the SQL RPCs). */
   poster: { full_name: string } | null;
   /** Who the entry actually belongs to (the contributor/borrower) — null for group-level entries (e.g. expenses). */
@@ -121,4 +127,23 @@ export interface AdjustmentInput {
 /** POST — post a manual adjustment (owner/treasurer). */
 export function postAdjustment(groupId: string, input: AdjustmentInput) {
   return api.post<{ entry: LedgerEntry }>(`/api/groups/${groupId}/ledger/adjustment`, input);
+}
+
+/** "LE-1043" — entry numbers start at 1 per group and display from 1001. */
+export function entryRef(e: { entry_no?: number | null }) {
+  return e.entry_no ? `LE-${1000 + e.entry_no}` : 'Entry';
+}
+
+export interface LedgerEntryDetail {
+  entry: LedgerEntry;
+  /** What a flag on this entry points at (the record behind it); null for entries with no source record. */
+  entity_type: FlaggableEntityType | null;
+  record: FlaggedRecord | null;
+  reversed_by: { id: string; entry_no: number; posted_at: string } | null;
+  history: AuditLogEntry[];
+}
+
+/** GET — one posting with its record, reversal and audit trail (officers only). */
+export function getLedgerEntryDetail(groupId: string, entryId: string) {
+  return api.get<LedgerEntryDetail>(`/api/groups/${groupId}/ledger/entries/${entryId}`);
 }

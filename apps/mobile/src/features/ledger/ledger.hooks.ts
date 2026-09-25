@@ -21,6 +21,7 @@
 import { useCallback } from 'react';
 import { useQuery, useAction } from '../../hooks/useApi';
 import {
+  getLedgerEntryDetail,
   initiateReversal,
   listReversalRequests,
   verifyReversal,
@@ -54,4 +55,10 @@ export function useFinalizeReversal(groupId: string) {
 
 export function usePostAdjustment(groupId: string) {
   return useAction((input: AdjustmentInput) => postAdjustment(groupId, input));
+}
+
+/** One posting's page — the entry, its record, reversal and audit trail. */
+export function useLedgerEntryDetail(groupId: string, entryId: string) {
+  const fn = useCallback(() => getLedgerEntryDetail(groupId, entryId), [groupId, entryId]);
+  return useQuery(fn, [groupId, entryId], { table: 'audit_log', filter: `group_id=eq.${groupId}` });
 }

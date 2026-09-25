@@ -1,14 +1,15 @@
-import { useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, Animated, Easing } from 'react-native';
+import { type ReactNode } from 'react';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
   ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
-  Wallet, Layers, ChevronDown,
+  Wallet, Layers,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { DashboardBand, FoldTarget, BAND_GAP, BAND_TAB_SIZE, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { BandTab, BandCollapsible, useBandFold } from '@/components/shared/BandFold';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { semantic, intent, shadowToken, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -18,6 +19,7 @@ import { useMyBalance, useLedger, useFundSummary } from '@/features/reporting/re
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { cyclePeriods, buildTimeline } from '@/features/contributions/periods';
+import { usePenaltyDue } from '@/features/contributions/penalty';
 import type { Contribution } from '@/api/contributions';
 
 
@@ -95,7 +97,9 @@ function StandingCard({ groupId }: { groupId: string }) {
   const tone = intent[meta.intent];
   const Icon = STANDING_ICON[meta.intent];
 
-  const amount = entry?.amount ?? (cycle ? Number(cycle.contribution_amount) * heads : null);
+  const baseAmount = entry?.amount ?? (cycle ? Number(cycle.contribution_amount) * heads : null);
+  const penaltyDue = usePenaltyDue(groupId, cycle, Number(baseAmount ?? 0), kind === 'late', rows);
+  const amount = baseAmount !== null ? Number(baseAmount) + penaltyDue : null;
   const now = new Date();
   const due = entry?.dueDate ?? null;
   function go() {
@@ -143,7 +147,7 @@ function StandingCard({ groupId }: { groupId: string }) {
       meta1 = (
         <Text variant="body" style={{ fontSize: 12, lineHeight: 16, color: onBandText }}>
           Was due <Text style={{ fontSize: 12, lineHeight: 16, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{shortDate(due.toISOString())}</Text>
-          {'  '}<Text style={{ fontSize: 12, lineHeight: 16, color: intent.danger.text }}>· {lateDays} day{lateDays === 1 ? '' : 's'} late{cycle.penalty_amount ? ' — a penalty may apply after review' : ''}</Text>
+          {'  '}<Text style={{ fontSize: 12, lineHeight: 16, color: intent.danger.text }}>· {lateDays} day{lateDays === 1 ? '' : 's'} late{penaltyDue ? ` · incl. ${formatPeso(penaltyDue)} penalty` : ''}</Text>
         </Text>
       );
     } else {
@@ -264,55 +268,6 @@ function LegendDot({ color, label }: { color: string; label: string }) {
         {label}
       </Text>
     </View>
-  );
-}
-
-/** Compact round arrow straddling the bottom-right edge of the band; toggles the capital + heads details. */
-function PositionToggle({ open, progress, onPress }: { open: boolean; progress: Animated.Value; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={onPress}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={open ? 'Hide capital and heads' : 'Show capital and heads'}
-      style={[
-        {
-          width: BAND_TAB_SIZE, height: BAND_TAB_SIZE, borderRadius: BAND_TAB_SIZE / 2,
-          backgroundColor: 'rgba(255,255,255,0.95)', borderWidth: 1, borderColor: semantic.borderStrong,
-          alignItems: 'center', justifyContent: 'center',
-        },
-        shadowToken.card,
-      ]}
-    >
-      <Animated.View style={{ transform: [{ rotate: progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
-        <ChevronDown size={18} color={NAV_BG} strokeWidth={2.8} />
-      </Animated.View>
-    </Pressable>
-  );
-}
-
-const POSITION_ANIM_MS = 260;
-
-/** Animates its content's measured height and opacity with `progress` (0 closed, 1 open); stays mounted so it can animate. */
-function Collapsible({ open, progress, children }: { open: boolean; progress: Animated.Value; children: ReactNode }) {
-  const [height, setHeight] = useState(0);
-
-  return (
-    <Animated.View
-      pointerEvents={open ? 'auto' : 'none'}
-      accessibilityElementsHidden={!open}
-      importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
-      style={{
-        overflow: 'hidden',
-        opacity: progress,
-        height: progress.interpolate({ inputRange: [0, 1], outputRange: [0, height] }),
-        marginTop: progress.interpolate({ inputRange: [0, 1], outputRange: [-BAND_GAP, 0] }),
-      }}
-    >
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0 }} onLayout={(e) => setHeight(e.nativeEvent.layout.height)}>
-        {children}
-      </View>
-    </Animated.View>
   );
 }
 
@@ -498,27 +453,15 @@ function RecentActivity({ groupId, onSeeAll, onOpen }: { groupId: string; onSeeA
 }
 
 export function MemberHero({ groupId }: { groupId: string }) {
-  const [positionOpen, setPositionOpen] = useState(false);
-  const [progress] = useState(() => new Animated.Value(0));
-
-  function togglePosition() {
-    const next = !positionOpen;
-    setPositionOpen(next);
-    Animated.timing(progress, {
-      toValue: next ? 1 : 0,
-      duration: POSITION_ANIM_MS,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: false,
-    }).start();
-  }
+  const fold = useBandFold();
 
   return (
-    <DashboardBand tab={<PositionToggle open={positionOpen} progress={progress} onPress={togglePosition} />}>
+    <DashboardBand tab={<BandTab open={fold.open} progress={fold.progress} onPress={fold.toggle} label="capital and heads" />}>
       <FoldTarget>
         <StandingCard groupId={groupId} />
-        <Collapsible open={positionOpen} progress={progress}>
+        <BandCollapsible open={fold.open} progress={fold.progress}>
           <PositionPanel groupId={groupId} />
-        </Collapsible>
+        </BandCollapsible>
       </FoldTarget>
     </DashboardBand>
   );

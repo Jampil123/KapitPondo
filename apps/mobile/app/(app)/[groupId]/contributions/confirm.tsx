@@ -220,7 +220,7 @@ export default function ConfirmContributions() {
                 const isDuplicateRef = !!c.external_reference && (refCounts.get(c.external_reference) ?? 0) > 1;
                 const noProof = !c.proof_signed_url;
                 return (
-                  <View key={c.id} style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+                  <View key={c.id} style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
                     <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
                       <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={48} />
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -302,9 +302,9 @@ export default function ConfirmContributions() {
                 {alreadyHandled.length > 0 ? (
                   <View>
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Already handled</Text>
-                    <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
+                    <View>
                       {alreadyHandled.map(({ m, entry }) => (
-                        <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
+                        <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
                           <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />
                           <View style={{ flex: 1, minWidth: 0 }}>
                             <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
@@ -368,7 +368,7 @@ export default function ConfirmContributions() {
             ) : (
               <View style={{ gap: 10 }}>
                 {returnedRows.map((c) => (
-                  <View key={c.id} style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: intent.danger.base }, shadowToken.card]}>
+                  <View key={c.id} style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden', borderLeftWidth: 4, borderLeftColor: intent.danger.base }, shadowToken.soft]}>
                     {c.rejection_reason ? (
                       <View style={{ backgroundColor: intent.danger.soft, padding: 12, paddingBottom: 10 }}>
                         <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>Returned {shortDate(c.updated_at)}</Text>

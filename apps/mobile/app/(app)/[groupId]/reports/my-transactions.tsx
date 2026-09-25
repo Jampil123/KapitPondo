@@ -58,7 +58,7 @@ function Row({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
   const who = e.membership?.members?.full_name ?? 'Group';
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
       </View>
@@ -162,7 +162,7 @@ export default function MyTransactions() {
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : grouped.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, shadowToken.card]}>
+          <View style={[{ backgroundColor: semantic.card, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, shadowToken.soft]}>
             <Text variant="body" color="muted">
               {category === 'all' ? "You haven't confirmed any postings yet." : 'Nothing in this category yet.'}
             </Text>
@@ -171,7 +171,7 @@ export default function MyTransactions() {
           grouped.map((g) => (
             <View key={g.label}>
               <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{g.label}</Text>
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+              <View>
                 {g.list.map((e) => <Row key={e.id} e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id, scope: 'group' } })} />)}
               </View>
             </View>

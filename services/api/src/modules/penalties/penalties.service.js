@@ -26,6 +26,20 @@
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 
+// A cycle's penalty is either a fixed peso amount or a percent of the
+// contribution that was due (cycles.penalty_type).
+function penaltyFor(cycle, contributionAmount) {
+  const rate = Number(cycle.penalty_amount ?? 0);
+  if (!rate) return 0;
+  return cycle.penalty_type === 'percent'
+    ? Math.round(Number(contributionAmount) * rate) / 100
+    : rate;
+}
+
+function peso(n) {
+  return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function currentPeriodDueDate(dueDay) {
   const now = new Date();
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), dueDay));
@@ -55,7 +69,7 @@ async function checkLatePenalties(groupId) {
   const todayStr = new Date().toISOString().slice(0, 10);
   const { data: cycles, error: cyclesErr } = await supabase
     .from('cycles')
-    .select('id, contribution_amount, penalty_amount, contribution_due_day, start_date, end_date')
+    .select('id, contribution_amount, penalty_amount, penalty_type, contribution_due_day, start_date, end_date')
     .eq('group_id', groupId)
     .eq('status', 'active')
     .not('contribution_due_day', 'is', null)
@@ -77,6 +91,11 @@ async function checkLatePenalties(groupId) {
 
     const dueDate = currentPeriodDueDate(cycle.contribution_due_day);
     if (now < dueDate) continue; // not due yet this period
+    // This month's due day can fall before the cycle's first day (a cycle
+    // starting on the 20th with a due day of the 15th) — that period isn't
+    // part of the cycle, so there's nothing to be late for.
+    if (cycle.start_date && dueDate < new Date(cycle.start_date)) continue;
+    const dueDay = dueDate.toISOString().slice(0, 10);
 
     const { data: memberships, error: mErr } = await supabase
       .from('memberships')
@@ -86,7 +105,10 @@ async function checkLatePenalties(groupId) {
     if (mErr) throw mErr;
 
     for (const membership of memberships) {
-      const { data: paid } = await supabase
+      // limit(1) + length, not maybeSingle(): with two or more matches
+      // maybeSingle() returns an error and null data, which read as "none"
+      // and charged the same period again on every check.
+      const { data: paid, error: paidErr } = await supabase
         .from('contributions')
         .select('id')
         .eq('membership_id', membership.id)
@@ -94,33 +116,40 @@ async function checkLatePenalties(groupId) {
         .in('status', ['submitted', 'approved'])
         .gte('created_at', start)
         .lt('created_at', end)
-        .maybeSingle();
-      if (paid) continue; // compliant this period
+        .limit(1);
+      if (paidErr) throw paidErr;
+      if (paid.length) continue; // compliant this period
 
-      const { data: alreadyFlagged } = await supabase
+      const { data: flagged, error: flaggedErr } = await supabase
         .from('contributions')
         .select('id')
         .eq('membership_id', membership.id)
         .eq('cycle_id', cycle.id)
         .eq('status', 'late')
-        .eq('due_date', dueDate.toISOString().slice(0, 10))
-        .maybeSingle();
-      if (alreadyFlagged) continue; // already charged this period
+        .eq('due_date', dueDay)
+        .limit(1);
+      if (flaggedErr) throw flaggedErr;
+      if (flagged.length) continue; // already charged this period
 
+      const dueAmount = Number(cycle.contribution_amount) * (membership.heads || 1);
+      const penaltyAmount = penaltyFor(cycle, dueAmount);
       const { data: lateContribution, error: insErr } = await supabase
         .from('contributions')
         .insert({
           membership_id: membership.id,
           cycle_id: cycle.id,
           group_id: groupId,
-          amount: Number(cycle.contribution_amount) * (membership.heads || 1),
-          due_date: dueDate.toISOString().slice(0, 10),
+          amount: dueAmount,
+          due_date: dueDay,
           is_late: true,
-          penalty_applied: cycle.penalty_amount,
+          penalty_applied: penaltyAmount,
           status: 'late',
         })
         .select()
         .single();
+      // Two checks running at once: the unique index on late periods
+      // (migration 0069) lets only one insert through; the other stops here.
+      if (insErr?.code === '23505') continue;
       if (insErr) throw insErr;
 
       const { data: penalty, error: penErr } = await supabase
@@ -130,7 +159,7 @@ async function checkLatePenalties(groupId) {
           membership_id: membership.id,
           cycle_id: cycle.id,
           contribution_id: lateContribution.id,
-          amount: cycle.penalty_amount,
+          amount: penaltyAmount,
           reason: 'Late contribution',
         })
         .select()
@@ -144,7 +173,7 @@ async function checkLatePenalties(groupId) {
         groupId,
         type: 'penalty.charged',
         title: 'Late penalty applied',
-        message: `Your contribution is overdue — a ${cycle.penalty_amount} penalty has been applied.`,
+        message: `Your contribution is overdue — a ${peso(penaltyAmount)} late penalty was added. Pay it together with the contribution.`,
       });
 
       created.push(penalty);
@@ -185,6 +214,64 @@ async function listPenalties({ groupId, status, membershipId }) {
   return data;
 }
 
+// A member's self-submitted contribution covers their pending late penalties
+// for that cycle when the amount paid is at least the contribution due plus
+// those penalties. The contribution itself keeps only the contribution share
+// (capital); the rest is recorded as penalty_applied, and the covered
+// penalties are settled when the contribution is approved (see
+// settlePenaltiesFor). A penalty already riding on another contribution
+// that's still under review isn't counted twice; one whose contribution was
+// rejected is free to be covered again.
+async function splitPenaltyShare({ groupId, membershipId, heads, cycleId, amount }) {
+  await checkLatePenaltiesIfDue(groupId).catch((e) => console.error('[penalties] check failed:', e.message));
+
+  const { data: cycle, error: cErr } = await supabase
+    .from('cycles').select('contribution_amount').eq('id', cycleId).single();
+  if (cErr) throw cErr;
+
+  const { data: pending, error } = await supabase
+    .from('penalties')
+    .select('id, amount, paid_with:contributions!paid_with_contribution_id(status)')
+    .eq('membership_id', membershipId)
+    .eq('cycle_id', cycleId)
+    .eq('status', 'pending');
+  if (error) throw error;
+
+  const coverable = (pending ?? []).filter((p) => !p.paid_with || p.paid_with.status === 'rejected');
+  const penaltyShare = Math.round(coverable.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
+  const due = Number(cycle.contribution_amount) * (heads || 1);
+  const paid = Number(amount);
+
+  if (!penaltyShare || paid + 0.005 < due + penaltyShare) {
+    return { contributionAmount: paid, penaltyShare: 0, penaltyIds: [] };
+  }
+  return {
+    contributionAmount: Math.round((paid - penaltyShare) * 100) / 100,
+    penaltyShare,
+    penaltyIds: coverable.map((p) => p.id),
+  };
+}
+
+async function coverPenalties({ penaltyIds, contributionId }) {
+  if (!penaltyIds.length) return;
+  const { error } = await supabase
+    .from('penalties')
+    .update({ paid_with_contribution_id: contributionId, updated_at: new Date().toISOString() })
+    .in('id', penaltyIds)
+    .eq('status', 'pending');
+  if (error) throw error;
+}
+
+// Posts the penalties an approved contribution covered (migration 0068).
+async function settlePenaltiesFor({ contributionId, approverId }) {
+  const { data, error } = await supabase.rpc('settle_contribution_penalties', {
+    p_contribution_id: contributionId,
+    p_approver_id: approverId,
+  });
+  if (error) throw error;
+  return data ?? [];
+}
+
 async function waivePenalty({ penaltyId, waivedBy, reason }) {
   const { data, error } = await supabase
     .from('penalties')
@@ -218,4 +305,7 @@ async function waivePenalty({ penaltyId, waivedBy, reason }) {
   return data;
 }
 
-module.exports = { checkLatePenalties, checkLatePenaltiesIfDue, listPenalties, waivePenalty };
+module.exports = {
+  penaltyFor, splitPenaltyShare, coverPenalties, settlePenaltiesFor,
+  checkLatePenalties, checkLatePenaltiesIfDue, listPenalties, waivePenalty,
+};

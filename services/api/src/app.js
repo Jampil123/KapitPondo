@@ -29,6 +29,9 @@ const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: p
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
 const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
+const findingsRoutes = require('./modules/findings/findings.routes');
+const flagsRoutes = require('./modules/flags/flags.routes');
+const loanAuditsRoutes = require('./modules/loanAudits/loanAudits.routes');
 const adminRouter = require('./routes/admin'); // the whole sysadmin/admin-web API tree (verifications, metrics, audit) — was never mounted, see app.use('/admin', ...) below
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
@@ -76,6 +79,9 @@ app.use('/api', ocrRoutes);
 app.use('/api', adminSecurityRoutes);
 app.use('/api', recoveryRoutes);
 app.use('/api', auditLogRoutes);
+app.use('/api', findingsRoutes);
+app.use('/api', flagsRoutes);
+app.use('/api', loanAuditsRoutes);
 
 // Error handler stays last.
 app.use(errorHandler);

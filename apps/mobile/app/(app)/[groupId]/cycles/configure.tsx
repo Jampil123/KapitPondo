@@ -1,11 +1,10 @@
 import { useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, Modal, Platform } from 'react-native';
+import { View, ScrollView, TextInput, Pressable } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Calendar } from 'lucide-react-native';
-import { DateTimePicker } from '@expo/ui/community/datetime-picker';
+import { DateInput, formatDisplayDate, parseIsoDate } from '@/components/shared/DateInput';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { BandHeader } from '@/components/shared/DashboardBand';
@@ -22,82 +21,6 @@ function Label({ children }: { children: string }) {
 }
 const inputStyle = { backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 52, fontFamily: 'Poppins_400Regular', fontSize: 14, color: semantic.textPrimary };
 
-function parseIsoDate(value: string): Date | null {
-  if (!value.trim()) return null;
-  const d = new Date(`${value.trim()}T00:00:00`);
-  return isNaN(d.getTime()) ? null : d;
-}
-function toIsoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function formatDisplayDate(value: string): string {
-  const d = parseIsoDate(value);
-  return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
-}
-function DateInput({ label, value, onChange, minimumDate }: {
-  label: string;
-  value: string;
-  onChange: (iso: string) => void;
-  minimumDate?: Date;
-}) {
-  const [show, setShow] = useState(false);
-  const current = parseIsoDate(value) ?? new Date();
-
-  if (Platform.OS === 'web') {
-    return (
-      <View>
-        <Label>{label}</Label>
-        <TextInput value={value} onChangeText={onChange} placeholder="YYYY-MM-DD" placeholderTextColor={semantic.textMuted} style={inputStyle} />
-      </View>
-    );
-  }
-
-  return (
-    <View>
-      <Label>{label}</Label>
-      <Pressable
-        onPress={() => setShow(true)}
-        style={[inputStyle, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}
-      >
-        <Text variant="body" style={{ fontSize: 14, color: value ? semantic.textPrimary : semantic.textMuted }}>
-          {value ? formatDisplayDate(value) : 'Select date'}
-        </Text>
-        <Calendar size={17} color={semantic.textMuted} />
-      </Pressable>
-
-      {show && Platform.OS === 'android' ? (
-        <DateTimePicker
-          mode="date"
-          value={current}
-          minimumDate={minimumDate}
-          onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
-          onDismiss={() => setShow(false)}
-        />
-      ) : null}
-
-      {Platform.OS === 'ios' ? (
-        <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setShow(false)}>
-            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
-              <Text variant="h3" style={{ fontSize: 17 }}>{label}</Text>
-              <DateTimePicker
-                mode="date"
-                display="inline"
-                value={current}
-                minimumDate={minimumDate}
-                onValueChange={(_e, date) => onChange(toIsoDate(date))}
-              />
-              <Button label="Done" onPress={() => setShow(false)} />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      ) : null}
-    </View>
-  );
-}
 
 function StatusPill({ entity, value }: { entity: 'cycle'; value?: string | null }) {
   const meta = getStatusMeta(entity, value);

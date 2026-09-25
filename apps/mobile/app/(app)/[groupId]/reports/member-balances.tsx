@@ -7,7 +7,7 @@ import { ArrowUpDown, FileDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { FilterChips } from '@/components/shared/FilterChips';
+import { PillFilters } from '@/components/shared/PillFilters';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
@@ -176,7 +176,9 @@ export default function MemberBalances() {
         </View>
 
         {/* ---------------- Filters ---------------- */}
-        <FilterChips<Filter> options={FILTERS} value={filter} onChange={setFilter} style={{ marginTop: 14 }} />
+        <View style={{ marginTop: 14 }}>
+          <PillFilters<Filter> options={FILTERS} value={filter} onChange={setFilter} />
+        </View>
 
         {/* ---------------- Rows ---------------- */}
         {loading ? (

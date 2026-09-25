@@ -5,12 +5,14 @@
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 const { logAudit } = require('../../lib/auditLog');
+const { withSubjects } = require('../../lib/auditSubjects');
 
 // entity_type -> one of the four categories the Auditor screen filters by.
 // Kept here (not in the DB) since it's a display grouping, not a stored fact.
 const CATEGORY_BY_ENTITY = {
   contribution: 'money',
   expense: 'money',
+  loan: 'money',
   loan_disbursement: 'money',
   loan_payment: 'money',
   ledger_adjustment: 'money',
@@ -20,12 +22,22 @@ const CATEGORY_BY_ENTITY = {
   membership_approval: 'governance',
   distribution: 'governance',
   penalty: 'governance',
+  audit_finding: 'governance',
+  audit_flag: 'governance',
   reversal_request: 'reversals',
   cycle: 'settings',
   group_gcash: 'settings',
 };
 
-async function listAuditLog({ groupId, category, search, before, limit = 30 }) {
+// The Audit trail screen's filter chips — groups of actions, not categories.
+const KINDS = {
+  recorded: { actions: ['recorded', 'initiated', 'posted', 'created', 'proposed'] },
+  verifications: { actions: ['approved', 'confirmed', 'verified', 'finalized', 'rejected', 'disbursed'] },
+  flags: { entityTypes: ['audit_flag', 'audit_finding'], actions: ['flagged', 'proof_requested'] },
+  reversals: { entityTypes: ['reversal_request'] },
+};
+
+async function listAuditLog({ groupId, category, kind, search, before, limit = 30 }) {
   let q = supabase
     .from('audit_log')
     .select('*, actor:members!actor_id(full_name)')
@@ -39,43 +51,41 @@ async function listAuditLog({ groupId, category, search, before, limit = 30 }) {
       .map(([type]) => type);
     q = q.in('entity_type', entityTypes);
   }
+  const k = KINDS[kind];
+  if (k?.actions && k?.entityTypes) {
+    q = q.or(`action.in.(${k.actions.join(',')}),entity_type.in.(${k.entityTypes.join(',')})`);
+  } else if (k?.actions) {
+    q = q.in('action', k.actions);
+  } else if (k?.entityTypes) {
+    q = q.in('entity_type', k.entityTypes);
+  }
   if (before) q = q.lt('created_at', before);
   // Plain-column search only — before_data/after_data are JSON, not searched.
   if (search && search.trim()) q = q.ilike('action', `%${search.trim()}%`);
 
   const { data, error } = await q;
   if (error) throw error;
-  return data.map((row) => ({ ...row, category: CATEGORY_BY_ENTITY[row.entity_type] ?? 'governance' }));
+  const rows = await withSubjects(data);
+  return rows.map((row) => ({ ...row, category: CATEGORY_BY_ENTITY[row.entity_type] ?? 'governance' }));
 }
 
-async function getOwnerMemberId(groupId) {
-  const { data, error } = await supabase.from('groups').select('owner_id').eq('id', groupId).single();
+// Everything in a date range for the Auditor's exported report — not paged
+// like listAuditLog, but capped so one export can't pull an unbounded table.
+const EXPORT_LIMIT = 5000;
+
+async function listAuditLogForExport({ groupId, from, to }) {
+  let q = supabase
+    .from('audit_log')
+    .select('*, actor:members!actor_id(full_name)')
+    .eq('group_id', groupId)
+    .order('created_at', { ascending: false })
+    .limit(EXPORT_LIMIT);
+  if (from) q = q.gte('created_at', from);
+  if (to) q = q.lt('created_at', to);
+  const { data, error } = await q;
   if (error) throw error;
-  return data.owner_id;
-}
-
-// The Auditor flags a posting they've already reviewed as a concern — a
-// note attached to the record, sent to the Owner. Deliberately NOT a ledger
-// change: correcting the numbers still goes through the real reversal
-// workflow (ledger.routes.js) with all three officers. This is oversight
-// commentary, not a correction.
-async function flagPosting({ groupId, actorId, actorRole, entityType, entityId, note, label }) {
-  await logAudit({
-    groupId, actorId, actorRole,
-    action: 'flagged', entityType, entityId,
-    before: null, after: { note: note ?? null },
-  });
-
-  const ownerId = await getOwnerMemberId(groupId);
-  if (ownerId) {
-    await notify({
-      memberId: ownerId,
-      groupId,
-      type: 'audit.flagged',
-      title: 'Auditor flagged a posting',
-      message: label ? `${label}${note ? `: ${note}` : ''}` : (note ?? 'A posting was flagged for review.'),
-    });
-  }
+  const rows = await withSubjects(data);
+  return rows.map((row) => ({ ...row, category: CATEGORY_BY_ENTITY[row.entity_type] ?? 'governance' }));
 }
 
 // The Auditor asks whoever recorded a proof-less posting to supply one.
@@ -99,4 +109,4 @@ async function askForProof({ groupId, actorId, actorRole, entityType, entityId, 
   }
 }
 
-module.exports = { listAuditLog, CATEGORY_BY_ENTITY, flagPosting, askForProof };
+module.exports = { listAuditLog, listAuditLogForExport, EXPORT_LIMIT, CATEGORY_BY_ENTITY, askForProof };

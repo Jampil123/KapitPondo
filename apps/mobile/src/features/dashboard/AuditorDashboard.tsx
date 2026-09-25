@@ -1,44 +1,31 @@
-import { useMemo, useState, useEffect } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, Modal, Image } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ShieldCheck, CheckCircle2, ArrowUpRight, ArrowDownRight, Undo2, Check, ChevronDown,
-  ScrollText, FileText, BarChart3, Receipt, X, AlertTriangle,
+  CheckCircle2, Check, Flag, Banknote, Clock, Download,
+  AlertTriangle, ChevronRight,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
-import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
-import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
+import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { Alert } from '@/lib/alert';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
-import { useQuery } from '@/hooks/useApi';
-import { listMembers } from '@/api/groups';
-import { useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
-import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
-import { useReversalRequests, useVerifyReversal, useRejectReversal } from '@/features/ledger/ledger.hooks';
+import { useContributions } from '@/features/contributions/contributions.hooks';
+import { useRepayments } from '@/features/lending/lending.hooks';
+import { useLoanAudits } from '@/features/loanAudits/loanAudits.hooks';
+import { useReversalRequests } from '@/features/ledger/ledger.hooks';
 import { useDistributions, useVerifyDistribution, useCancelDistribution } from '@/features/distribution/distribution.hooks';
-import type { Contribution } from '@/api/contributions';
-import type { LoanPayment } from '@/api/lending';
-import type { ReversalRequest } from '@/api/ledger';
+import { useAuditLog, useAuditTrailSince, useFlagPosting } from '@/features/auditlog/auditlog.hooks';
+import { useFindings } from '@/features/findings/findings.hooks';
+import { useFlags } from '@/features/flags/flags.hooks';
+import { FlagPrompt } from '@/features/flags/FlagPrompt';
+import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
+import type { FlaggableEntityType } from '@/api/auditLog';
 
-const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
-
-function timeAgo(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (isNaN(then)) return '';
-  const mins = Math.round((Date.now() - then) / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  if (days === 1) return '1 day ago';
-  return `${days} days ago`;
-}
+const HERO_ROWS = 3;
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -46,576 +33,326 @@ function shortDate(iso: string | null) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
 }
 
-function ageLabel(iso: string): { label: string; aged: boolean } {
-  const hours = (Date.now() - new Date(iso).getTime()) / 3600000;
-  const aged = hours > 48;
-  if (hours < 1) return { label: 'Just now', aged };
-  if (hours < 24) return { label: `Waiting ${Math.round(hours)}h`, aged };
-  return { label: `Waiting ${Math.round(hours / 24)}d`, aged };
-}
-
-function SectionHead({ title, aside, tone }: { title: string; aside?: string; tone?: 'hot' | 'calm' }) {
-  const color = tone === 'hot' ? intent.danger.text : tone === 'calm' ? intent.success.text : semantic.textSecondary;
+function SectionHead({ title, aside, tone, onAsidePress }: { title: string; aside?: string; tone?: 'hot' | 'calm'; onAsidePress?: () => void }) {
+  const color = onAsidePress ? semantic.brandDark : tone === 'hot' ? intent.danger.text : tone === 'calm' ? intent.success.text : semantic.textSecondary;
+  const label = aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color }}>{aside}</Text> : null;
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14 }}>
       <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
-      {aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color }}>{aside}</Text> : null}
+      {label && onAsidePress ? <Pressable onPress={onAsidePress} hitSlop={8}>{label}</Pressable> : label}
     </View>
   );
 }
 
-function computeAgeHours(iso: string) {
-  return (Date.now() - new Date(iso).getTime()) / 3600000;
-}
-
-function oldestAgeLabel(hours: number | null): string {
-  if (hours === null) return 'None waiting';
-  if (hours < 1) return 'Just now';
-  if (hours < 24) return `${Math.round(hours)} hour${Math.round(hours) === 1 ? '' : 's'}`;
-  const days = Math.round(hours / 24);
-  return `${days} day${days === 1 ? '' : 's'}`;
-}
-
-function MiniLegend({ color, label }: { color: string; label: string }) {
-  return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-      <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: color }} />
-      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>{label}</Text>
-    </View>
-  );
-}
-
-function VerificationHero({ groupId }: { groupId: string }) {
+/** Everything the Auditor's screens derive from — fetched once per tree (hero and body are separate trees). */
+function useAuditorData(groupId: string) {
   const { member } = useAuth();
   const { membership } = useActiveGroup();
-  const myName = member?.full_name ?? null;
-  const { cycle } = useActiveCycle(groupId);
+  const contribs = useContributions(groupId, {});
+  const repayments = useRepayments(groupId);
+  const reversals = useReversalRequests(groupId);
 
-  const contribsForCycle = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
-  const contribsPending = useContributions(groupId, { status: 'submitted' });
-  const repaymentsPending = useRepayments(groupId, 'submitted');
-  const reversalsPending = useReversalRequests(groupId, 'pending_verification');
+  const pending = useMemo(() => ({
+    contribs: (contribs.data ?? []).filter((c) => c.status === 'submitted'),
+    repayments: (repayments.data ?? []).filter((p) => p.status === 'submitted'),
+    reversals: (reversals.data ?? []).filter((r) => r.status === 'pending_verification'),
+  }), [contribs.data, repayments.data, reversals.data]);
 
-  const contribsAll = useContributions(groupId, {});
-  const repaymentsAll = useRepayments(groupId);
-  const reversalsAll = useReversalRequests(groupId);
+  // Items that are the Auditor's own can't be verified by them (API enforces it too).
+  const isMine = useMemo(() => ({
+    contrib: (c: { membership_id: string }) => c.membership_id === membership?.id,
+    repayment: (p: { loans?: { membership_id: string } }) => p.loans?.membership_id === membership?.id,
+    reversal: (r: { entry?: { membership_id: string | null } }) => !!r.entry?.membership_id && r.entry.membership_id === membership?.id,
+  }), [membership?.id]);
 
-  const ledger = useLedger(groupId, { limit: 5000 });
+  return {
+    member, membership, contribs, repayments, reversals, pending, isMine,
+    loading: contribs.loading || repayments.loading || reversals.loading,
+  };
+}
 
-  const [expanded, setExpanded] = useState(true);
-  const [showHealth, setShowHealth] = useState(false);
+/* ---------------- Main card ---------------- */
+type WaitingRow = { key: string; name: string; kind: string; problem: string | null; amount: number | string | null; date: string };
 
-  const loading = contribsPending.loading || repaymentsPending.loading || reversalsPending.loading;
+function VerificationHero({ groupId }: { groupId: string }) {
+  const router = useRouter();
+  const { pending, isMine, loading } = useAuditorData(groupId);
 
-  // Stage A — members with no resolved claim yet for the active cycle's current period
-  // (same per-member dedup CollectionBlock uses on the Owner/Treasurer dashboards).
-  const currentRows = useMemo(() => {
-    const rows = contribsForCycle.data ?? [];
-    const latestByMember = new Map<string, Contribution>();
-    for (const r of rows) {
-      const existing = latestByMember.get(r.membership_id);
-      const t = new Date(r.due_date ?? r.created_at).getTime();
-      const existingT = existing ? new Date(existing.due_date ?? existing.created_at).getTime() : -Infinity;
-      if (!existing || t > existingT) latestByMember.set(r.membership_id, r);
-    }
-    return [...latestByMember.values()];
-  }, [contribsForCycle.data]);
-  const membersYetToPay = currentRows.filter((r) => r.status === 'pending').length;
-
-  // Stage B — the exact total the "Waiting for you" queue below shows.
-  const waitingOnYou = (contribsPending.data?.length ?? 0) + (repaymentsPending.data?.length ?? 0) + (reversalsPending.data?.length ?? 0);
-
-  // Stage C — real ledger entry count.
-  const postedCount = ledger.data?.length ?? 0;
-
-  const pendingAges = [
-    ...(contribsPending.data ?? []).map((c) => computeAgeHours(c.created_at)),
-    ...(repaymentsPending.data ?? []).map((p) => computeAgeHours(p.created_at)),
-    ...(reversalsPending.data ?? []).map((r) => computeAgeHours(r.initiated_at)),
-  ];
-  const oldestHours = pendingAges.length ? Math.max(...pendingAges) : null;
-  const stale = oldestHours !== null && oldestHours > 48;
-
-  const record = useMemo(() => {
-    let verified = 0;
-    let flagged = 0;
-    (contribsAll.data ?? []).forEach((c) => { if (myName && c.approver?.full_name === myName && c.status === 'approved') verified++; });
-    (repaymentsAll.data ?? []).forEach((p) => { if (myName && p.verifier?.full_name === myName && (p.status === 'approved' || p.status === 'paid')) verified++; });
-    (reversalsAll.data ?? []).forEach((r) => { if (membership && r.verified_by === membership.id) flagged++; });
-    return { verified, flagged };
-  }, [contribsAll.data, repaymentsAll.data, reversalsAll.data, myName, membership]);
-
-  const handled = record.verified + record.flagged;
-  const totalPostings = handled + waitingOnYou;
-  const pct = totalPostings > 0 ? Math.round((handled / totalPostings) * 100) : 100;
-
-  const proofless = useMemo(() => [
-    ...(contribsAll.data ?? []).filter((c) => c.status !== 'rejected' && !c.proof_url),
-    // LoanPayment has no 'rejected' status — a rejected claim just stays without one being reset.
-    ...(repaymentsAll.data ?? []).filter((p) => !p.proof_url),
-  ].length, [contribsAll.data, repaymentsAll.data]);
-  const staleCount = pendingAges.filter((h) => h > 48).length;
-  const unlinkedReversals = useMemo(() => (reversalsAll.data ?? []).filter((r) => !r.entry).length, [reversalsAll.data]);
-
-  const checks = [
-    { label: 'Every posting has proof attached', failLabel: 'Postings without proof', n: proofless },
-    { label: 'Nothing waiting over 48 hours', failLabel: 'Waiting over 48 hours', n: staleCount },
-    { label: 'All reversals linked to originals', failLabel: 'Reversals missing an original', n: unlinkedReversals },
-  ];
-  const issueCount = checks.reduce((s, c) => s + c.n, 0);
-  const locked = waitingOnYou > 0;
-
-  useEffect(() => {
-    if (waitingOnYou > 0) setExpanded(true);
-  }, [waitingOnYou]);
-
-  const checkedAt = useMemo(() => new Date().toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }), []);
-  const totalScanned = (contribsAll.data?.length ?? 0) + (repaymentsAll.data?.length ?? 0) + (reversalsAll.data?.length ?? 0);
-
-  const allClear = issueCount === 0;
-  const pillTone = allClear ? intent.success : intent.danger;
+  // Oldest first, same order as To review. `problem` is the first field that doesn't check out.
+  const rows: WaitingRow[] = useMemo(() => [
+    ...pending.contribs.filter((c) => !isMine.contrib(c)).map((c): WaitingRow => ({
+      key: `c-${c.id}`, name: c.memberships?.members?.full_name ?? 'Member', kind: 'Contribution',
+      problem: !c.proof_url ? 'no proof attached' : null, amount: c.amount, date: c.created_at,
+    })),
+    ...pending.repayments.filter((p) => !isMine.repayment(p)).map((p): WaitingRow => ({
+      key: `p-${p.id}`, name: p.loans?.membership?.members?.full_name ?? 'Member', kind: 'Loan repayment',
+      problem: !p.proof_url ? 'no proof attached' : null, amount: p.amount, date: p.created_at,
+    })),
+    ...pending.reversals.filter((r) => !isMine.reversal(r)).map((r): WaitingRow => ({
+      key: `r-${r.id}`, name: r.entry?.description ?? r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry', kind: 'Reversal',
+      problem: !r.entry ? 'no original linked' : null, amount: r.entry ? r.entry.amount : null, date: r.initiated_at,
+    })),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [pending, isMine]);
 
   return (
     <View style={{ paddingTop: 6 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-        <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Verification flow</Text>
-          <Text style={{ fontSize: 11.5, lineHeight: 15, color: onBandText, marginTop: 2 }}>
-            {issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'} found` : !loading && waitingOnYou === 0 ? 'Nothing is sitting with you' : 'Where every posting stands right now'}
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => setShowHealth((s) => !s)}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: pillTone.soft, paddingVertical: 6, paddingHorizontal: 9, borderRadius: 20 }}
-        >
-          <ShieldCheck size={13} color={pillTone.text} />
-          <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: pillTone.text }}>
-            {issueCount > 0 ? `${issueCount} issue${issueCount === 1 ? '' : 's'}` : 'All clear'}
-          </Text>
-          <ChevronDown size={12} color={pillTone.text} style={{ transform: [{ rotate: showHealth ? '180deg' : '0deg' }] }} />
-        </Pressable>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
+        {loading ? (
+          <ActivityIndicator color={semantic.brand} style={{ marginVertical: 4 }} />
+        ) : rows.length === 0 ? (
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={24} color={intent.success.text} />
+              <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6 }}>All clear</Text>
+            </View>
+            <Text style={{ fontSize: 12.5, lineHeight: 18, fontFamily: 'Poppins_500Medium', color: onBandText, marginTop: 6 }}>
+              No records are waiting for verification. New ones appear here when the Treasurer records them.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 34, lineHeight: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1 }}>{rows.length}</Text>
+            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_500Medium', color: onBandText }}>
+              record{rows.length === 1 ? '' : 's'} waiting for your verification
+            </Text>
+          </View>
+        )}
       </View>
 
-      <View style={[glassPanel, { marginTop: 14, overflow: 'hidden' }]}>
-        <View style={{ padding: 14 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{loading ? '–' : membersYetToPay}</Text>
-              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Members{'\n'}yet to pay</Text>
-            </View>
-            <View style={{ width: 20, paddingTop: 11 }}>
-              <View style={{ height: 2, backgroundColor: semantic.borderStrong, borderRadius: 1 }} />
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <View style={{ width: 20, height: 2.5, borderRadius: 2, backgroundColor: '#2FA8FF', marginBottom: 4, shadowColor: '#2FA8FF', shadowOpacity: 0.9, shadowRadius: 6 }} />
-              <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{loading ? '–' : waitingOnYou}</Text>
-              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Waiting{'\n'}on you</Text>
-            </View>
-            <View style={{ width: 20, paddingTop: 11 }}>
-              <View style={{ height: 2, backgroundColor: semantic.borderStrong, borderRadius: 1 }} />
-            </View>
-            <View style={{ flex: 1, alignItems: 'center' }}>
-              <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{loading ? '–' : postedCount}</Text>
-              <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary, marginTop: 5, textAlign: 'center', lineHeight: 12 }}>Posted{'\n'}to ledger</Text>
-            </View>
-          </View>
-
-          {expanded ? (
-            <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 15, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-                <Text style={{ fontSize: 12, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>Oldest waiting on you</Text>
-                <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_700Bold', color: stale ? intent.warning.text : intent.success.text }}>{oldestAgeLabel(oldestHours)}</Text>
-              </View>
-
-              <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border }}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{handled} of {totalPostings} postings handled</Text>
-                  <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>{pct}%</Text>
-                </View>
-                <View style={{ height: 7, borderRadius: 4, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
-                  <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 4, backgroundColor: intent.success.base }} />
-                </View>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 11, marginTop: 9 }}>
-                  <MiniLegend color={intent.success.base} label={`${record.verified} verified`} />
-                  <MiniLegend color={intent.warning.base} label={`${record.flagged} flagged`} />
-                </View>
-              </View>
-
-              {showHealth ? (
-                <View style={{ marginTop: 14, paddingTop: 13, borderTopWidth: 1, borderColor: semantic.border, gap: 2 }}>
-                  {checks.map((c) => (
-                    <View key={c.label} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 6 }}>
-                      <View style={{ width: 19, height: 19, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.n > 0 ? intent.danger.base : intent.success.soft }}>
-                        {c.n > 0 ? <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: '#fff' }}>!</Text> : <Check size={10} color={intent.success.text} strokeWidth={3} />}
-                      </View>
-                      <Text style={{ flex: 1, fontSize: 12, fontFamily: 'Poppins_500Medium', color: c.n > 0 ? semantic.textPrimary : semantic.textSecondary }}>{c.n > 0 ? c.failLabel : c.label}</Text>
-                      {c.n > 0 ? <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>{c.n}</Text> : null}
-                    </View>
-                  ))}
-                  <Text style={{ fontSize: 10.5, color: semantic.textSecondary, fontWeight: '600', marginTop: 8 }}>
-                    Last scanned today, {checkedAt} · {totalScanned} postings
+      {!loading && rows.length > 0 ? (
+        <>
+          <View style={[glassPanel, { marginTop: 12, paddingHorizontal: 14, paddingVertical: 4 }]}>
+            {rows.slice(0, HERO_ROWS).map((r, i, shown) => (
+              <View key={r.key} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, borderBottomWidth: i < shown.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }} numberOfLines={1}>{r.name}</Text>
+                  <Text style={{ fontSize: 11.5, color: r.problem ? intent.danger.text : semantic.textSecondary }} numberOfLines={1}>
+                    {r.kind}, {r.problem ?? 'all fields match'}
                   </Text>
                 </View>
-              ) : null}
-            </>
-          ) : null}
-        </View>
-
-        <Pressable
-          disabled={locked}
-          onPress={() => setExpanded((e) => !e)}
-          style={{
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 11,
-            backgroundColor: 'rgba(255,255,255,0.45)', borderTopWidth: 1, borderColor: semantic.border,
-            opacity: locked ? 0.55 : 1,
-          }}
-        >
-          <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark, letterSpacing: 0.3 }}>
-            {locked ? `${waitingOnYou} item${waitingOnYou === 1 ? '' : 's'} waiting` : expanded ? 'Show less' : 'Show my progress'}
-          </Text>
-          <ChevronDown size={13} color={semantic.brandDark} style={{ transform: [{ rotate: expanded ? '180deg' : '0deg' }] }} />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-/* ---------------- shared queue-card bits ---------------- */
-function Tag({ tone, children }: { tone: 'age' | 'ok'; children: React.ReactNode }) {
-  const t = tone === 'age' ? intent.warning : intent.success;
-  return (
-    <View style={{ backgroundColor: t.soft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 }}>
-      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{children}</Text>
-    </View>
-  );
-}
-
-function QueueCard({ aged, children }: { aged?: boolean; children: React.ReactNode }) {
-  return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 18, marginBottom: 10, borderLeftWidth: aged ? 4 : 0, borderLeftColor: intent.warning.base }, shadowToken.soft]}>
-      {children}
-    </View>
-  );
-}
-
-/**
- * `proofUrl` drives what the first slot shows: a real "Proof" button when
- * one's attached, or a plain-spoken "No proof" warning when it isn't —
- * the Auditor should never have to tap through to discover that.
- * `proofUrl === undefined` (as opposed to null) hides the slot entirely,
- * for entity types that don't carry proof at all (e.g. reversal requests).
- */
-function QueueActions({ busy, proofUrl, onViewProof, onReject, onVerify }: {
-  busy: boolean;
-  proofUrl?: string | null;
-  onViewProof?: () => void;
-  onReject: () => void;
-  onVerify: () => void;
-}) {
-  return (
-    <View style={{ flexDirection: 'row', gap: 8, padding: 14, paddingTop: 0 }}>
-      {proofUrl !== undefined ? (
-        proofUrl ? (
-          <Pressable disabled={busy} onPress={onViewProof} style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', backgroundColor: semantic.surfaceAlt, opacity: busy ? 0.5 : 1 }}>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Proof</Text>
-          </Pressable>
-        ) : (
-          <View style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5, backgroundColor: intent.danger.soft }}>
-            <AlertTriangle size={12} color={intent.danger.text} />
-            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: intent.danger.text }}>No proof</Text>
+                {r.amount !== null ? <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(r.amount)}</Text> : null}
+              </View>
+            ))}
           </View>
-        )
+          <Pressable
+            onPress={() => router.push({ pathname: '/(app)/[groupId]/ledger' as any, params: { groupId, tab: 'queue' } })}
+            style={{ marginTop: 10, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark }}
+          >
+            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Open verification queue</Text>
+          </Pressable>
+        </>
       ) : null}
-      <Pressable disabled={busy} onPress={onReject} style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', borderWidth: 1.5, borderColor: semantic.border, opacity: busy ? 0.5 : 1 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>Reject</Text>
-      </Pressable>
-      <Pressable disabled={busy} onPress={onVerify} style={{ flex: 1, paddingVertical: 11, borderRadius: 11, alignItems: 'center', backgroundColor: intent.success.base, opacity: busy ? 0.5 : 1 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{busy ? '…' : 'Verify'}</Text>
-      </Pressable>
-    </View>
+      </View>
   );
 }
 
-type QueueType = 'contribution' | 'repayment' | 'reversal';
-type RejectTarget = { type: QueueType; id: string; label: string };
-type FilterKey = 'all' | QueueType;
+/** Flag with a note for the Organizer — used by the failed-check cards. */
+function useFlagPrompt(groupId: string) {
+  const flag = useFlagPosting(groupId);
+  const [target, setTarget] = useState<{ type: FlaggableEntityType; id: string; label: string; reason?: string } | null>(null);
 
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'contribution', label: 'Contributions' },
-  { key: 'repayment', label: 'Repayments' },
-  { key: 'reversal', label: 'Reversals' },
-];
-
-/* ---------------- Verification queue ---------------- */
-function VerificationQueue({ groupId }: { groupId: string }) {
-  const contribs = useContributions(groupId, { status: 'submitted' });
-  const repayments = useRepayments(groupId, 'submitted');
-  const reversals = useReversalRequests(groupId, 'pending_verification');
-  const balances = useMemberBalances(groupId);
-  const members = useQuery(() => listMembers(groupId), [groupId]);
-
-  const approveContrib = useApproveContribution(groupId);
-  const rejectContrib = useRejectContribution(groupId);
-  const confirmRepayment = useConfirmRepayment(groupId);
-  const rejectRepaymentAction = useRejectRepayment(groupId);
-  const verifyReversal = useVerifyReversal(groupId);
-  const rejectReversalAction = useRejectReversal(groupId);
-
-  const [actingId, setActingId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
-  const [filter, setFilter] = useState<FilterKey>('all');
-  const [viewProof, setViewProof] = useState<{ title: string; url: string } | null>(null);
-
-  // Keyed by MEMBERSHIP id — matches contribution.membership_id (the payer).
-  const payerByMembership = useMemo(() => {
-    const m = new Map<string, { full_name: string; heads: number }>();
-    (balances.data ?? []).forEach((b) => m.set(b.membership_id, { full_name: b.full_name ?? 'Member', heads: b.heads }));
-    return m;
-  }, [balances.data]);
-  // Keyed by MEMBER id — matches contribution/loan_payment.recorded_by
-  // (the recorder, who may be the payer themselves or a different officer).
-  // A separate map on purpose: membership_id and member_id are not the same
-  // key space, so reusing payerByMembership here would silently miss.
-  const roleByMember = useMemo(() => {
-    const m = new Map<string, string>();
-    (members.data ?? []).forEach((mm) => m.set(mm.member_id, mm.role));
-    return m;
-  }, [members.data]);
-
-  const contribRows = contribs.data ?? [];
-  const repaymentRows = repayments.data ?? [];
-  const reversalRows = reversals.data ?? [];
-  const total = contribRows.length + repaymentRows.length + reversalRows.length;
-  const loading = contribs.loading || repayments.loading || reversals.loading;
-
-  const showContribs = filter === 'all' || filter === 'contribution';
-  const showRepayments = filter === 'all' || filter === 'repayment';
-  const showReversals = filter === 'all' || filter === 'reversal';
-  const filteredCount =
-    (showContribs ? contribRows.length : 0) +
-    (showRepayments ? repaymentRows.length : 0) + (showReversals ? reversalRows.length : 0);
-
-  async function handleVerify(target: RejectTarget) {
-    setActingId(target.id);
-    if (target.type === 'contribution') { await approveContrib.run(target.id); contribs.refetch(); }
-    else if (target.type === 'repayment') { await confirmRepayment.run(target.id); repayments.refetch(); }
-    else { await verifyReversal.run(target.id); reversals.refetch(); }
-    setActingId(null);
+  async function confirm(reason: string, note: string) {
+    if (!target) return;
+    const t = target;
+    setTarget(null);
+    const ok = await flag.run({ entity_type: t.type, entity_id: t.id, reason, note: note || undefined, label: t.label });
+    if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
+    else Alert.alert('Flagged', 'The Organizer has been notified.');
   }
 
-  async function handleRejectConfirm(reason: string) {
-    if (!rejectTarget) return;
-    const target = rejectTarget;
-    setRejectTarget(null);
-    setActingId(target.id);
-    if (target.type === 'contribution') { await rejectContrib.run(target.id, reason || undefined); contribs.refetch(); }
-    else if (target.type === 'repayment') { await rejectRepaymentAction.run(target.id, reason || undefined); repayments.refetch(); }
-    else { await rejectReversalAction.run(target.id, reason || undefined); reversals.refetch(); }
-    setActingId(null);
-  }
+  const prompt = (
+    <FlagPrompt
+      visible={!!target}
+      title={target ? `Flag ${target.label}` : 'Flag'}
+      defaultReason={target?.reason}
+      onCancel={() => setTarget(null)}
+      onConfirm={confirm}
+    />
+  );
+  return { open: setTarget, busy: flag.loading, prompt };
+}
+
+/* ---------------- Stat tiles + failed checks (replaces To review) ---------------- */
+const TRAIL_DAYS = 90;
+// Audit actions that count as "verified by you" — see the logAudit calls in contributions/lending/ledger/distribution routes.
+const VERIFY_ACTIONS = new Set(['approved:contribution', 'confirmed:loan_payment', 'verified:reversal_request', 'verified:distribution']);
+
+function StatTile({ value, label, onPress }: { value: number | null; label: string; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={[{ flex: 1, backgroundColor: semantic.card, borderRadius: 18, padding: 14, minHeight: 104, justifyContent: 'center' }, shadowToken.soft]}>
+      {value === null ? <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start' }} /> : (
+        <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{value}</Text>
+      )}
+      <Text style={{ fontSize: 11.5, lineHeight: 15, color: semantic.textSecondary, marginTop: 2 }}>{label}</Text>
+    </Pressable>
+  );
+}
+
+/** `open` is a page that explains the failure (a loan's audit); without one, tapping goes straight to the flag prompt. */
+type FailedCheck = { key: string; title: string; sub: string; flag: { type: FlaggableEntityType; id: string; label: string }; open?: { route: string; params: Record<string, string> } };
+
+/** Postings that broke a control after they went through — the kind of thing the Auditor exists to catch. */
+function useFailedChecks(groupId: string, data: ReturnType<typeof useAuditorData>, flaggedIds: Set<string>) {
+  const loanAudits = useLoanAudits(groupId);
+  const { contribs, repayments } = data;
+
+  const checks = useMemo(() => {
+    const out: FailedCheck[] = [];
+    const same = (a?: string | null, b?: string | null) => !!a && !!b && a === b;
+
+    // Loans: the server re-runs the lending rules as of each approval (loan-audits) — same source as the Loan audits page.
+    (loanAudits.data ?? []).filter((l) => l.failed > 0).forEach((l) => {
+      const borrower = l.borrower ?? 'Member';
+      const first = l.checks.find((c) => !c.passed)!;
+      out.push({
+        key: `l-${l.loan_id}`, title: `${borrower} · Loan ${l.ref}`, sub: l.failed > 1 ? `${first.detail} +${l.failed - 1} more` : first.detail,
+        flag: { type: 'loan', id: l.loan_id, label: `${l.ref} · ${borrower}` },
+        open: { route: 'audit/loan/[id]', params: { id: l.loan_id } },
+      });
+    });
+
+    (contribs.data ?? []).filter((c) => c.status === 'approved' && !c.auto_confirmed).forEach((c) => {
+      const payer = c.memberships?.members?.full_name ?? 'Member';
+      const approver = c.approver?.full_name;
+      const reason = same(approver, payer) ? 'Self-verified'
+        : c.is_walk_in && same(approver, c.recorder?.full_name) ? 'Recorded and verified by one officer'
+        : null;
+      if (reason) out.push({ key: `c-${c.id}`, title: `${payer} · Contribution`, sub: reason, flag: { type: 'contribution', id: c.id, label: `${payer}'s contribution` } });
+    });
+
+    (repayments.data ?? []).filter((p) => p.status === 'paid').forEach((p) => {
+      const borrower = p.loans?.membership?.members?.full_name ?? 'Member';
+      const verifier = p.verifier?.full_name;
+      const reason = same(verifier, borrower) ? 'Self-verified'
+        : same(verifier, p.recorder?.full_name) ? 'Recorded and verified by one officer'
+        : null;
+      if (reason) out.push({ key: `p-${p.id}`, title: `${borrower} · Repayment`, sub: reason, flag: { type: 'loan_payment', id: p.id, label: `${borrower}'s repayment` } });
+    });
+
+    // Once the Auditor has flagged it, it's counted under Open flags instead.
+    return out.filter((c) => !flaggedIds.has(c.flag.id));
+  }, [loanAudits.data, contribs.data, repayments.data, flaggedIds]);
+
+  return { checks, loading: loanAudits.loading || contribs.loading || repayments.loading };
+}
+
+function WarningCard({ check, onPress }: { check: FailedCheck; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: intent.danger.soft, borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, marginTop: 8 }}>
+      <AlertTriangle size={16} color={intent.danger.text} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }} numberOfLines={1}>{check.title}</Text>
+        <Text style={{ fontSize: 11, color: intent.danger.text }} numberOfLines={1}>{check.sub}</Text>
+      </View>
+      <ChevronRight size={16} color={intent.danger.text} />
+    </Pressable>
+  );
+}
+
+/** Counts behind the stat tiles, warning cards and Audit tools — one fetch each. */
+function useAuditorOverview(groupId: string, data: ReturnType<typeof useAuditorData>) {
+  const { member } = data;
+  const [since] = useState(() => new Date(Date.now() - TRAIL_DAYS * 86400000).toISOString());
+  const trail = useAuditTrailSince(groupId, since);
+  const findings = useFindings(groupId, 'open');
+  const flags = useFlags(groupId);
+
+  const stats = useMemo(() => {
+    const entries = trail.data?.entries ?? [];
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+
+    return entries.filter((e) => e.actor_id === member?.id && VERIFY_ACTIONS.has(`${e.action}:${e.entity_type}`) && new Date(e.created_at) >= monthStart).length;
+  }, [trail.data, member?.id]);
+
+  // Any flag, open or closed, takes a record off the failed-check cards — a dismissed one was looked at and found fine.
+  const flaggedIds = useMemo(() => new Set((flags.data ?? []).map((f) => f.entity_id)), [flags.data]);
+  const failed = useFailedChecks(groupId, data, flaggedIds);
+  const trailReady = !!trail.data || (!trail.loading && !!trail.error);
+  const flagsReady = !!flags.data || (!flags.loading && !!flags.error);
+  const openFlags = flagsReady ? (flags.data ?? []).filter((f) => f.status === 'open').length : null;
+  const openFindings = findings.data ? findings.data.length : findings.loading ? null : 0;
+
+  return { verified: trailReady ? stats : null, openFlags, openFindings, failed: flagsReady && !failed.loading ? failed.checks : null };
+}
+
+function OverviewTiles({ groupId, overview, go }: { groupId: string; overview: ReturnType<typeof useAuditorOverview>; go: (r: string, params?: Record<string, string>) => void }) {
+  const flag = useFlagPrompt(groupId);
 
   return (
     <>
-      <SectionHead title="Waiting for you" aside={loading ? undefined : total > 0 ? `${total} waiting` : 'All clear'} tone={total > 0 ? 'hot' : 'calm'} />
+      <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+        <StatTile value={overview.openFlags} label="Open flags" onPress={() => go('audit/flags')} />
+        <StatTile value={overview.openFindings} label="Findings with the Organizer" onPress={() => go('audit/flags', { tab: 'findings' })} />
+        <StatTile value={overview.verified} label="Verified by you this month" onPress={() => go('ledger')} />
+      </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }} contentContainerStyle={{ gap: 7, paddingBottom: 2, paddingRight: 16 }}>
-        {FILTERS.map((f) => {
-          const active = filter === f.key;
-          return (
-            <Pressable
-              key={f.key}
-              onPress={() => setFilter(f.key)}
-              style={{
-                paddingVertical: 7, paddingHorizontal: 13, borderRadius: 18,
-                backgroundColor: active ? semantic.dashCard : semantic.surface,
-                borderWidth: 1, borderColor: active ? semantic.dashCard : semantic.border,
-              }}
-            >
-              <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: active ? '#fff' : semantic.textSecondary }}>{f.label}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {loading ? (
-        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
-          <ActivityIndicator color={semantic.brand} />
-        </View>
-      ) : total === 0 ? (
-        <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.soft]}>
-          <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
-            <CheckCircle2 size={18} color={intent.success.text} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Nothing waiting on you</Text>
-            <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Every posting is verified and on the ledger</Text>
-          </View>
-        </View>
-      ) : (
-        <View>
-          {showContribs && contribRows.map((c: Contribution) => {
-            const age = ageLabel(c.created_at);
-            const busy = actingId === c.id;
-            const payer = payerByMembership.get(c.membership_id);
-            const recorderName = c.recorder?.full_name ?? 'Member';
-            const recorderRole = c.recorded_by ? roleByMember.get(c.recorded_by) : null;
-            return (
-              <QueueCard key={c.id} aged={age.aged}>
-                <View style={{ padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text variant="overline" color="muted">Contribution</Text>
-                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(c.amount)}</Text>
-                  </View>
-                  <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>
-                    {payer?.full_name ?? 'Member'}{payer?.heads ? ` · ${payer.heads} head${payer.heads === 1 ? '' : 's'}` : ''}
-                  </Text>
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
-                    <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-                      <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>
-                        Recorded by <Text style={{ color: semantic.textSecondary }}>{recorderName}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
-                      </Text>
-                    </View>
-                    {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
-                  </View>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6 }}>
-                    <Text variant="caption" color="secondary">{timeAgo(c.created_at)}</Text>
-                    {c.external_reference ? <Text variant="caption" color="secondary">· ref {c.external_reference}</Text> : null}
-                  </View>
-                </View>
-                <QueueActions
-                  busy={busy}
-                  proofUrl={c.proof_signed_url}
-                  onViewProof={() => c.proof_signed_url && setViewProof({ title: `Contribution · ${payer?.full_name ?? 'Member'}`, url: c.proof_signed_url })}
-                  onReject={() => setRejectTarget({ type: 'contribution', id: c.id, label: `${payer?.full_name ?? 'this'} contribution` })}
-                  onVerify={() => handleVerify({ type: 'contribution', id: c.id, label: '' })}
-                />
-              </QueueCard>
-            );
-          })}
-
-          {showRepayments && repaymentRows.map((p: LoanPayment) => {
-            const age = ageLabel(p.created_at);
-            const busy = actingId === p.id;
-            const name = p.loans?.membership?.members?.full_name ?? 'Member';
-            const recorderRole = p.recorded_by ? roleByMember.get(p.recorded_by) : null;
-            return (
-              <QueueCard key={p.id} aged={age.aged}>
-                <View style={{ padding: 14, paddingBottom: 10 }}>
-                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Text variant="overline" color="muted">Loan repayment</Text>
-                    <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(p.amount)}</Text>
-                  </View>
-                  <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>{name}</Text>
-                  {p.recorder?.full_name ? (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 5, marginTop: 7 }}>
-                      <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 }}>
-                        <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>
-                          Recorded by <Text style={{ color: semantic.textPrimary }}>{p.recorder.full_name}</Text>{recorderRole ? ` (${ROLE_LABEL[recorderRole] ?? recorderRole})` : ''}
-                        </Text>
-                      </View>
-                      {age.aged ? <Tag tone="age">{age.label}</Tag> : null}
-                    </View>
-                  ) : null}
-                  <Text variant="caption" color="secondary" style={{ marginTop: 6 }}>{timeAgo(p.created_at)}</Text>
-                </View>
-                <QueueActions
-                  busy={busy}
-                  proofUrl={p.proof_signed_url}
-                  onViewProof={() => p.proof_signed_url && setViewProof({ title: `Repayment · ${name}`, url: p.proof_signed_url })}
-                  onReject={() => setRejectTarget({ type: 'repayment', id: p.id, label: `${name}'s repayment` })}
-                  onVerify={() => handleVerify({ type: 'repayment', id: p.id, label: '' })}
-                />
-              </QueueCard>
-            );
-          })}
-
-          {showReversals && reversalRows.map((r: ReversalRequest) => {
-            const age = ageLabel(r.initiated_at);
-            const busy = actingId === r.id;
-            return (
-              <QueueCard key={r.id} aged={age.aged}>
-                <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 10 }}>
-                  <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <Undo2 size={18} color={semantic.brandDark} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text variant="overline" color="muted">Reversing entry</Text>
-                      {r.entry ? <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.entry.amount)}</Text> : null}
-                    </View>
-                    <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 3 }} numberOfLines={1}>
-                      {r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry'}{r.entry?.description ? ` · ${r.entry.description}` : ''}
-                    </Text>
-                    {age.aged ? <View style={{ marginTop: 4 }}><Tag tone="age">{age.label}</Tag></View> : null}
-                  </View>
-                </View>
-
-                <View style={{ marginHorizontal: 14, marginBottom: 12, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }}>
-                  <Text variant="overline" color="muted" style={{ marginBottom: 3 }}>Reason given</Text>
-                  <Text style={{ fontSize: 12, lineHeight: 17, color: semantic.textSecondary }}>{r.reason}</Text>
-                </View>
-
-                <View style={{ flexDirection: 'row', paddingHorizontal: 14, marginBottom: 12, gap: 4 }}>
-                  {[
-                    { label: 'Initiated', done: true },
-                    { label: 'You verify', done: false, now: true },
-                    { label: 'Organizer finalizes', done: false },
-                  ].map((s, i) => (
-                    <View key={s.label} style={{ flex: 1, alignItems: 'center' }}>
-                      <View style={{
-                        width: 18, height: 18, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: s.done ? intent.success.base : s.now ? intent.info.base : semantic.surface,
-                      }}>
-                        {s.done ? <Check size={10} color="#fff" strokeWidth={3} /> : <Text style={{ fontSize: 9, fontFamily: 'Poppins_700Bold', color: s.now ? '#fff' : semantic.textMuted }}>{i + 1}</Text>}
-                      </View>
-                      <Text style={{ fontSize: 9, fontFamily: 'Poppins_700Bold', color: s.now ? intent.info.text : semantic.textMuted, marginTop: 4, textAlign: 'center' }}>{s.label}</Text>
-                    </View>
-                  ))}
-                </View>
-
-                <QueueActions
-                  busy={busy}
-                  onReject={() => setRejectTarget({ type: 'reversal', id: r.id, label: 'this reversal' })}
-                  onVerify={() => handleVerify({ type: 'reversal', id: r.id, label: '' })}
-                />
-              </QueueCard>
-            );
-          })}
-
-          {filteredCount === 0 ? (
-            <Text variant="body" color="muted" style={{ textAlign: 'center', padding: 20 }}>Nothing in this filter right now.</Text>
-          ) : null}
-        </View>
-      )}
-
-      <ReasonPrompt
-        visible={!!rejectTarget}
-        title={`Reject ${rejectTarget?.label ?? 'this item'}?`}
-        confirmLabel="Reject"
-        destructive
-        onCancel={() => setRejectTarget(null)}
-        onConfirm={handleRejectConfirm}
-      />
-
-      <Modal visible={!!viewProof} transparent animationType="fade" onRequestClose={() => setViewProof(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewProof(null)}>
-          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <Text variant="label" style={{ flex: 1 }} numberOfLines={1}>{viewProof?.title}</Text>
-              <Pressable onPress={() => setViewProof(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-            </View>
-            {viewProof?.url ? (
-              <Image source={{ uri: viewProof.url }} style={{ width: '100%', height: 360 }} resizeMode="contain" />
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
+      {(overview.failed ?? []).map((c) => (
+        <WarningCard key={c.key} check={c} onPress={() => (c.open ? go(c.open.route, c.open.params) : flag.open({ ...c.flag, reason: 'Broke a sign-off rule' }))} />
+      ))}
+      {flag.prompt}
     </>
   );
 }
 
-/* ---------------- Year-end verification: contextual, real gates ---------------- */
+/* ---------------- Audit tools (same tiles as the Member's Shortcuts) ---------------- */
+function ToolTile({ Icon, label, badge, onPress, busy }: { Icon: any; label: string; badge?: number; onPress: () => void; busy?: boolean }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={busy}
+      style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
+    >
+      {busy ? <ActivityIndicator color={NAV_BG} style={{ height: 26 }} /> : <Icon size={26} color={NAV_BG} strokeWidth={1.8} />}
+      <Text variant="caption" style={{ textAlign: 'center', fontSize: 10, lineHeight: 14 }} numberOfLines={2}>{label}</Text>
+      {badge ? (
+        <View style={{ position: 'absolute', top: 8, right: 8, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5, backgroundColor: intent.danger.base, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 10, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{badge}</Text>
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
+function AuditTools({ groupId, overview, go }: { groupId: string; overview: ReturnType<typeof useAuditorOverview>; go: (r: string) => void }) {
+  const loanFails = overview.failed?.filter((c) => c.flag.type === 'loan' || c.flag.type === 'loan_disbursement').length ?? 0;
+  const openItems = (overview.openFlags ?? 0) + (overview.openFindings ?? 0);
+
+  return (
+    <>
+      <SectionHead title="Audit tools" />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+        <ToolTile Icon={Banknote} label="Loan audits" badge={loanFails} onPress={() => go('audit/loans')} />
+        <ToolTile Icon={Flag} label="Flags & findings" badge={openItems} onPress={() => go('audit/flags')} />
+        <ToolTile Icon={Clock} label="Audit trail" onPress={() => go('audit/log')} />
+        <ToolTile Icon={Download} label="Export report" onPress={() => go('audit/export')} />
+      </View>
+    </>
+  );
+}
+
+/* ---------------- Recent activity (timeline) ---------------- */
+const RECENT_SHOWN = 3;
+
+function RecentActivity({ groupId, onOpen }: { groupId: string; onOpen: (id: string, at: string) => void }) {
+  const log = useAuditLog(groupId, { limit: RECENT_SHOWN });
+  const entries = log.data ?? [];
+
+  return (
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16, marginTop: 8 }, shadowToken.soft]}>
+      {log.loading && entries.length === 0 ? (
+        <ActivityIndicator color={semantic.brand} style={{ margin: 8 }} />
+      ) : entries.length === 0 ? (
+        <Text variant="body" color="muted">No activity yet.</Text>
+      ) : (
+        <AuditTimeline entries={entries} onOpen={(e) => onOpen(e.id, e.created_at)} />
+      )}
+    </View>
+  );
+}
+
+/* ---------------- Year-end verification ---------------- */
 function Gate({ done, now, label }: { done: boolean; now?: boolean; label: string }) {
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -647,7 +384,7 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
   return (
     <>
       <SectionHead title="Year-end preview" aside="Organizer is waiting" tone="hot" />
-      <View style={{ backgroundColor: semantic.dashCard, borderRadius: 18, padding: 16 }}>
+      <View style={{ backgroundColor: semantic.dashCard, borderRadius: 20, padding: 16 }}>
         <Text style={{ fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Verify the distribution figures</Text>
         <Text style={{ fontSize: 12, lineHeight: 17, color: '#A9C4CF', marginTop: 6 }}>
           The Treasurer prepared this preview. Nothing is paid out until you verify and the Organizer finalizes.
@@ -680,149 +417,33 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
   );
 }
 
-/* ---------------- My verification record ---------------- */
-function RecordStat({ n, label }: { n: number; label: string }) {
-  return (
-    <View style={{ flex: 1, alignItems: 'center' }}>
-      <Text style={{ fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{n}</Text>
-      <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary, marginTop: 3 }}>{label}</Text>
-    </View>
-  );
-}
-
-function VerificationRecord({ groupId }: { groupId: string }) {
-  const { member } = useAuth();
-  const { membership } = useActiveGroup();
-  const myName = member?.full_name ?? null;
-
-  const contribs = useContributions(groupId, {});
-  const repayments = useRepayments(groupId);
-  const reversals = useReversalRequests(groupId);
-
-  const loading = contribs.loading || repayments.loading || reversals.loading;
-
-  const counts = useMemo(() => {
-    let verified = 0;
-    let flagged = 0;
-
-    (contribs.data ?? []).forEach((c) => {
-      if (myName && c.approver?.full_name === myName) { if (c.status === 'approved') verified++; }
-    });
-    (repayments.data ?? []).forEach((p) => {
-      if (myName && p.verifier?.full_name === myName) { if (p.status === 'approved' || p.status === 'paid') verified++; }
-    });
-    (reversals.data ?? []).forEach((r) => {
-      if (membership && r.verified_by === membership.id) flagged++;
-    });
-
-    return { verified, flagged };
-  }, [contribs.data, repayments.data, reversals.data, myName, membership]);
-
-  return (
-    <>
-      <SectionHead title="My verification record" />
-      <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: 16 }, shadowToken.soft]}>
-        {loading ? (
-          <ActivityIndicator color={semantic.brand} />
-        ) : (
-          <View style={{ flexDirection: 'row' }}>
-            <RecordStat n={counts.verified} label="Verified" />
-            <View style={{ width: 1, backgroundColor: semantic.border }} />
-            <RecordStat n={counts.flagged} label="Flagged" />
-          </View>
-        )}
-      </View>
-    </>
-  );
-}
-
-/* ---------------- Recent verifications ---------------- */
-function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
-  return e.membership?.members?.full_name ?? null;
-}
-
-function RecentVerifications({ groupId }: { groupId: string }) {
-  const ledger = useLedger(groupId, { limit: 5 });
-  const txns = ledger.data ?? [];
-
-  return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 18, padding: txns.length ? 6 : 20 }, shadowToken.soft]}>
-      {ledger.loading ? (
-        <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
-      ) : txns.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No verifications yet.</Text>
-      ) : (
-        txns.map((e, i) => {
-          const name = contributorName(e);
-          const credit = e.direction === 'credit';
-          return (
-            <View key={e.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 10, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-              <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
-                <Check size={16} color={intent.success.text} strokeWidth={2.4} />
-              </View>
-              <View style={{ flex: 1, gap: 1 }}>
-                <Text variant="label" style={{ fontSize: 12.5 }} numberOfLines={1}>{name ?? e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                <Text variant="caption" color="secondary" numberOfLines={1}>
-                  {name ? `${e.description ?? e.entry_type.replace(/_/g, ' ')} · ` : ''}{shortDate(e.posted_at)}
-                </Text>
-              </View>
-              {credit ? <ArrowDownRight size={17} color={intent.success.text} /> : <ArrowUpRight size={17} color={semantic.textPrimary} />}
-            </View>
-          );
-        })
-      )}
-    </View>
-  );
-}
-
-// Ledger and Reports/Proofs are distinct real screens (no route serves double duty
-// here): Ledger → the raw transaction ledger, Audit log → the postings review/
-// decision trail, Reports → the aggregate member-balances report, Proofs → the
-// dedicated proof-review screen.
-const LOOKUP_ACTIONS: { label: string; icon: any; route: string }[] = [
-  { label: 'Ledger', icon: ScrollText, route: 'reports/group-ledger' },
-  { label: 'Audit Log', icon: FileText, route: 'audit/log' },
-  { label: 'Reports', icon: BarChart3, route: 'reports/member-balances' },
-  { label: 'Proofs', icon: Receipt, route: 'audit/proofs' },
-];
-
 export function AuditorHero({ groupId }: { groupId: string }) {
   return (
     <DashboardBand>
-      <FoldTarget>
-        <VerificationHero groupId={groupId} />
-      </FoldTarget>
+      <VerificationHero groupId={groupId} />
     </DashboardBand>
   );
 }
 
 export function AuditorDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
+  const go = (route: string, params?: Record<string, string>) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...params } });
+  const data = useAuditorData(groupId);
+  const overview = useAuditorOverview(groupId, data);
 
   return (
     <>
       <YearEndVerification groupId={groupId} go={go} />
 
-      <VerificationQueue groupId={groupId} />
+      <OverviewTiles groupId={groupId} overview={overview} go={go} />
 
-      <VerificationRecord groupId={groupId} />
+      <AuditTools groupId={groupId} overview={overview} go={go} />
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        {LOOKUP_ACTIONS.map((a) => (
-          <Pressable
-            key={a.route}
-            onPress={() => go(a.route)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
-          >
-            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
-            <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <SectionHead title="Recent verifications" aside="Posted to ledger" />
-      <RecentVerifications groupId={groupId} />
+      <SectionHead title="Recent activity" aside="See audit trail" onAsidePress={() => go('audit/log')} />
+      <RecentActivity
+        groupId={groupId}
+        onOpen={(id, at) => router.push({ pathname: '/(app)/[groupId]/audit/[id]' as any, params: { groupId, id, at } })}
+      />
     </>
   );
 }

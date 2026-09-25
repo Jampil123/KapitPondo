@@ -25,7 +25,9 @@ export interface Penalty {
   waived_by: string | null;
   waived_at: string | null;
   waive_reason: string | null;
-  ledger_entry_id: string | null; // set only once actually paid — not reachable yet, no "pay" flow exists
+  ledger_entry_id: string | null; // set once paid
+  /** The contribution submission that covers this penalty, once the member has paid it (migration 0068). */
+  paid_with_contribution_id: string | null;
   created_at: string;
   /** Who the penalty belongs to. */
   membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null;

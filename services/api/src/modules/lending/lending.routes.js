@@ -328,6 +328,11 @@ router.post(
         externalReference: external_reference,
         isWalkIn: !isOwnLoan,
       });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'recorded', entityType: 'loan_payment', entityId: payment.id,
+        before: null, after: { status: 'submitted', amount: payment.amount, walk_in: !isOwnLoan },
+      });
       res.status(201).json({ message: 'Repayment submitted for confirmation', payment });
     } catch (err) { next(err); }
   }
@@ -390,6 +395,9 @@ router.post(
       }
       if (payment.recorded_by === req.member.id) {
         return res.status(403).json({ error: 'You cannot confirm a repayment you submitted' });
+      }
+      if (payment.loans.membership_id === req.membership.id) {
+        return res.status(403).json({ error: 'You cannot confirm a repayment on your own loan' });
       }
       const ledgerEntry = await service.confirmRepayment({
         paymentId: req.params.paymentId,

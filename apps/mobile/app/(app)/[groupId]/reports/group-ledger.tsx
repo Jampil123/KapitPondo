@@ -64,7 +64,7 @@ function Row({ e, mine }: { e: LedgerEntry; mine: boolean }) {
   const credit = e.direction === 'credit';
   const who = e.membership?.members?.full_name ?? (e.entry_type === 'expense' ? 'Group' : null);
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, paddingHorizontal: 16, borderBottomWidth: 1, borderColor: semantic.border, backgroundColor: mine ? semantic.surfaceAlt : 'transparent' }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border, ...(mine ? { backgroundColor: semantic.surfaceAlt, marginHorizontal: -8, paddingHorizontal: 10 } : null) }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
         <tone.Icon size={16} color={tone.fg} />
       </View>
@@ -222,7 +222,7 @@ export default function GroupLedger() {
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
         ) : grouped.length === 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
+          <View style={[{ backgroundColor: semantic.card, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 16 }, CARD_SHADOW]}>
             <Text variant="body" color="muted">No postings match this filter.</Text>
           </View>
         ) : (
@@ -232,7 +232,7 @@ export default function GroupLedger() {
                 <Text variant="overline" color="muted">{g.label}</Text>
                 <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_700Bold' }}>Balance {formatPeso(g.balance)}</Text>
               </View>
-              <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
+              <View>
                 {g.list.map(({ e }) => (
                   <Row key={e.id} e={e} mine={e.membership_id === membership?.id} />
                 ))}

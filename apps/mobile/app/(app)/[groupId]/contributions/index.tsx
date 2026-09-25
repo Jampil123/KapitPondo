@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Clock3, AlertTriangle, RotateCcw, Clock, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
+import { latePenalty } from '@/features/contributions/penalty';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterTabs } from '@/components/shared/FilterTabs';
 import { semantic, intent, type IntentName } from '@/theme/colors';
@@ -145,13 +146,11 @@ function UpcomingRow({ entry, frequency, onPress }: { entry: PeriodEntry; freque
   return onPress ? <Pressable onPress={onPress}>{content}</Pressable> : content;
 }
 
-function PenaltyNotice({ amount, type }: { amount: number | string; type: string | null }) {
+function PenaltyNotice({ amount }: { amount: number }) {
   return (
     <View style={{ paddingVertical: 11, paddingHorizontal: 16, paddingLeft: 66, backgroundColor: intent.warning.soft, borderBottomWidth: 1, borderColor: semantic.border, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <Text style={{ flex: 1, fontSize: 11.5, fontFamily: 'Poppins_500Medium', color: intent.warning.text }}>Late penalty may apply</Text>
-      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>
-        {type === 'percent' ? `${amount}%` : formatPeso(amount)}
-      </Text>
+      <Text style={{ flex: 1, fontSize: 11.5, fontFamily: 'Poppins_500Medium', color: intent.warning.text }}>+ Late penalty</Text>
+      <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>{formatPeso(amount)}</Text>
     </View>
   );
 }
@@ -269,7 +268,7 @@ export default function ContributionsOverview() {
                   {needsAction.map((entry) => (
                     <View key={entry.index}>
                       <ActionRow entry={entry} frequency={cycle.frequency} onPress={() => openEntry(entry)} />
-                      {entry.kind === 'late' && cycle.penalty_amount ? <PenaltyNotice amount={cycle.penalty_amount} type={cycle.penalty_type} /> : null}
+                      {entry.kind === 'late' && latePenalty(cycle, Number(entry.amount)) ? <PenaltyNotice amount={latePenalty(cycle, Number(entry.amount))} /> : null}
                     </View>
                   ))}
                 </View>

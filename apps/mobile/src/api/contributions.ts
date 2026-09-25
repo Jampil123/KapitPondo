@@ -13,6 +13,8 @@ export interface Contribution {
   due_date: string | null;
   paid_date: string | null;
   is_late: boolean;
+  /** Late-penalty share of what the member paid, kept apart from `amount` (the contribution alone) — see migration 0068. */
+  penalty_applied: Money;
   status: ContributionStatus;
   payment_method: PaymentMethod | null;
   proof_url: string | null;

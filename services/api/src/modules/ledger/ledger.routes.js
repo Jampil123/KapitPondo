@@ -9,6 +9,22 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./ledger.service');
 const { logAudit } = require('../../lib/auditLog');
 
+// One posting with the record behind it, what reversed it, and its audit
+// trail — the officers' entry page. Officers only: it names who recorded and
+// verified each record.
+router.get(
+  '/groups/:groupId/ledger/entries/:entryId',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const detail = await service.entryDetail({ groupId: req.params.groupId, entryId: req.params.entryId });
+      if (!detail) return res.status(404).json({ error: 'Ledger entry not found' });
+      res.json(detail);
+    } catch (err) { next(err); }
+  }
+);
+
 // Initiate a reversal request (Treasurer or Owner). Requires a reason. Does
 // NOT touch the ledger yet — see /verify and /finalize below (TC-021).
 router.post(
@@ -60,13 +76,19 @@ router.get(
 );
 
 // Auditor verifies a pending reversal request (TC-026) — proceeds to the
-// Owner for final approval.
+// Owner for final approval. Treasurer/Owner only get through when the entry
+// is the Auditor's own (see reversalReviewBlock).
 router.post(
   '/groups/:groupId/reversal-requests/:id/verify',
   requireAuth,
-  requireGroupRole(['auditor']),
+  requireGroupRole(['auditor', 'treasurer', 'owner']),
   async (req, res, next) => {
     try {
+      const blocked = await service.reversalReviewBlock({
+        requestId: req.params.id, groupId: req.params.groupId,
+        memberId: req.member.id, membershipId: req.membership.id, role: req.membership.role,
+      });
+      if (blocked) return res.status(403).json({ error: blocked });
       const request = await service.verifyReversal({
         requestId: req.params.id,
         verifiedBy: req.member.id,
@@ -87,9 +109,14 @@ router.post(
 router.post(
   '/groups/:groupId/reversal-requests/:id/reject',
   requireAuth,
-  requireGroupRole(['auditor']),
+  requireGroupRole(['auditor', 'treasurer', 'owner']),
   async (req, res, next) => {
     try {
+      const blocked = await service.reversalReviewBlock({
+        requestId: req.params.id, groupId: req.params.groupId,
+        memberId: req.member.id, membershipId: req.membership.id, role: req.membership.role,
+      });
+      if (blocked) return res.status(403).json({ error: blocked });
       const request = await service.rejectReversal({
         requestId: req.params.id,
         verifiedBy: req.member.id,

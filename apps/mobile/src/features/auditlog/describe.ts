@@ -26,26 +26,39 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
   const after = e.after_data ?? {};
   const b = before as Record<string, any>;
   const a = after as Record<string, any>;
+  const s = e.subject;
+  const name = s?.name ?? null;
+  const entry = s?.entry_ref ?? null;
+
+  // Recording a contribution/repayment — the first step, before anyone verifies it.
+  if (e.action === 'recorded') {
+    const what = e.entity_type === 'loan_payment' ? `a loan repayment${name ? ` from ${name}` : ''}` : `a contribution${name ? ` for ${name}` : ''}`;
+    return { title: `Recorded ${what}`, from: '—', to: 'Pending verification' };
+  }
+
+  // The Auditor's own actions apply to any entity type, so they're checked before the per-type wording.
+  if (e.action === 'flagged') return { title: a.flag ? `Raised flag ${a.flag}${entry ? ` on ${entry}` : name ? ` on ${name}'s record` : ''}` : 'Flagged a posting', to: a.flag ? 'Open' : undefined, toBad: true, reason: a.reason ? [a.reason, a.note].filter(Boolean).join(' — ') : a.note };
+  if (e.action === 'proof_requested') return { title: 'Asked for a proof' };
 
   switch (e.entity_type) {
     case 'contribution':
       return e.action === 'approved'
-        ? { title: 'Verified a contribution', from: 'Submitted', to: `Posted · ${fmtValue(a.amount)}`, toGood: true, ref: a.recorded_by ? 'Recorded by another officer' : undefined }
-        : { title: 'Returned a contribution', from: 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
+        ? { title: entry ? `Verified contribution ${entry}` : `Verified ${name ? `${name}'s` : 'a'} contribution`, from: 'Pending', to: 'Verified', toGood: true, ref: a.recorded_by ? 'Recorded by another officer' : undefined }
+        : { title: `Returned ${name ? `${name}'s` : 'a'} contribution`, from: 'Pending', to: 'Returned', toBad: true, reason: a.reason };
     case 'expense':
       return e.action === 'approved'
         ? { title: 'Verified an expense', from: 'Recorded', to: `Posted · ${fmtValue(a.amount)}`, toGood: true }
         : { title: 'Returned an expense', from: 'Recorded', to: 'Returned', toBad: true, reason: a.reason };
     case 'loan_decision':
       return e.action === 'approved'
-        ? { title: 'Approved a loan request', from: 'Requested', to: `Approved · ${fmtValue(a.approved_principal)}`, toGood: true }
-        : { title: 'Rejected a loan request', from: 'Requested', to: 'Rejected', toBad: true, reason: a.reason };
+        ? { title: `Approved loan ${s?.loan_ref ?? 'request'}${name ? ` for ${name}` : ''}`, from: 'Requested', to: `Approved · ${fmtValue(a.approved_principal)}`, toGood: true }
+        : { title: `Rejected ${name ? `${name}'s` : 'a'} loan request`, from: 'Requested', to: 'Rejected', toBad: true, reason: a.reason };
     case 'loan_disbursement':
-      return { title: 'Released a loan', from: 'Approved', to: `Active · ${fmtValue(a.principal)}`, toGood: true };
+      return { title: `Released ${s?.loan_ref ? `loan ${s.loan_ref}` : 'a loan'}${name ? ` to ${name}` : ''}`, from: 'Approved', to: `Active · ${fmtValue(a.principal)}`, toGood: true };
     case 'loan_payment':
       return e.action === 'confirmed'
-        ? { title: 'Verified a repayment', from: 'Submitted', to: `Posted · ${fmtValue(a.amount)}`, toGood: true }
-        : { title: 'Returned a repayment', from: 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
+        ? { title: entry ? `Verified loan repayment ${entry}` : `Verified ${name ? `${name}'s` : 'a'} repayment`, from: 'Pending', to: 'Verified', toGood: true }
+        : { title: `Returned ${name ? `${name}'s` : 'a'} repayment`, from: 'Pending', to: 'Returned', toBad: true, reason: a.reason };
     case 'membership_role':
       return { title: 'Changed a member’s role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: ROLE_LABEL[a.role] ?? a.role };
     case 'membership_heads':
@@ -59,9 +72,17 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
         ? { title: 'Verified the year-end distribution', from: 'Preview', to: `Verified · ${fmtValue(a.total_amount)}`, toGood: true }
         : { title: 'Finalized the year-end distribution', from: 'Verified', to: `Finalized · ${fmtValue(a.total_amount)}`, toGood: true };
     case 'penalty':
-      return { title: 'Waived a penalty', from: 'Pending', to: `Waived · ${fmtValue(a.amount)}`, toGood: true, reason: a.reason };
+      return e.action === 'paid'
+        ? { title: 'Collected a late penalty', from: 'Pending', to: `Paid · ${fmtValue(a.amount)}`, toGood: true }
+        : { title: 'Waived a penalty', from: 'Pending', to: `Waived · ${fmtValue(a.amount)}`, toGood: true, reason: a.reason };
     case 'reversal_request': {
-      const titles: Record<string, string> = { initiated: 'Requested a reversal', verified: 'Verified a reversal request', rejected: 'Rejected a reversal request', finalized: 'Approved a reversing entry' };
+      const of = entry ? ` of ${entry}` : '';
+      const titles: Record<string, string> = {
+        initiated: `Started a reversal${of}`,
+        verified: `Verified the reversal${of}`,
+        rejected: `Rejected the reversal${of}`,
+        finalized: s?.reversing_entry_ref ? `Approved reversal ${s.reversing_entry_ref}${of}` : `Approved the reversal${of}`,
+      };
       return {
         title: titles[e.action] ?? 'Updated a reversal request',
         from: b.entry_stands ? 'Entry stands' : (b.status ?? 'Pending'),
@@ -81,13 +102,24 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       const titles: Record<string, string> = { proposed: 'Proposed a GCash number', approved: 'Approved the GCash number', rejected: 'Rejected the GCash number', cancelled: 'Withdrew a GCash number' };
       return { title: titles[e.action] ?? 'Updated the GCash number', to: a.number ?? undefined, toGood: e.action === 'approved', toBad: e.action === 'rejected', reason: a.reason ?? a.note };
     }
+    case 'audit_flag':
+      return { title: e.action === 'resolved' ? 'Resolved a flag' : e.action === 'dismissed' ? 'Dismissed a flag' : 'Updated a flag', from: 'Open', to: a.status === 'resolved' ? 'Resolved' : a.status === 'dismissed' ? 'Dismissed' : a.status, toGood: e.action === 'resolved', reason: a.note };
+    case 'audit_finding': {
+      const titles: Record<string, string> = { submitted: 'Submitted an audit finding', resolved: 'Resolved an audit finding', dismissed: 'Dismissed an audit finding' };
+      return {
+        title: titles[e.action] ?? 'Updated an audit finding',
+        from: b.status ?? undefined,
+        to: e.action === 'submitted' ? `${a.severity ?? ''} · ${a.title ?? ''}`.trim() : a.status ?? undefined,
+        toGood: e.action === 'resolved',
+        toBad: e.action === 'submitted',
+        reason: a.note,
+      };
+    }
     case 'announcement':
       return { title: 'Posted an announcement' };
     case 'payment_reminder':
       return { title: 'Sent a payment reminder' };
     default:
-      if (e.action === 'flagged') return { title: 'Flagged a posting', toBad: true, reason: a.note };
-      if (e.action === 'proof_requested') return { title: 'Asked for a proof' };
       return { title: e.action.replace(/_/g, ' ') };
   }
 }

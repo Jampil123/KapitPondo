@@ -3,7 +3,7 @@ const router = express.Router();
 const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
-const { checkLatePenaltiesIfDue } = require('../penalties/penalties.service');
+const { checkLatePenaltiesIfDue, splitPenaltyShare, coverPenalties, settlePenaltiesFor } = require('../penalties/penalties.service');
 const { logAudit } = require('../../lib/auditLog');
 
 // Submit a contribution — status 'submitted' either way, awaiting a
@@ -43,16 +43,31 @@ router.post('/groups/:groupId/contributions',
         isWalkIn = true;
       }
 
+      // A member paying late covers their pending late penalty in the same
+      // transfer; only the contribution share is kept as `amount`.
+      const split = isWalkIn
+        ? { contributionAmount: amount, penaltyShare: 0, penaltyIds: [] }
+        : await splitPenaltyShare({
+          groupId: req.params.groupId, membershipId: targetMembershipId,
+          heads: req.membership.heads, cycleId: cycle_id, amount,
+        });
+
       const contribution = await service.createContribution({
         membershipId: targetMembershipId,
         cycleId: cycle_id,
         groupId: req.params.groupId,
-        amount,
+        amount: split.contributionAmount,
+        penaltyApplied: split.penaltyShare,
         paymentMethod: payment_method,
         proofUrl: proof_url,
         externalReference: external_reference,
         recordedBy: req.member.id,
         isWalkIn,
+      });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'recorded', entityType: 'contribution', entityId: contribution.id,
+        before: null, after: { status: 'submitted', amount: contribution.amount, walk_in: isWalkIn },
       });
 
       // A walk-in for someone else posts immediately (migration 0064); the
@@ -66,6 +81,7 @@ router.post('/groups/:groupId/contributions',
         });
         return res.status(201).json({ contribution: { ...contribution, status: 'approved' }, ledger_entry: ledgerEntry });
       }
+      await coverPenalties({ penaltyIds: split.penaltyIds, contributionId: contribution.id });
       res.status(201).json({ contribution });
     } catch (err) { next(err); }
   }
@@ -135,6 +151,9 @@ router.post('/groups/:groupId/contributions/:id/approve',
       if (contribution.recorded_by === req.member.id) {
         return res.status(403).json({ error: 'You cannot approve a contribution you recorded' });
       }
+      if (contribution.membership_id === req.membership.id) {
+        return res.status(403).json({ error: 'You cannot approve your own contribution' });
+      }
       const ledgerEntry = await service.approveContribution({
         contributionId: req.params.id,
         approverId: req.member.id,
@@ -144,6 +163,16 @@ router.post('/groups/:groupId/contributions/:id/approve',
         action: 'approved', entityType: 'contribution', entityId: req.params.id,
         before: { status: contribution.status }, after: { status: 'approved', amount: contribution.amount, recorded_by: contribution.recorded_by },
       });
+      if (Number(contribution.penalty_applied) > 0) {
+        const settled = await settlePenaltiesFor({ contributionId: req.params.id, approverId: req.member.id });
+        for (const p of settled) {
+          await logAudit({
+            groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+            action: 'paid', entityType: 'penalty', entityId: p.id,
+            before: { status: 'pending' }, after: { status: 'paid', amount: p.amount, contribution_id: req.params.id },
+          });
+        }
+      }
       res.json({ message: 'Contribution approved', ledgerEntry });
     } catch (err) {
       if (err.message && err.message.includes('must be confirmed by')) {

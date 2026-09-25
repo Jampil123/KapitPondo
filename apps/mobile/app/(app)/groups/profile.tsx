@@ -2,7 +2,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppBar } from '@/components/shared/AppBar';
 import { ProfileBody } from '@/features/profile/ProfileBody';
 
-const BAND_TOP = '#4C7C90';
+const BAND_TOP = '#6A93A6';
 
 export default function Profile() {
   return (

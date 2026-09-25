@@ -22,7 +22,7 @@ import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
 function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: string; sub?: string; pill?: { text: string; tone: IntentName }; onPress?: () => void }) {
   const tone = pill ? intent[pill.tone] : null;
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 16 }}>
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
       <View style={{ width: 32, height: 32, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={16} color={semantic.brandDark} />
       </View>
@@ -108,7 +108,7 @@ export function ProfileBody() {
             style={{
               position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
               backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
-              borderWidth: 2, borderColor: semantic.brandDark,
+              borderWidth: 2, borderColor: '#6A93A6',
             }}
           >
             {uploadingAvatar ? <ActivityIndicator size="small" color="#fff" /> : <vmeta.icon size={12} color="#fff" strokeWidth={2.6} />}
@@ -134,7 +134,7 @@ export function ProfileBody() {
   return (
     <View style={{ flex: 1, backgroundColor: semantic.background }}>
       <LinearGradient
-        colors={['#4C7C90', semantic.brandDark, '#35606F']}
+        colors={['#6A93A6', '#7298AB', '#7FA6B8']}
         onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 26 }}
       >
@@ -180,7 +180,7 @@ export function ProfileBody() {
         {/* Account */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Account</Text>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+          <View>
             <Row
               icon={Mail}
               label="Email address"
@@ -196,7 +196,7 @@ export function ProfileBody() {
         {/* Privacy & security */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Privacy &amp; security</Text>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+          <View>
             <Row icon={History} label="Login activity" sub="Devices and times your account signed in" onPress={() => router.push('/(app)/login-activity' as any)} />
             <Row icon={Lock} label="My data & consent" sub="Review what we collect and why" onPress={() => router.push('/(app)/my-data-consent' as any)} />
             <Row icon={Download} label="Download my records" sub="Contributions, loans and payouts" onPress={() => router.push('/(app)/download-records' as any)} />
@@ -206,7 +206,7 @@ export function ProfileBody() {
         {/* Support */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Help</Text>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, shadowToken.card]}>
+          <View>
             <Row icon={HelpCircle} label="Help Center" onPress={() => router.push('/(app)/help-center' as any)} />
           </View>
         </View>

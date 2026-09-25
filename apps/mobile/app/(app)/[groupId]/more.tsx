@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   ArrowUpCircle, Coins, Image as ImageIcon, Layers, BarChart3, Users, PiggyBank, Repeat, LifeBuoy,
-  UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ScrollText, FileText, Wallet,
+  UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ScrollText, FileText, Wallet, ClipboardCheck,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
@@ -18,6 +18,8 @@ const YEAR_END: Item = { icon: CalendarClock, label: 'Year-end', to: 'distributi
 const LOAN_DECISIONS: Item = { icon: Coins, label: 'Loan decisions', to: 'loans/decisions' };
 const PAYMENT_CHANNEL: Item = { icon: Smartphone, label: 'Payment channel', to: 'group/settings' };
 
+const AUDIT_FINDINGS: Item = { icon: ClipboardCheck, label: 'Audit findings', to: 'audit/findings' };
+
 const MANAGE: Record<GroupRole, Item[]> = {
   owner: [
     { icon: UserCheck, label: 'Approve members', to: 'members/approvals' },
@@ -26,12 +28,14 @@ const MANAGE: Record<GroupRole, Item[]> = {
     { icon: ShieldCheck, label: 'Officers', to: 'members/officers' },
     { icon: SlidersHorizontal, label: 'Cycle settings', to: 'cycles/configure' },
     { icon: AlertTriangle, label: 'Penalties', to: 'penalties' },
+    AUDIT_FINDINGS,
     YEAR_END,
   ],
   treasurer: [LOAN_DECISIONS, PAYMENT_CHANNEL, YEAR_END],
   auditor: [
     { icon: ScrollText, label: 'Audit log', to: 'audit/log' },
     { icon: FileText, label: 'Proof review', to: 'audit/proofs' },
+    AUDIT_FINDINGS,
     { icon: Wallet, label: 'Member balances', to: 'reports/member-balances' },
     YEAR_END,
   ],

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useRef, type ReactNode } from 'react';
 import { View, ScrollView, Image, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
 import { buildTimeline } from '@/features/contributions/periods';
+import { usePenaltyDue } from '@/features/contributions/penalty';
 import { useQuery } from '@/hooks/useApi';
 import { listOfficers } from '@/api/groups';
 import { useProofScan, confirmSubmitDespiteDuplicate } from '@/features/contributions/useProofScan';
@@ -109,7 +110,7 @@ export default function Contribute() {
     : (timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null)?.row ?? null;
   const loading = cycleLoading || contribs.loading;
   const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
-  const payAmount = Number(current?.amount ?? expected);
+  const baseAmount = Number(current?.amount ?? expected);
   const due = current?.due_date ? parseApiDate(current.due_date) : dueParam ? new Date(dueParam) : null;
   const now = new Date();
 
@@ -119,6 +120,10 @@ export default function Contribute() {
     current?.is_late && due ? 'overdue' :
     !current && due && due < now ? 'overdue' :
     'submit';
+
+  // Late: the transfer covers the contribution plus the late penalty; the API splits the two back apart.
+  const penaltyDue = usePenaltyDue(groupId!, cycle, baseAmount, state === 'overdue', rows);
+  const payAmount = baseAmount + penaltyDue;
 
   // Paying needs the group's Owner to have set a treasurer GCash number
   // (see group/settings.tsx) — without it the screen below is blocked outright.
@@ -148,16 +153,19 @@ export default function Contribute() {
     [group?.fund_code, membership?.id, dueTime],
   );
 
+  // The last amount filled in automatically — replaced when the penalty loads, but never once the member (or the proof scan) changes it.
+  const autoAmount = useRef('');
   useEffect(() => {
     if (loading) return;
     if (state === 'rejected' && current) {
-      setAmount(String(current.amount));
+      setAmount(String(Number(current.amount) + Number(current.penalty_applied ?? 0)));
       setReference(current.external_reference ?? '');
-    } else if ((state === 'submit' || state === 'overdue') && cycle && !amount) {
-      setAmount(String(current?.amount ?? expected));
+    } else if ((state === 'submit' || state === 'overdue') && cycle && (!amount || amount === autoAmount.current)) {
+      autoAmount.current = payAmount.toFixed(2);
+      setAmount(autoAmount.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, state, cycle?.id, current?.id]);
+  }, [loading, state, cycle?.id, current?.id, payAmount]);
 
   async function copyValue(key: string, value: string) {
     await Clipboard.setStringAsync(value);
@@ -335,10 +343,10 @@ export default function Contribute() {
           {state === 'overdue' && (
             <AmountBlock
               label="Amount due"
-              amount={current?.amount ?? expected}
+              amount={payAmount}
               badge={<Badge tone="danger" label={`${lateDays} day${lateDays === 1 ? '' : 's'} late`} Icon={AlertTriangle} />}
               meta={<>{cycle.name} · was due <Text style={{ fontWeight: '700', color: intent.danger.text }}>{shortDate(due)}</Text></>}
-              note={breakdown}
+              note={penaltyDue ? `${breakdown} + ${formatPeso(penaltyDue)} late penalty` : breakdown}
               copied={copiedField === 'amount'}
               onCopy={() => copyValue('amount', payAmount.toFixed(2))}
             />
@@ -347,10 +355,10 @@ export default function Contribute() {
           {state === 'review' && current && (
             <AmountBlock
               label="Submitted"
-              amount={current.amount}
+              amount={Number(current.amount) + Number(current.penalty_applied ?? 0)}
               badge={<Badge tone="info" label="Under review" Icon={Clock3} />}
               meta={<>Sent <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}</>}
-              note={cycle.name}
+              note={Number(current.penalty_applied) > 0 ? `${cycle.name} · incl. ${formatPeso(current.penalty_applied)} late penalty` : cycle.name}
             />
           )}
 
@@ -363,15 +371,6 @@ export default function Contribute() {
               note={`Returned ${shortDate(current.updated_at)}`}
             />
           )}
-
-          {state === 'overdue' && cycle.penalty_amount ? (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 18 }}>
-              <AlertTriangle size={15} color={intent.warning.text} />
-              <Text style={{ flex: 1, fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: intent.warning.text }}>
-                A {cycle.penalty_type === 'percent' ? `${cycle.penalty_amount}%` : formatPeso(cycle.penalty_amount)} late penalty may be added
-              </Text>
-            </View>
-          ) : null}
 
           {canPay && (
             <>

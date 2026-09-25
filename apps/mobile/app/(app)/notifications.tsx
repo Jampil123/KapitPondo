@@ -4,8 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BellOff, CheckCircle2, XCircle, Bell, Settings } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { BandHeader } from '@/components/shared/DashboardBand';
+import { semantic } from '@/theme/colors';
 import { useNotifications } from '@/context/NotificationsContext';
 import type { Notification } from '@/api/notifications';
 
@@ -28,22 +28,19 @@ function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
-      style={[
-        { flexDirection: 'row', gap: 12, backgroundColor: semantic.surface, borderRadius: 16, padding: 14 },
-        shadowToken.card,
-      ]}
+      style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon size={20} color={color} />
+      <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
+        <Icon size={16} color={color} />
       </View>
-      <View style={{ flex: 1, gap: 3 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-          <Text variant="label" style={{ flex: 1, fontSize: 14.5 }}>{n.title ?? 'Notification'}</Text>
-          {!n.is_read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: semantic.brand }} /> : null}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+          <Text style={{ flex: 1, fontSize: 13, fontFamily: n.is_read ? 'Poppins_500Medium' : 'Poppins_600SemiBold', color: semantic.textPrimary }}>{n.title ?? 'Notification'}</Text>
+          <Text variant="caption" color="muted" style={{ fontSize: 10.5 }}>{formatWhen(n.created_at)}</Text>
         </View>
-        {n.message ? <Text variant="bodySmall" color="secondary">{n.message}</Text> : null}
-        <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{formatWhen(n.created_at)}</Text>
+        {n.message ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{n.message}</Text> : null}
       </View>
+      {!n.is_read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: semantic.brand, marginTop: 6 }} /> : null}
     </Pressable>
   );
 }
@@ -73,19 +70,19 @@ export default function Notifications() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader
         title="Notifications"
         subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
         right={
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             {unreadCount > 0 ? (
               <Pressable onPress={onMarkAllRead} hitSlop={8} style={{ paddingHorizontal: 8 }}>
-                <Text variant="label" color="brand" style={{ fontSize: 13 }}>Mark all read</Text>
+                <Text variant="label" style={{ fontSize: 13, color: semantic.brandDark }}>Mark all read</Text>
               </Pressable>
             ) : null}
-            <Pressable onPress={() => router.push('/(app)/notification-center' as any)} hitSlop={8} style={{ padding: 6 }}>
-              <Settings size={19} color={semantic.textSecondary} />
+            <Pressable onPress={() => router.push('/(app)/notification-center' as any)} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }}>
+              <Settings size={16} color={semantic.brandDark} />
             </Pressable>
           </View>
         }
@@ -97,18 +94,18 @@ export default function Notifications() {
         </View>
       ) : error && notifications.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>Couldn't load notifications. {error.message}</Text>
+          <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>Couldn’t load notifications. {error.message}</Text>
         </View>
       ) : notifications.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 36, gap: 10 }}>
           <BellOff size={40} color={semantic.textMuted} />
           <Text variant="h3" style={{ fontSize: 16 }}>No notifications yet</Text>
           <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>
-            You'll see updates here — like identity verification results — as they happen.
+            You’ll see updates here — like identity verification results — as they happen.
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 10 }}>
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}>
           {notifications.map((n) => (
             <Row key={n.id} n={n} onPress={() => onPressRow(n)} />
           ))}
