@@ -138,6 +138,8 @@ export interface LedgerEntryDetail {
   entry: LedgerEntry;
   /** What a flag on this entry points at (the record behind it); null for entries with no source record. */
   entity_type: FlaggableEntityType | null;
+  /** The record behind the entry (for older repayment entries, the payment rather than the loan). */
+  source_id: string | null;
   record: FlaggedRecord | null;
   reversed_by: { id: string; entry_no: number; posted_at: string } | null;
   history: AuditLogEntry[];

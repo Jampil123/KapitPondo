@@ -18,12 +18,14 @@
  */
 import { api } from './client';
 import type { Money } from '../lib/money';
+import type { ProofReading } from './contributions';
 
 // 'cancelled' = the borrower withdrew their own still-pending request (migration
 // 0041) — distinct from 'rejected', which is an Owner decision. 'defaulted' is
 // in the DB enum but no code path ever sets it — dead status, kept for parity.
 export type LoanStatus = 'pending' | 'approved' | 'active' | 'paid' | 'rejected' | 'cancelled' | 'defaulted';
-export type LoanPaymentStatus = 'scheduled' | 'submitted' | 'approved' | 'paid' | 'late' | 'partial' | 'rejected';
+/** 'confirmed' = money confirmed as received, waiting for the verification that posts it (migration 0075). */
+export type LoanPaymentStatus = 'scheduled' | 'submitted' | 'confirmed' | 'approved' | 'paid' | 'late' | 'partial' | 'rejected';
 export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
 export interface Loan {
@@ -42,6 +44,17 @@ export interface Loan {
   disbursed_at: string | null;
   rejection_reason: string | null;
   created_at: string;
+  approved_by?: string | null;
+  disbursed_by?: string | null;
+  /** Officer loans need a before-release review (migration 0075). */
+  review_required?: boolean;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  /** Why a reviewer sent the loan back (or a note when clearing it). */
+  review_note?: string | null;
+  /** Set once the release is verified — that's when the disbursement posts. Released but null = cash out, not yet posted. */
+  disbursed_ledger_entry_id?: string | null;
+  release_verified_at?: string | null;
   /** Which of the borrower's heads this loan is for — 1 is the member themselves (migration 0065). */
   head_no: number;
   /** The name the borrower gave that head, if any. Always null for head 1. */
@@ -131,6 +144,11 @@ export interface LoanPayment {
   gateway_provider: string | null;
   gateway_reference: string | null;
   auto_confirmed: boolean;
+  /** Step 1 of 2 (migration 0075): who confirmed the repayment arrived. */
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  /** What the server read off the proof (0076); null until read. */
+  proof_reading?: ProofReading | null;
   /** Only present on the group-wide listRepayments() — who the loan (and therefore this repayment) belongs to. */
   loans?: { id: string; group_id: string; membership_id: string; membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null };
 }
@@ -215,7 +233,7 @@ export function approveLoan(groupId: string, loanId: string, interestRate: numbe
   );
 }
 
-/** POST — disburse an already-approved loan (Treasurer or Owner). Posts the disbursement ledger entry; loan -> active. */
+/** POST — release an approved loan (Treasurer, or the Organizer for the Treasurer's own). Cash goes out, loan -> active; the ledger posting waits for verifyLoanRelease(). */
 export function disburseLoan(groupId: string, loanId: string) {
   return api.post<{ message: string; ledgerEntry: unknown }>(
     `/api/groups/${groupId}/loans/${loanId}/disburse`,
@@ -266,7 +284,7 @@ export async function checkDuplicateExternalReference(groupId: string, ref: stri
   return res.duplicate;
 }
 
-/** POST — confirm a submitted repayment claim (a DIFFERENT officer than whoever submitted it). Posts the ledger credit and updates the loan balance. */
+/** POST — the next step on a repayment: confirms a submitted one, or verifies (and posts) a confirmed one. */
 export function confirmRepayment(groupId: string, paymentId: string) {
   return api.post<{ message: string; ledgerEntry: unknown }>(`/api/groups/${groupId}/repayments/${paymentId}/confirm`);
 }
@@ -277,4 +295,34 @@ export function rejectRepayment(groupId: string, paymentId: string, reason?: str
     `/api/groups/${groupId}/repayments/${paymentId}/reject`,
     reason ? { reason } : undefined,
   );
+}
+
+/** POST — step 1 on a repayment: the fund holder confirms it arrived. Posts nothing. */
+export function confirmRepaymentReceipt(groupId: string, paymentId: string) {
+  return api.post<{ message: string; payment: LoanPayment }>(`/api/groups/${groupId}/repayments/${paymentId}/confirm-receipt`);
+}
+
+/** POST — step 2 on a repayment: the independent check. Posts the credit and reduces the loan. */
+export function verifyRepayment(groupId: string, paymentId: string) {
+  return api.post<{ message: string; ledgerEntry: unknown }>(`/api/groups/${groupId}/repayments/${paymentId}/verify`);
+}
+
+/** POST — read (or re-read) a repayment's proof now. */
+export function readRepaymentProof(groupId: string, paymentId: string) {
+  return api.post<{ reading: ProofReading | null }>(`/api/groups/${groupId}/repayments/${paymentId}/read-proof`);
+}
+
+/** POST — the borrower's "This isn't right" on a repayment recorded for them. */
+export function disputeRepayment(groupId: string, paymentId: string, note?: string) {
+  return api.post<{ message: string }>(`/api/groups/${groupId}/repayments/${paymentId}/dispute`, note ? { note } : undefined);
+}
+
+/** POST — before-release review of an officer's loan: clear it, or send it back with a note. */
+export function reviewLoan(groupId: string, loanId: string, cleared: boolean, note?: string) {
+  return api.post<{ message: string; loan: Loan }>(`/api/groups/${groupId}/loans/${loanId}/review`, { cleared, note });
+}
+
+/** POST — verify a loan release. This is what posts the disbursement. */
+export function verifyLoanRelease(groupId: string, loanId: string) {
+  return api.post<{ message: string; ledgerEntry: unknown }>(`/api/groups/${groupId}/loans/${loanId}/verify-release`);
 }

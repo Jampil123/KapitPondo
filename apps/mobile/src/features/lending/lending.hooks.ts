@@ -32,6 +32,11 @@ import {
   submitRepayment,
   listRepayments,
   confirmRepayment,
+  confirmRepaymentReceipt,
+  verifyRepayment,
+  disputeRepayment,
+  reviewLoan,
+  verifyLoanRelease,
   rejectRepayment,
   type ApplyLoanInput,
   type LoanStatus,
@@ -141,4 +146,24 @@ export function useConfirmRepayment(groupId: string) {
 
 export function useRejectRepayment(groupId: string) {
   return useAction((paymentId: string, reason?: string) => rejectRepayment(groupId, paymentId, reason));
+}
+
+export function useConfirmRepaymentReceipt(groupId: string) {
+  return useAction((paymentId: string) => confirmRepaymentReceipt(groupId, paymentId));
+}
+
+export function useVerifyRepayment(groupId: string) {
+  return useAction((paymentId: string) => verifyRepayment(groupId, paymentId));
+}
+
+export function useDisputeRepayment(groupId: string) {
+  return useAction((paymentId: string, note?: string) => disputeRepayment(groupId, paymentId, note));
+}
+
+export function useReviewLoan(groupId: string) {
+  return useAction((loanId: string, cleared: boolean, note?: string) => reviewLoan(groupId, loanId, cleared, note));
+}
+
+export function useVerifyLoanRelease(groupId: string) {
+  return useAction((loanId: string) => verifyLoanRelease(groupId, loanId));
 }

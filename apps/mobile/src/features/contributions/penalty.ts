@@ -19,7 +19,7 @@ export function usePenaltyDue(groupId: string, cycle: Cycle | null, dueAmount: n
   const pending = useMyPenalties(groupId, 'pending');
   return useMemo(() => {
     if (!late || !cycle) return 0;
-    const underReview = new Set(rows.filter((r) => r.status === 'submitted').map((r) => r.id));
+    const underReview = new Set(rows.filter((r) => r.status === 'submitted' || r.status === 'confirmed').map((r) => r.id));
     const charged = (pending.data ?? [])
       .filter((p) => p.cycle_id === cycle.id && !(p.paid_with_contribution_id && underReview.has(p.paid_with_contribution_id)))
       .reduce((sum, p) => sum + Number(p.amount), 0);

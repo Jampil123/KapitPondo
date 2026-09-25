@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Search, Rows3, LayoutGrid, Receipt, Flag, Send } from 'lucide-react-native';
@@ -111,7 +112,7 @@ export default function ReviewProofs() {
   // Only real payments carry proof — 'late'/'pending' contribution rows are missed-period markers, not payments.
   const items: ProofItem[] = useMemo(() => {
     const cs: ProofItem[] = (contribs.data ?? [])
-      .filter((c) => c.status === 'submitted' || c.status === 'approved' || c.status === 'rejected')
+      .filter((c) => c.status === 'submitted' || c.status === 'confirmed' || c.status === 'approved' || c.status === 'rejected')
       .map((c) => ({
         id: c.id, entityType: 'contribution', kind: 'Contribution',
         name: c.memberships?.members?.full_name ?? 'Member', reference: c.external_reference,
@@ -156,6 +157,7 @@ export default function ReviewProofs() {
     setFlagTarget(null);
     const ok = await flag.run({ entity_type: target.entityType, entity_id: target.id, reason, note: note || undefined, label: `${target.kind} · ${target.name} · ${formatPeso(target.amount)}` });
     if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
+    else toast('Flagged — the Organizer has been notified');
   }
 
   function onAsk(item: ProofItem) {
@@ -166,7 +168,7 @@ export default function ReviewProofs() {
         text: 'Request', onPress: async () => {
           const ok = await ask.run({ entity_type: item.entityType, entity_id: item.id, recorded_by: item.recordedById!, label: `${item.kind} · ${item.name} · ${formatPeso(item.amount)}` });
           if (ok === undefined) Alert.alert('Could not send', ask.error?.message ?? 'Try again.');
-          else Alert.alert('Sent', `${item.recordedByName ?? 'They'} will be notified.`);
+          else toast(`Proof requested from ${item.recordedByName ?? 'the recorder'}`);
         },
       },
     ]);

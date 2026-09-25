@@ -1,7 +1,18 @@
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-export type ContributionStatus = 'pending' | 'submitted' | 'approved' | 'rejected' | 'late';
+/** 'confirmed' = money confirmed as received, waiting for the independent verification that posts it (migration 0075). */
+/** The server's OCR reading of an uploaded proof (migration 0076). `read: false` = the photo couldn't be read. */
+export interface ProofReading {
+  amount: number | null;
+  reference: string | null;
+  /** "2026-09-24" */
+  date: string | null;
+  sender: string | null;
+  read: boolean;
+}
+
+export type ContributionStatus = 'pending' | 'submitted' | 'confirmed' | 'approved' | 'rejected' | 'late';
 export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
 export interface Contribution {
@@ -34,6 +45,11 @@ export interface Contribution {
   recorder: { full_name: string } | null;
   /** Who approved this contribution — null until an officer confirms it. */
   approver: { full_name: string } | null;
+  /** Step 1 of 2 (migration 0075): who confirmed the money arrived, and when. */
+  confirmed_by?: string | null;
+  confirmed_at?: string | null;
+  /** What the server read off the proof (0076); null until read. */
+  proof_reading?: ProofReading | null;
   /** The payer's membership + name, joined server-side (listContributions only). */
   memberships: { member_id: string; heads: number; members: { full_name: string | null; avatar_url?: string | null } | null } | null;
   /** Set when a PayMongo webhook posted this automatically (see 0051_paymongo_contributions.sql) — no recorder/approver pair, the gateway's signed confirmation stands in for both. */
@@ -81,6 +97,26 @@ export function approveContribution(groupId: string, contributionId: string) {
   return api.post<{ contribution: Contribution; ledger_entry?: unknown }>(
     `/api/groups/${groupId}/contributions/${contributionId}/approve`,
   );
+}
+
+/** POST — step 1: the fund holder confirms the money arrived. Posts nothing. */
+export function confirmContribution(groupId: string, contributionId: string) {
+  return api.post<{ message: string; contribution: Contribution }>(`/api/groups/${groupId}/contributions/${contributionId}/confirm`);
+}
+
+/** POST — step 2: the independent check. This posts to the ledger. */
+export function verifyContribution(groupId: string, contributionId: string) {
+  return api.post<{ message: string; ledgerEntry: unknown }>(`/api/groups/${groupId}/contributions/${contributionId}/verify`);
+}
+
+/** POST — read (or re-read) the proof now, for records submitted before proofs were read automatically. */
+export function readContributionProof(groupId: string, contributionId: string) {
+  return api.post<{ reading: ProofReading | null }>(`/api/groups/${groupId}/contributions/${contributionId}/read-proof`);
+}
+
+/** POST — the member's "This isn't right" on a contribution recorded for them. Raises a flag for the Auditor. */
+export function disputeContribution(groupId: string, contributionId: string, note?: string) {
+  return api.post<{ message: string }>(`/api/groups/${groupId}/contributions/${contributionId}/dispute`, note ? { note } : undefined);
 }
 
 /** POST — reject a contribution (status: rejected). */

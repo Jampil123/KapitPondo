@@ -49,6 +49,7 @@ export const cycleStatus: Record<string, StatusMeta> = {
 export const contributionStatus: Record<string, StatusMeta> = {
   pending:   { intent: 'warning', label: 'Due' },
   submitted: { intent: 'info',    label: 'Under review' },
+  confirmed: { intent: 'info',    label: 'Pending verification' },
   approved:  { intent: 'success', label: 'Approved' },
   rejected:  { intent: 'danger',  label: 'Rejected' },
 };
@@ -69,6 +70,7 @@ export const loanStatus: Record<string, StatusMeta> = {
 export const loanPaymentStatus: Record<string, StatusMeta> = {
   scheduled: { intent: 'neutral', label: 'Scheduled' },
   submitted: { intent: 'info',    label: 'Under review' },
+  confirmed: { intent: 'info',    label: 'Pending verification' },
   approved:  { intent: 'success', label: 'Approved' },
   paid:      { intent: 'success', label: 'Paid' },
   late:      { intent: 'danger',  label: 'Late' },

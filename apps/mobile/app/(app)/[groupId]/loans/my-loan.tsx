@@ -10,6 +10,7 @@ import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
+import { loanChain } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLoans, useLoan, useCancelLoan } from '@/features/lending/lending.hooks';
 import { Badge } from '@/features/lending/LoanBits';
@@ -93,6 +94,8 @@ export default function MyLoan() {
   const { groupId, loanId } = useLocalSearchParams<{ groupId: string; loanId?: string }>();
   const router = useRouter();
   const { membership } = useActiveGroup();
+  // Who decides / reviews / releases depends on who's borrowing (an officer's loan skips the officer and adds a review).
+  const chain = loanChain(membership?.role);
   const { cycle } = useActiveCycle(groupId!);
   const allLoans = useLoans(groupId!, {});
   const cancel = useCancelLoan(groupId!);
@@ -178,7 +181,7 @@ export default function MyLoan() {
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
   const interestLeft = remainingInterest(activeLoan, payments);
   // A repayment waiting on an officer blocks the next one until it's settled.
-  const underReview = payments.some((p) => p.status === 'submitted');
+  const underReview = payments.some((p) => p.status === 'submitted' || p.status === 'confirmed');
   const repaidAmount = Math.max(0, principal - outstanding);
   const repaidPct = principal > 0 ? Math.min(100, Math.round((repaidAmount / principal) * 100)) : 0;
 
@@ -280,7 +283,7 @@ export default function MyLoan() {
             <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Requested</Text>
-                <Badge tone="info" label="With the Organizer" Icon={Clock3} />
+                <Badge tone="info" label={`With the ${chain.approver}`} Icon={Clock3} />
               </View>
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(pendingLoan.principal)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
@@ -288,15 +291,27 @@ export default function MyLoan() {
               </Text>
             </View>
 
-            <SectionHead title="Progress" aside="Step 2 of 4" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              <Tracker steps={[
+            {(() => {
+              const steps = [
                 { title: 'You sent the request', sub: shortDate(pendingLoan.applied_at), done: true },
-                { title: 'Organizer is deciding', sub: 'Reviews the amount against your record and the fund’s cash', done: false, now: true },
-                { title: 'Treasurer releases the money', sub: 'Sent outside the app, with a reference number', done: false },
+                {
+                  title: `${chain.approver} is deciding`,
+                  sub: pendingLoan.review_note ? `Sent back at review: ${pendingLoan.review_note}` : 'Reviews the amount against your record and the fund’s cash',
+                  done: false, now: true,
+                },
+                ...(chain.reviewer ? [{ title: `${chain.reviewer} reviews before release`, sub: 'Officer loans get a second check', done: false }] : []),
+                { title: `${chain.releaser} releases the money`, sub: 'Sent outside the app, with a reference number', done: false },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
-              ]} />
-            </View>
+              ];
+              return (
+                <>
+                  <SectionHead title="Progress" aside={`Step 2 of ${steps.length}`} />
+                  <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
+                    <Tracker steps={steps} />
+                  </View>
+                </>
+              );
+            })()}
 
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16, marginTop: 15 }, CARD_SHADOW]}>
               <Text variant="body" color="secondary" style={{ fontSize: 12.5, lineHeight: 18 }}>
@@ -321,24 +336,36 @@ export default function MyLoan() {
             <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Approved</Text>
-                <Badge tone="neutral" label="Awaiting release" Icon={Check} />
+                <Badge tone="neutral" label={approvedLoan.review_required && !approvedLoan.reviewed_at ? 'In review' : 'Awaiting release'} Icon={Check} />
               </View>
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
-                Approved by <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{approvedLoan.approver?.full_name ?? 'the Organizer'}</Text> on {shortDate(approvedLoan.approved_at)}
+                Approved by <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{approvedLoan.approver?.full_name ?? `the ${chain.approver}`}</Text> on {shortDate(approvedLoan.approved_at)}
                 {approvedLoan.approved_principal && Number(approvedLoan.approved_principal) < Number(approvedLoan.principal) ? ' · partial amount' : ''}
               </Text>
             </View>
 
-            <SectionHead title="Progress" aside="Step 3 of 4" />
-            <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
-              <Tracker steps={[
+            {(() => {
+              const inReview = !!approvedLoan.review_required && !approvedLoan.reviewed_at;
+              const steps = [
                 { title: 'You sent the request', sub: shortDate(approvedLoan.applied_at), done: true },
-                { title: 'Organizer approved', sub: `${shortDate(approvedLoan.approved_at)} · ${formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)} approved`, done: true },
-                { title: 'Treasurer is releasing the money', sub: 'Sent outside the app, with a reference number recorded', done: false, now: true },
+                { title: `${chain.approver} approved`, sub: `${shortDate(approvedLoan.approved_at)} · ${formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)} approved`, done: true },
+                ...(approvedLoan.review_required ? [inReview
+                  ? { title: `${chain.reviewer ?? 'Auditor'} is reviewing`, sub: 'A second check on officer loans before any money moves', done: false, now: true }
+                  : { title: `${chain.reviewer ?? 'Auditor'} cleared it`, sub: shortDate(approvedLoan.reviewed_at), done: true }] : []),
+                { title: inReview ? `${chain.releaser} releases the money` : `${chain.releaser} is releasing the money`, sub: 'Sent outside the app, with a reference number recorded', done: false, now: !inReview },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
-              ]} />
-            </View>
+              ];
+              const current = steps.findIndex((s) => !s.done) + 1;
+              return (
+                <>
+                  <SectionHead title="Progress" aside={`Step ${current} of ${steps.length}`} />
+                  <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, padding: 16 }, CARD_SHADOW]}>
+                    <Tracker steps={steps} />
+                  </View>
+                </>
+              );
+            })()}
           </>
         )}
 

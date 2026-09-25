@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Receipt, FileText } from 'lucide-react-native';
@@ -13,7 +14,7 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { headLabel, type Loan, type LoanPayment } from '@/api/lending';
-import { useLoans, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useLoans, useRepayments, useConfirmRepaymentReceipt, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
@@ -63,7 +64,7 @@ export default function RecordRepayment() {
 
   const loans = useLoans(groupId!, {});
   const repayments = useRepayments(groupId!);
-  const confirmAction = useConfirmRepayment(groupId!);
+  const confirmAction = useConfirmRepaymentReceipt(groupId!);
   const rejectAction = useRejectRepayment(groupId!);
   const allLoans = loans.data ?? [];
   const activeLoans = allLoans.filter((l) => l.status === 'active' || l.status === 'approved');
@@ -76,8 +77,11 @@ export default function RecordRepayment() {
   // borrower) used to only get excluded from "Pending" when it was a
   // walk-in they recorded for someone else, so their own repayment claim
   // sat in their own Pending queue with no way for them to confirm it.
-  const pendingRows = rows.filter((p) => p.status === 'submitted' && p.recorded_by !== member?.id);
-  const awaitingRows = rows.filter((p) => p.status === 'submitted' && p.recorded_by === member?.id);
+  // Since the two-step flow (migration 0075): confirming here only moves a
+  // repayment to "Pending verification"; the Auditor's verification posts it.
+  // Repayments on my own loan are confirmed by the Organizer, not me.
+  const pendingRows = rows.filter((p) => p.status === 'submitted' && p.recorded_by !== member?.id && p.loans?.membership?.member_id !== member?.id);
+  const awaitingRows = rows.filter((p) => p.status === 'confirmed' || (p.status === 'submitted' && (p.recorded_by === member?.id || p.loans?.membership?.member_id === member?.id)));
   const returnedRows = rows.filter((p) => p.status === 'rejected' && p.recorded_by === member?.id);
 
   // Per-loan status tag for the "Record new" list — is there already a claim
@@ -95,7 +99,7 @@ export default function RecordRepayment() {
 
   async function onConfirm(p: LoanPayment) {
     const ok = await confirmAction.run(p.id);
-    if (ok !== undefined) repayments.refetch();
+    if (ok !== undefined) { repayments.refetch(); toast('Confirmed — waiting for the Auditor’s verification'); }
     else if (confirmAction.error) Alert.alert('Could not confirm', confirmAction.error.message);
   }
 
@@ -105,7 +109,7 @@ export default function RecordRepayment() {
     const id = rejectTarget.id;
     setRejectTarget(null);
     const ok = await rejectAction.run(id, reason || undefined);
-    if (ok !== undefined) repayments.refetch();
+    if (ok !== undefined) { repayments.refetch(); toast('Returned to the borrower'); }
     else if (rejectAction.error) Alert.alert('Could not return', rejectAction.error.message);
   }
 
@@ -137,7 +141,7 @@ export default function RecordRepayment() {
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
-            { key: 'awaiting', label: 'Awaiting confirmation', count: awaitingRows.length },
+            { key: 'awaiting', label: 'Awaiting', count: awaitingRows.length },
             { key: 'returned', label: 'Returned', count: returnedRows.length, hot: returnedRows.length > 0 },
           ]}
           value={tab}
@@ -249,7 +253,7 @@ export default function RecordRepayment() {
                           <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{loanName(l)}</Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                             <Text variant="caption" color="secondary">{formatPeso(outstanding)} left</Text>
-                            {pendingP ? <Tag label="Awaiting your review" tone="review" /> : awaitingP ? <Tag label="Awaiting confirmation" tone="settle" /> : null}
+                            {pendingP ? <Tag label="Awaiting your review" tone="review" /> : awaitingP ? <Tag label={awaitingP.status === 'confirmed' ? 'Pending verification' : 'Awaiting the Organizer'} tone="settle" /> : null}
                           </View>
                           <View style={{ height: 5, borderRadius: 3, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 8 }}>
                             <View style={{ width: `${pct}%`, height: '100%', backgroundColor: intent.success.base, borderRadius: 3 }} />
@@ -307,7 +311,9 @@ export default function RecordRepayment() {
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.info.text }} numberOfLines={2}>{repaymentName(p)}</Text>
                       <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text, marginTop: 1 }}>{formatPeso(p.amount)}</Text>
-                      <Text variant="caption" style={{ marginTop: 1, color: intent.info.text, opacity: 0.75 }}>Recorded by you {timeAgo(p.created_at)}</Text>
+                      <Text variant="caption" style={{ marginTop: 1, color: intent.info.text, opacity: 0.75 }}>
+                        {p.status === 'confirmed' ? `Waiting for verification · ${timeAgo(p.confirmed_at ?? p.created_at)}` : `Waiting for the Organizer · ${timeAgo(p.created_at)}`}
+                      </Text>
                     </View>
                   </View>
                 ))}

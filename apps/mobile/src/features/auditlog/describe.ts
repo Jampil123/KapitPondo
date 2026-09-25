@@ -41,24 +41,38 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
   if (e.action === 'proof_requested') return { title: 'Asked for a proof' };
 
   switch (e.entity_type) {
-    case 'contribution':
-      return e.action === 'approved'
-        ? { title: entry ? `Verified contribution ${entry}` : `Verified ${name ? `${name}'s` : 'a'} contribution`, from: 'Pending', to: 'Verified', toGood: true, ref: a.recorded_by ? 'Recorded by another officer' : undefined }
-        : { title: `Returned ${name ? `${name}'s` : 'a'} contribution`, from: 'Pending', to: 'Returned', toBad: true, reason: a.reason };
+    case 'contribution': {
+      const whose = `${name ? `${name}'s` : 'a'} contribution`;
+      if (e.action === 'confirmed') return { title: `Confirmed ${whose}`, from: 'Submitted', to: 'Pending verification' };
+      if (isPostingSignoff(e)) return { title: entry ? `Verified contribution ${entry}` : `Verified ${whose}`, from: 'Pending verification', to: 'Verified', toGood: true };
+      return { title: `Returned ${whose}`, from: b.status === 'confirmed' ? 'Pending verification' : 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
+    }
     case 'expense':
       return e.action === 'approved'
         ? { title: 'Verified an expense', from: 'Recorded', to: `Posted · ${fmtValue(a.amount)}`, toGood: true }
         : { title: 'Returned an expense', from: 'Recorded', to: 'Returned', toBad: true, reason: a.reason };
-    case 'loan_decision':
+    case 'loan_decision': {
+      const loan = `loan ${s?.loan_ref ?? ''}`.trim();
+      if (e.action === 'reviewed') return { title: `Cleared ${loan} for release`, from: 'Approved', to: 'Cleared', toGood: true, reason: a.note };
+      if (e.action === 'sent_back') return { title: `Sent ${loan} back to the approver`, from: 'Approved', to: 'Sent back', toBad: true, reason: a.note };
       return e.action === 'approved'
         ? { title: `Approved loan ${s?.loan_ref ?? 'request'}${name ? ` for ${name}` : ''}`, from: 'Requested', to: `Approved · ${fmtValue(a.approved_principal)}`, toGood: true }
         : { title: `Rejected ${name ? `${name}'s` : 'a'} loan request`, from: 'Requested', to: 'Rejected', toBad: true, reason: a.reason };
-    case 'loan_disbursement':
-      return { title: `Released ${s?.loan_ref ? `loan ${s.loan_ref}` : 'a loan'}${name ? ` to ${name}` : ''}`, from: 'Approved', to: `Active · ${fmtValue(a.principal)}`, toGood: true };
-    case 'loan_payment':
-      return e.action === 'confirmed'
-        ? { title: entry ? `Verified loan repayment ${entry}` : `Verified ${name ? `${name}'s` : 'a'} repayment`, from: 'Pending', to: 'Verified', toGood: true }
-        : { title: `Returned ${name ? `${name}'s` : 'a'} repayment`, from: 'Pending', to: 'Returned', toBad: true, reason: a.reason };
+    }
+    case 'loan_disbursement': {
+      const loan = s?.loan_ref ? `loan ${s.loan_ref}` : 'a loan';
+      if (e.action === 'verified') return { title: `Verified the release of ${loan}`, from: 'Released', to: 'Posted', toGood: true };
+      // Since 0075 a release waits for verification before it posts (after_data.posted === false).
+      return a.posted === false
+        ? { title: `Released ${loan}${name ? ` to ${name}` : ''}`, from: 'Approved', to: 'Pending verification' }
+        : { title: `Released ${loan}${name ? ` to ${name}` : ''}`, from: 'Approved', to: `Active · ${fmtValue(a.principal)}`, toGood: true };
+    }
+    case 'loan_payment': {
+      const whose = `${name ? `${name}'s` : 'a'} repayment`;
+      if (isPostingSignoff(e)) return { title: entry ? `Verified loan repayment ${entry}` : `Verified ${whose}`, from: 'Pending verification', to: 'Verified', toGood: true };
+      if (e.action === 'confirmed') return { title: `Confirmed ${whose}`, from: 'Submitted', to: 'Pending verification' };
+      return { title: `Returned ${whose}`, from: b.status === 'confirmed' ? 'Pending verification' : 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
+    }
     case 'membership_role':
       return { title: 'Changed a member’s role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: ROLE_LABEL[a.role] ?? a.role };
     case 'membership_heads':
@@ -121,5 +135,24 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       return { title: 'Sent a payment reminder' };
     default:
       return { title: e.action.replace(/_/g, ' ') };
+  }
+}
+
+/**
+ * Did this entry sign a record off into the ledger? Since the two-step flow
+ * (migration 0075) that's `verified`; before it, one `approved` contribution /
+ * `confirmed` repayment posted directly. A `confirmed` repayment is now only
+ * step one — it counts only when it says it posted (status 'paid').
+ */
+export function isPostingSignoff(e: AuditLogEntry): boolean {
+  const a = (e.after_data ?? {}) as Record<string, any>;
+  switch (e.entity_type) {
+    case 'contribution': return e.action === 'verified' || (e.action === 'approved' && a.status === 'approved');
+    case 'loan_payment': return e.action === 'verified' || (e.action === 'confirmed' && a.status === 'paid');
+    case 'loan_disbursement': return e.action === 'verified';
+    case 'reversal_request': return e.action === 'verified' || e.action === 'finalized';
+    case 'distribution': return e.action === 'verified';
+    case 'expense': return e.action === 'approved';
+    default: return false;
   }
 }

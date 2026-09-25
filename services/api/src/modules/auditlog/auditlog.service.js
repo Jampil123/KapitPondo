@@ -32,7 +32,7 @@ const CATEGORY_BY_ENTITY = {
 // The Audit trail screen's filter chips — groups of actions, not categories.
 const KINDS = {
   recorded: { actions: ['recorded', 'initiated', 'posted', 'created', 'proposed'] },
-  verifications: { actions: ['approved', 'confirmed', 'verified', 'finalized', 'rejected', 'disbursed'] },
+  verifications: { actions: ['approved', 'confirmed', 'verified', 'finalized', 'rejected', 'disbursed', 'reviewed', 'sent_back'] },
   flags: { entityTypes: ['audit_flag', 'audit_finding'], actions: ['flagged', 'proof_requested'] },
   reversals: { entityTypes: ['reversal_request'] },
 };

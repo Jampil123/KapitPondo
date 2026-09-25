@@ -42,8 +42,8 @@ export default function Repay() {
   const activeLoan = (loans.data ?? []).find((l) => l.membership_id === membership?.id && (!loanId || l.id === loanId)) ?? null;
   const submit = useSubmitRepayment(groupId!);
   // One at a time: a repayment still under review has to be settled before the next can be sent.
-  const pending = useRepayments(groupId!, 'submitted');
-  const underReview = !!activeLoan && (pending.data ?? []).some((p) => p.loan_id === activeLoan.id);
+  const pending = useRepayments(groupId!);
+  const underReview = !!activeLoan && (pending.data ?? []).some((p) => p.loan_id === activeLoan.id && (p.status === 'submitted' || p.status === 'confirmed'));
 
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
   const [amountEdit, setAmountEdit] = useState<string | null>(null);

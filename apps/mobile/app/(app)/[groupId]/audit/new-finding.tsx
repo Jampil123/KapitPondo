@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { CloseHeader } from '@/features/payments/PaymentPage';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { semantic, shadowToken } from '@/theme/colors';
 import { entryRef } from '@/api/ledger';
 import { useFlags } from '@/features/flags/flags.hooks';
@@ -42,6 +43,7 @@ export default function NewAuditFinding() {
       Alert.alert('Could not submit', submit.error?.message ?? 'Try again.');
       return;
     }
+    toast('Finding submitted to the Organizer');
     router.back();
   }
 

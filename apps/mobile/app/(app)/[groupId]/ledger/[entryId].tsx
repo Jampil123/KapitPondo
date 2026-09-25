@@ -6,6 +6,7 @@ import { Flag } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { CloseHeader } from '@/features/payments/PaymentPage';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -79,14 +80,14 @@ export default function LedgerEntryPage() {
     [isLoan ? 'Released by' : 'Verified by', r?.verified_by ?? e.poster?.full_name ?? null],
     ['Reversed by', d.reversed_by ? `${entryRef(d.reversed_by)}, ${longDate(d.reversed_by.posted_at)}` : null],
   ] as [string, string | null][]).filter(([, v]) => !!v) as [string, string][];
-  const canFlag = role === 'auditor' && !!d.entity_type && !!e.source_id;
+  const canFlag = role === 'auditor' && !!d.entity_type && !!d.source_id;
 
   async function onFlag(reason: string, note: string) {
     setFlagging(false);
-    const ok = await flag.run({ entity_type: d!.entity_type!, entity_id: e.source_id!, reason, note: note || undefined, label: `${entryRef(e)} · ${kind}${who ? ` · ${who}` : ''}` });
+    const ok = await flag.run({ entity_type: d!.entity_type!, entity_id: d!.source_id!, reason, note: note || undefined, label: `${entryRef(e)} · ${kind}${who ? ` · ${who}` : ''}` });
     if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
     else {
-      Alert.alert('Flagged', 'The Organizer has been notified.');
+      toast('Flagged — the Organizer has been notified');
       q.refetch();
     }
   }

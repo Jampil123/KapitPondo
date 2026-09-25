@@ -14,15 +14,35 @@
  *   - proofs         (payment / expense proof images, private)
  *   - avatars        (profile pictures, PUBLIC — see migration 0019)
  */
+import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode } from 'base64-arraybuffer';
+import { decode, encode } from 'base64-arraybuffer';
 import { supabase } from './supabase';
 
-/** Reads a local image file as base64 + a guessed media type, for sending to an API (e.g. OCR/AI) rather than to storage. */
-export async function readImageBase64(localUri: string): Promise<{ base64: string; mediaType: string }> {
-  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+const EXT_BY_TYPE: Record<string, string> = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/jpg': 'jpg' };
+const TYPE_BY_EXT: Record<string, string> = { png: 'image/png', webp: 'image/webp', jpg: 'image/jpeg', jpeg: 'image/jpeg' };
+
+/**
+ * A picked image's bytes, base64 and type — on the phone read from the local
+ * file, on the web from the blob:/data: URL the picker hands back (expo-file-system
+ * has no web implementation, and those URLs carry no file extension).
+ */
+async function readLocalImage(localUri: string): Promise<{ bytes: ArrayBuffer; base64: string; mediaType: string; ext: string }> {
+  if (Platform.OS === 'web') {
+    const blob = await (await fetch(localUri)).blob();
+    const bytes = await blob.arrayBuffer();
+    const ext = EXT_BY_TYPE[blob.type] ?? 'jpg';
+    return { bytes, base64: encode(bytes), mediaType: TYPE_BY_EXT[ext], ext };
+  }
+  const guessed = (localUri.split('?')[0].split('.').pop() || 'jpg').toLowerCase();
+  const ext = TYPE_BY_EXT[guessed] ? (guessed === 'jpeg' ? 'jpg' : guessed) : 'jpg';
   const base64 = await FileSystem.readAsStringAsync(localUri, { encoding: FileSystem.EncodingType.Base64 });
-  const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+  return { bytes: decode(base64), base64, mediaType: TYPE_BY_EXT[ext], ext };
+}
+
+/** Reads a local image file as base64 + its media type, for sending to an API (e.g. OCR/AI) rather than to storage. */
+export async function readImageBase64(localUri: string): Promise<{ base64: string; mediaType: string }> {
+  const { base64, mediaType } = await readLocalImage(localUri);
   return { base64, mediaType };
 }
 
@@ -31,19 +51,12 @@ export async function uploadImage(
   localUri: string,
   prefix = 'upload',
 ): Promise<string> {
-  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const { bytes, mediaType, ext } = await readLocalImage(localUri);
   const path = `${prefix}/${Date.now()}.${ext}`;
-
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
 
   const { error } = await supabase.storage
     .from(bucket)
-    .upload(path, decode(base64), {
-      contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
-      upsert: false,
-    });
+    .upload(path, bytes, { contentType: mediaType, upsert: false });
 
   if (error) throw error;
   return path;
@@ -55,19 +68,12 @@ export async function uploadImage(
  * are rendered directly by the app, so the caller needs the real URL).
  */
 export async function uploadAvatar(memberId: string, localUri: string): Promise<string> {
-  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const { bytes, mediaType, ext } = await readLocalImage(localUri);
   const path = `${memberId}/${Date.now()}.${ext}`;
-
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
 
   const { error } = await supabase.storage
     .from('avatars')
-    .upload(path, decode(base64), {
-      contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
-      upsert: true,
-    });
+    .upload(path, bytes, { contentType: mediaType, upsert: true });
 
   if (error) throw error;
   return supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
@@ -80,19 +86,12 @@ export async function uploadAvatar(memberId: string, localUri: string): Promise<
  * an ID document or payment proof is.
  */
 export async function uploadChatImage(groupId: string, localUri: string): Promise<string> {
-  const ext = (localUri.split('.').pop() || 'jpg').toLowerCase();
+  const { bytes, mediaType, ext } = await readLocalImage(localUri);
   const path = `${groupId}/${Date.now()}.${ext}`;
-
-  const base64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
 
   const { error } = await supabase.storage
     .from('chat-media')
-    .upload(path, decode(base64), {
-      contentType: ext === 'png' ? 'image/png' : 'image/jpeg',
-      upsert: false,
-    });
+    .upload(path, bytes, { contentType: mediaType, upsert: false });
 
   if (error) throw error;
   return supabase.storage.from('chat-media').getPublicUrl(path).data.publicUrl;

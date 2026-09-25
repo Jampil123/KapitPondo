@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { useRouter } from 'expo-router';
 import {
   ArrowUpRight, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
@@ -17,8 +18,9 @@ import { parseApiDate } from '@/lib/cycle';
 import { useAuth } from '@/context/AuthContext';
 import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useLoans, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useContributions, useConfirmContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
+import { useLoans, useRepayments, useConfirmRepaymentReceipt, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useSignoffQueue } from '@/features/signoff/signoff';
 import type { Contribution } from '@/api/contributions';
 import type { Loan } from '@/api/lending';
 
@@ -144,9 +146,10 @@ function VerifyAction({ label, tone, Icon, onPress, disabled }: { label: string;
 }
 
 function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: ProofRow; onChanged: () => void }) {
-  const approveContribution = useApproveContribution(groupId);
+  // Step 1 of 2 (migration 0075): confirming moves it to "Pending verification"; the Auditor's verification posts it.
+  const approveContribution = useConfirmContribution(groupId);
   const rejectContribution = useRejectContribution(groupId);
-  const confirmRepayment = useConfirmRepayment(groupId);
+  const confirmRepayment = useConfirmRepaymentReceipt(groupId);
   const rejectRepayment = useRejectRepayment(groupId);
   const approve = row.kind === 'contribution' ? approveContribution : confirmRepayment;
   const reject = row.kind === 'contribution' ? rejectContribution : rejectRepayment;
@@ -157,13 +160,13 @@ function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: P
 
   async function onConfirm() {
     const ok = await approve.run(row.id);
-    if (ok !== undefined) onChanged();
+    if (ok !== undefined) { onChanged(); toast('Confirmed — waiting for the Auditor’s verification'); }
     else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
   }
   async function onReturn(reason: string) {
     setReturning(false);
     const ok = await reject.run(row.id, reason || undefined);
-    if (ok !== undefined) onChanged();
+    if (ok !== undefined) { onChanged(); toast(`Returned ${row.name}'s ${what}`); }
     else if (reject.error) Alert.alert('Could not return', reject.error.message);
   }
 
@@ -231,9 +234,9 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
     (balances.data ?? []).forEach((b) => m.set(b.membership_id, b.full_name ?? 'Member'));
     return m;
   }, [balances.data]);
-  // Anything this Treasurer recorded themselves needs a different officer, so it isn't theirs to confirm.
+  // Anything this Treasurer paid or recorded themselves is the Organizer's to confirm, not theirs.
   const contribRows: ProofRow[] = (pendingContribs.data ?? [])
-    .filter((c: Contribution) => c.recorded_by !== member?.id)
+    .filter((c: Contribution) => c.recorded_by !== member?.id && c.memberships?.member_id !== member?.id)
     .map((c: Contribution) => ({
       id: c.id,
       name: nameById.get(c.membership_id) ?? 'Member',
@@ -244,7 +247,7 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
       proof: c.proof_signed_url,
     }));
   const repayRows: ProofRow[] = (pendingRepayments.data ?? [])
-    .filter((p) => p.recorded_by !== member?.id)
+    .filter((p) => p.recorded_by !== member?.id && p.loans?.membership?.member_id !== member?.id)
     .map((p) => ({
       id: p.id,
       name: p.loans?.membership?.members?.full_name ?? 'Member',
@@ -325,11 +328,41 @@ function OwnerLoanToDecide({ groupId, go }: { groupId: string; go: (r: string) =
   );
 }
 
+/* ---------------- Loans the Treasurer reviews before release (the Auditor's own) ---------------- */
+function LoansToReview({ groupId }: { groupId: string }) {
+  const router = useRouter();
+  const { mine } = useSignoffQueue(groupId);
+  const reviews = mine.filter((i) => i.action === 'review');
+  if (reviews.length === 0) return null;
+  return (
+    <>
+      <SectionHead title="Review before release" aside={`${reviews.length} waiting`} tone="hot" />
+      {reviews.map((r) => (
+        <Pressable
+          key={r.key}
+          onPress={() => router.push({ pathname: '/(app)/[groupId]/signoffs' as any, params: { groupId } })}
+          style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', gap: 12 }, shadowToken.soft]}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.name}</Text>
+            <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Officer loan · approved by the Organizer · review to unlock release</Text>
+          </View>
+          <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{r.amount != null ? formatPeso(r.amount) : ''}</Text>
+        </Pressable>
+      ))}
+    </>
+  );
+}
+
 /* ---------------- To release ---------------- */
 function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }) {
   const { data } = useSummary(groupId);
+  const { member } = useAuth();
   const approvedLoans = useLoans(groupId, { status: 'approved' });
-  const loans = approvedLoans.data ?? [];
+  // Not my own loan (the Organizer releases that). Officer loans still in review stay listed, locked, so it's clear they're on the way.
+  const loans = (approvedLoans.data ?? []).filter((l) => l.membership?.member_id !== member?.id);
+  const inReview = (l: Loan) => !!l.review_required && !l.reviewed_at;
+  const reviewer = (l: Loan) => (l.membership?.role === 'auditor' ? 'you' : 'the Auditor');
   const cash = Number(data?.available_cash ?? 0);
 
   if (approvedLoans.loading) {
@@ -359,10 +392,16 @@ function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }
                 <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(loan.approved_principal ?? loan.principal)}</Text>
               </View>
               <View style={{ marginTop: 10 }}>
-                <Tag tone={covered ? 'ok' : 'late'}>{covered ? `Cash on hand covers this · ${formatPeso(cash)}` : `Short by ${formatPeso(Number(loan.principal) - cash)}`}</Tag>
+                {inReview(loan)
+                  ? <Tag tone="late">{`Officer loan — waiting for ${reviewer(loan)} to review before release`}</Tag>
+                  : <Tag tone={covered ? 'ok' : 'late'}>{covered ? `Cash on hand covers this · ${formatPeso(cash)}` : `Short by ${formatPeso(Number(loan.principal) - cash)}`}</Tag>}
               </View>
-              <Pressable onPress={() => go('loans/disburse')} style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark }}>
-                <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Release funds</Text>
+              <Pressable
+                onPress={() => go('loans/disburse')}
+                disabled={inReview(loan)}
+                style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark, opacity: inReview(loan) ? 0.4 : 1 }}
+              >
+                <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{inReview(loan) ? 'Waiting for review' : 'Release funds'}</Text>
               </Pressable>
             </View>
           );
@@ -559,6 +598,8 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
       <OwnerLoanToDecide groupId={groupId} go={go} />
 
       <ProofsToReview groupId={groupId} go={go} />
+
+      <LoansToReview groupId={groupId} />
 
       <ToRelease groupId={groupId} go={go} />
 

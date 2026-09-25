@@ -7,8 +7,10 @@
  * to "save" anywhere specific — that's the share target's job (Files, email,
  * Drive, WhatsApp, whatever the person picks).
  */
+import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { downloadInBrowser } from './shareText';
 
 function csvCell(value: string | number): string {
   const s = String(value);
@@ -21,6 +23,10 @@ export function toCsv(rows: (string | number)[][]): string {
 
 /** Writes `rows` as CSV to a temp file named `filename` and opens the share sheet for it. */
 export async function shareCsv(filename: string, rows: (string | number)[][]): Promise<void> {
+  if (Platform.OS === 'web') {
+    downloadInBrowser(filename, toCsv(rows), 'text/csv');
+    return;
+  }
   const available = await Sharing.isAvailableAsync();
   if (!available) throw new Error('Sharing is not available on this device.');
 

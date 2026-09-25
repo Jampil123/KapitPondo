@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Layers, Minus, Plus, Lock } from 'lucide-react-native';
@@ -64,7 +65,7 @@ export default function Heads() {
     const ok = await setHeads.run(membership.id, draft);
     if (ok !== undefined) {
       setLocalHeads(draft);
-      Alert.alert('Saved', `Heads updated to ${draft}.`);
+      toast(`Heads updated to ${draft}`);
     } else if (setHeads.error) {
       Alert.alert('Could not update heads', setHeads.error.message);
     }

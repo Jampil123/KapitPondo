@@ -16,6 +16,7 @@ import { uploadImage } from '@/lib/upload';
 import { parseApiDate } from '@/lib/cycle';
 import { buildContributionReference } from '@/lib/qrPh';
 import { useActiveGroup } from '@/context/GroupContext';
+import { signoffRoles, progressSteps } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
 import { buildTimeline } from '@/features/contributions/periods';
@@ -115,7 +116,7 @@ export default function Contribute() {
   const now = new Date();
 
   const state: PageState =
-    current?.status === 'submitted' ? 'review' :
+    current?.status === 'submitted' || current?.status === 'confirmed' ? 'review' :
     current?.status === 'rejected' ? 'rejected' :
     current?.is_late && due ? 'overdue' :
     !current && due && due < now ? 'overdue' :
@@ -395,11 +396,7 @@ export default function Contribute() {
             <>
               <SectionHead title="Progress" />
               <View style={{ gap: 4 }}>
-                {[
-                  { done: true, now: false, title: 'You submitted your proof', sub: shortDate(current.created_at) },
-                  { done: false, now: true, title: 'An officer is reviewing', sub: 'Checked against the amount and reference number' },
-                  { done: false, now: false, title: 'Posted to the ledger', sub: 'Counts towards your capital and year-end share' },
-                ].map((s, i, arr) => (
+                {progressSteps(current, signoffRoles(membership?.role), 'Counts towards your capital and year-end share', shortDate).map((s, i, arr) => (
                   <View key={s.title} style={{ flexDirection: 'row', gap: 12 }}>
                     <View style={{ alignItems: 'center', width: 24 }}>
                       <View style={{

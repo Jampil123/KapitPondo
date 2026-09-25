@@ -42,10 +42,11 @@ async function createContribution(input) {
   return data;
 }
 
-// Walk-in recorded by an officer for another member: posts to the ledger
-// right away, no second officer (migration 0064).
-async function postWalkInContribution({ contributionId, recorderId }) {
-  const { data, error } = await supabase.rpc('post_walk_in_contribution', {
+// Walk-in: recorded by the person who'd confirm it (usually the Treasurer
+// taking cash in person), it's confirmed on recording and goes straight to
+// "Pending verification" — never straight to the ledger (migration 0075).
+async function recordWalkIn({ contributionId, recorderId }) {
+  const { data, error } = await supabase.rpc('record_walk_in_contribution', {
     p_contribution_id: contributionId,
     p_recorder_id: recorderId,
   });
@@ -87,10 +88,21 @@ async function getContribution(id) {
   return data;
 }
 
-async function approveContribution({ contributionId, approverId }) {
-  const { data, error } = await supabase.rpc('approve_contribution', {
+// Step 1 — the fund holder confirms the money arrived. Posts nothing.
+async function confirmContribution({ contributionId, confirmerId }) {
+  const { data, error } = await supabase.rpc('confirm_contribution', {
     p_contribution_id: contributionId,
-    p_approver_id: approverId,
+    p_confirmer_id: confirmerId,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Step 2 — the independent check. This is what posts to the ledger.
+async function verifyContribution({ contributionId, verifierId }) {
+  const { data, error } = await supabase.rpc('verify_contribution', {
+    p_contribution_id: contributionId,
+    p_verifier_id: verifierId,
   });
   if (error) throw error;
   return data;
@@ -105,9 +117,10 @@ async function rejectContribution({ contributionId, reason }) {
       updated_at: new Date().toISOString(),
     })
     .eq('id', contributionId)
-    .eq('status', 'submitted')
+    // Either step can send it back: the confirmer, or the verifier after confirmation.
+    .in('status', ['submitted', 'confirmed'])
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
 
   if (data) {
@@ -152,6 +165,6 @@ async function autoConfirmContribution({ membershipId, cycleId, groupId, amount,
 
 module.exports = {
   createContribution, listContributions, getContribution, getActiveMembership,
-  approveContribution, rejectContribution, autoConfirmContribution, hasDuplicateReference,
-  postWalkInContribution,
+  confirmContribution, verifyContribution, rejectContribution, autoConfirmContribution, hasDuplicateReference,
+  recordWalkIn,
 };

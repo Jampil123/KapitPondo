@@ -1,187 +1,121 @@
 /**
  * features/audit/VerificationQueue.tsx
  * ----------------------------------------------------------------------------
- * Everything waiting on the Auditor's sign-off — contributions, repayments and
- * reversals — oldest first, with Verify / Reject right on the row. Records the
- * Auditor submitted themselves are shown but left to another officer (the API
- * enforces that too).
+ * Everything waiting on the signed-in officer's sign-off (features/signoff),
+ * oldest first: who, what, when, how much, and whether the record matches its
+ * proof. Tap a row for the full comparison and the Approve / Reject step
+ * (app/(app)/[groupId]/verify/[key].tsx). The officer's own records show
+ * locked at the bottom, with who they're routed to.
  */
-import { useMemo, useState } from 'react';
-import { View, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
-import { Check, X, Receipt } from 'lucide-react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import { ArrowDown, ArrowUp, Undo2, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { Alert } from '@/lib/alert';
 import { semantic, intent, shadowToken } from '@/theme/colors';
-import { formatPeso, type Money } from '@/lib/money';
-import { useActiveGroup } from '@/context/GroupContext';
-import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
-import { useReversalRequests, useVerifyReversal, useRejectReversal } from '@/features/ledger/ledger.hooks';
+import { formatPeso } from '@/lib/money';
+import { whenLabel } from '@/features/auditlog/AuditTimeline';
+import { useSignoffQueue, ROLE_NAME, type SignoffItem } from '@/features/signoff/signoff';
+import { compareToProof, matchLabel } from '@/features/signoff/proofMatch';
 
-type Kind = 'contribution' | 'repayment' | 'reversal';
-type Item = {
-  key: string;
-  kind: Kind;
-  id: string;
-  name: string;
-  label: string;
-  amount: Money | null;
-  date: string;
-  /** undefined = this kind never carries proof. */
-  proofUrl?: string | null;
-  note?: string | null;
-  mine: boolean;
+// "Contribution, recorded" — the verb for where the record is in its life.
+const VERB: Record<SignoffItem['action'], string> = {
+  confirm: 'submitted',
+  verify: 'recorded',
+  review: 'approved',
+  release: 'approved',
+  verify_release: 'recorded',
 };
 
-const KIND_LABEL: Record<Kind, string> = { contribution: 'Contribution', repayment: 'Loan repayment', reversal: 'Reversal' };
+// Non-money steps get a plain pill instead of a proof match.
+const STEP_PILL: Partial<Record<SignoffItem['action'], string>> = {
+  review: 'Review before release',
+  release: 'Ready to release',
+};
 
-function ago(iso: string) {
-  const hrs = (Date.now() - new Date(iso).getTime()) / 3600000;
-  if (hrs < 1) return 'just now';
-  if (hrs < 24) return `${Math.round(hrs)}h ago`;
-  const days = Math.round(hrs / 24);
-  return days === 1 ? '1 day ago' : `${days} days ago`;
+export function itemMatch(i: SignoffItem) {
+  return compareToProof({ amount: i.amount, reference: i.reference, recordedAt: i.recordedAt, payer: i.name }, i.reading, !!i.proofUrl);
 }
 
-function RowButton({ label, tone, Icon, onPress, disabled }: { label: string; tone: 'ok' | 'danger'; Icon: any; onPress: () => void; disabled?: boolean }) {
-  const t = tone === 'ok' ? { bg: semantic.brandDark, fg: '#fff' } : { bg: intent.danger.soft, fg: intent.danger.text };
+function Pill({ text, tone }: { text: string; tone: 'good' | 'bad' | 'muted' }) {
+  const t = tone === 'good' ? intent.success : tone === 'bad' ? intent.danger : { soft: semantic.surfaceAlt, text: semantic.textSecondary };
   return (
-    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.bg, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 11, opacity: disabled ? 0.5 : 1 }}>
-      <Icon size={12} color={t.fg} strokeWidth={2.6} />
-      <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: t.fg }}>{label}</Text>
+    <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: t.soft, paddingVertical: 3, paddingHorizontal: 9, borderRadius: 20, marginTop: 6 }}>
+      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.text }} />
+      <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: t.text }}>{text}</Text>
+    </View>
+  );
+}
+
+function rowIcon(i: SignoffItem) {
+  if (i.kind === 'reversal') return { Icon: Undo2, tone: intent.warning };
+  if (i.kind === 'loan') return { Icon: ArrowUp, tone: intent.danger };
+  return { Icon: ArrowDown, tone: intent.success };
+}
+
+function Row({ i, last, onPress }: { i: SignoffItem; last: boolean; onPress: () => void }) {
+  const { Icon, tone } = rowIcon(i);
+  const pill = i.kind === 'contribution' || i.kind === 'repayment' ? matchLabel(itemMatch(i)) : STEP_PILL[i.action] ? { text: STEP_PILL[i.action]!, tone: 'muted' as const } : null;
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 14, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: tone.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={18} color={tone.text} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{i.name}</Text>
+        <Text style={{ fontSize: 11.5, lineHeight: 16, color: semantic.textSecondary }}>{i.label}, {VERB[i.action]}</Text>
+        <Text style={{ fontSize: 11.5, lineHeight: 16, color: semantic.textSecondary }}>{whenLabel(i.since)}</Text>
+        {pill ? <Pill text={pill.text} tone={pill.tone} /> : null}
+      </View>
+      {i.amount !== null ? <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(i.amount)}</Text> : null}
     </Pressable>
   );
 }
 
+function OwnRow({ i, last }: { i: SignoffItem; last: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingHorizontal: 14, borderTopWidth: 1, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+        <Lock size={17} color={semantic.textSecondary} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>Your own {i.label.toLowerCase()}</Text>
+        <Text style={{ fontSize: 11.5, lineHeight: 16, color: semantic.textSecondary }}>
+          Routed to {i.holder ? `${i.holder} (${ROLE_NAME[i.role]})` : `the ${ROLE_NAME[i.role]}`}
+        </Text>
+      </View>
+      {i.amount !== null ? <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textSecondary }}>{formatPeso(i.amount)}</Text> : null}
+    </View>
+  );
+}
+
 export function VerificationQueue({ groupId }: { groupId: string }) {
-  const { membership } = useActiveGroup();
-  const contribs = useContributions(groupId, {});
-  const repayments = useRepayments(groupId);
-  const reversals = useReversalRequests(groupId);
+  const router = useRouter();
+  const queue = useSignoffQueue(groupId);
+  const mine = queue.mine;
+  const own = queue.own;
+  const othersWaiting = queue.items.filter((i) => !i.mine && !i.own).length;
 
-  const approveContrib = useApproveContribution(groupId);
-  const rejectContrib = useRejectContribution(groupId);
-  const confirmRepayment = useConfirmRepayment(groupId);
-  const rejectRepayment = useRejectRepayment(groupId);
-  const verifyReversal = useVerifyReversal(groupId);
-  const rejectReversal = useRejectReversal(groupId);
-
-  const [actingId, setActingId] = useState<string | null>(null);
-  const [rejectTarget, setRejectTarget] = useState<Item | null>(null);
-  const [proof, setProof] = useState<{ title: string; url: string } | null>(null);
-
-  const items: Item[] = useMemo(() => {
-    const me = membership?.id;
-    return [
-      ...(contribs.data ?? []).filter((c) => c.status === 'submitted').map((c): Item => {
-        const name = c.memberships?.members?.full_name ?? 'Member';
-        return { key: `c-${c.id}`, kind: 'contribution', id: c.id, name, label: `${name}'s contribution`, amount: c.amount, date: c.created_at, proofUrl: c.proof_signed_url, mine: c.membership_id === me };
-      }),
-      ...(repayments.data ?? []).filter((p) => p.status === 'submitted').map((p): Item => {
-        const name = p.loans?.membership?.members?.full_name ?? 'Member';
-        return { key: `p-${p.id}`, kind: 'repayment', id: p.id, name, label: `${name}'s repayment`, amount: p.amount, date: p.created_at, proofUrl: p.proof_signed_url, mine: p.loans?.membership_id === me };
-      }),
-      ...(reversals.data ?? []).filter((r) => r.status === 'pending_verification').map((r): Item => ({
-        key: `r-${r.id}`, kind: 'reversal', id: r.id,
-        name: r.entry?.description ?? r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry',
-        label: 'this reversal', amount: r.entry ? r.entry.amount : null, date: r.initiated_at, note: r.reason,
-        mine: !!r.entry?.membership_id && r.entry.membership_id === me,
-      })),
-    ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [contribs.data, repayments.data, reversals.data, membership?.id]);
-
-  const loading = (contribs.loading || repayments.loading || reversals.loading) && items.length === 0;
-
-  async function run(id: string, action: () => Promise<unknown>, refetch: () => void, failTitle: string, err: () => { message: string } | null) {
-    setActingId(id);
-    const ok = await action();
-    setActingId(null);
-    if (ok === undefined) Alert.alert(failTitle, err()?.message ?? 'Try again.');
-    else refetch();
-  }
-
-  function onVerify(i: Item) {
-    if (i.kind === 'contribution') run(i.id, () => approveContrib.run(i.id), contribs.refetch, 'Could not verify', () => approveContrib.error);
-    else if (i.kind === 'repayment') run(i.id, () => confirmRepayment.run(i.id), repayments.refetch, 'Could not verify', () => confirmRepayment.error);
-    else run(i.id, () => verifyReversal.run(i.id), reversals.refetch, 'Could not verify', () => verifyReversal.error);
-  }
-
-  function onRejectConfirm(reason: string) {
-    if (!rejectTarget) return;
-    const i = rejectTarget;
-    setRejectTarget(null);
-    const r = reason || undefined;
-    if (i.kind === 'contribution') run(i.id, () => rejectContrib.run(i.id, r), contribs.refetch, 'Could not reject', () => rejectContrib.error);
-    else if (i.kind === 'repayment') run(i.id, () => rejectRepayment.run(i.id, r), repayments.refetch, 'Could not reject', () => rejectRepayment.error);
-    else run(i.id, () => rejectReversal.run(i.id, r), reversals.refetch, 'Could not reject', () => rejectReversal.error);
-  }
+  const open = (i: SignoffItem) => router.push({ pathname: '/(app)/[groupId]/verify/[key]' as any, params: { groupId, key: i.key } });
 
   return (
     <>
       <View style={[{ backgroundColor: semantic.card, borderRadius: 20, marginTop: 14, overflow: 'hidden' }, shadowToken.soft]}>
-        {loading ? (
+        {queue.loading && queue.items.length === 0 ? (
           <ActivityIndicator color={semantic.brand} style={{ margin: 24 }} />
-        ) : items.length === 0 ? (
-          <Text variant="body" color="muted" style={{ padding: 18, textAlign: 'center' }}>Nothing is waiting for verification.</Text>
-        ) : items.map((i, idx) => {
-          const busy = actingId === i.id;
-          const noProof = i.proofUrl === null;
-          return (
-            <View key={i.key} style={{ padding: 14, gap: 10, borderBottomWidth: idx < items.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                {i.proofUrl ? (
-                  <Pressable onPress={() => setProof({ title: `${KIND_LABEL[i.kind]} · ${i.name}`, url: i.proofUrl! })} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
-                    <Image source={{ uri: i.proofUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                  </Pressable>
-                ) : (
-                  <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <Receipt size={16} color={semantic.textMuted} />
-                  </View>
-                )}
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }} numberOfLines={1}>{i.name}</Text>
-                  <Text style={{ fontSize: 11.5, color: noProof ? intent.danger.text : semantic.textSecondary }} numberOfLines={1}>
-                    {KIND_LABEL[i.kind]}, {noProof ? 'no proof attached' : ago(i.date)}
-                  </Text>
-                </View>
-                {i.amount !== null ? <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(i.amount)}</Text> : null}
-              </View>
-              {i.note ? <Text style={{ fontSize: 12, lineHeight: 17, color: semantic.textSecondary, backgroundColor: semantic.surfaceAlt, borderRadius: 10, padding: 10 }}>{i.note}</Text> : null}
-              <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-                {i.mine ? (
-                  <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: semantic.textSecondary }}>Yours — another officer verifies</Text>
-                ) : (
-                  <>
-                    <RowButton label="Reject" tone="danger" Icon={X} onPress={() => setRejectTarget(i)} disabled={busy} />
-                    <RowButton label={busy ? '…' : 'Verify'} tone="ok" Icon={Check} onPress={() => onVerify(i)} disabled={busy} />
-                  </>
-                )}
-              </View>
-            </View>
-          );
-        })}
+        ) : mine.length === 0 && own.length === 0 ? (
+          <Text variant="body" color="muted" style={{ padding: 18, textAlign: 'center' }}>Nothing is waiting on you.</Text>
+        ) : (
+          <>
+            {mine.map((i, idx) => <Row key={i.key} i={i} last={idx === mine.length - 1 && own.length === 0} onPress={() => open(i)} />)}
+            {own.map((i, idx) => <OwnRow key={i.key} i={i} last={idx === own.length - 1} />)}
+          </>
+        )}
       </View>
-
-      <ReasonPrompt
-        visible={!!rejectTarget}
-        title={`Reject ${rejectTarget?.label ?? 'this item'}?`}
-        confirmLabel="Reject"
-        destructive
-        onCancel={() => setRejectTarget(null)}
-        onConfirm={onRejectConfirm}
-      />
-      <Modal visible={!!proof} transparent animationType="fade" onRequestClose={() => setProof(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setProof(null)}>
-          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <Text variant="label" style={{ flex: 1 }} numberOfLines={1}>{proof?.title}</Text>
-              <Pressable onPress={() => setProof(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-            </View>
-            {proof?.url ? <Image source={{ uri: proof.url }} style={{ width: '100%', height: 360 }} resizeMode="contain" /> : null}
-          </View>
-        </Pressable>
-      </Modal>
+      {othersWaiting > 0 ? (
+        <Text variant="caption" color="secondary" style={{ marginTop: 10, paddingHorizontal: 4 }}>
+          {othersWaiting} more waiting on other officers.
+        </Text>
+      ) : null}
     </>
   );
 }

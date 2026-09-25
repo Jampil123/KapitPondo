@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Receipt, Check } from 'lucide-react-native';
@@ -15,7 +16,7 @@ import { useQuery } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
 import { listMembers, type GroupMember } from '@/api/groups';
 import { type Contribution } from '@/api/contributions';
-import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
+import { useContributions, useConfirmContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { currentPeriodIndex, cyclePeriods, periodLabel } from '@/features/contributions/periods';
 import { computePeriodSummary } from '@/features/contributions/periodSummary';
@@ -87,7 +88,7 @@ export default function ConfirmContributions() {
   const periodWord = cycle?.frequency === 'weekly' ? 'week' : cycle?.frequency === 'quarterly' ? 'quarter' : 'month';
   const headsById = useMemo(() => new Map(roster.map((m) => [m.id, m.heads])), [roster]);
 
-  const approve = useApproveContribution(groupId!);
+  const approve = useConfirmContribution(groupId!);
   const reject = useRejectContribution(groupId!);
 
   const rows = all.data ?? [];
@@ -102,11 +103,12 @@ export default function ConfirmContributions() {
     }
     return counts;
   }, [rows]);
-  // My own contribution never shows here for me to act on — I can't approve
-  // what I recorded myself (own submission or a walk-in), so it moves to
-  // "Awaiting confirmation" instead, purely to track its status.
-  const pendingRows = rows.filter((c) => c.status === 'submitted' && !c.is_walk_in && c.recorded_by !== member?.id);
-  const awaitingRows = rows.filter((c) => c.status === 'submitted' && c.recorded_by === member?.id);
+  // To confirm: members' claims waiting for me to check the money arrived. My
+  // own and what I recorded never show here — someone else signs those off.
+  // Awaiting: what's left the Treasurer's hands — confirmed and waiting for
+  // the Auditor's verification (which posts it), or mine waiting on the Organizer.
+  const pendingRows = rows.filter((c) => c.status === 'submitted' && !c.is_walk_in && c.recorded_by !== member?.id && c.memberships?.member_id !== member?.id);
+  const awaitingRows = rows.filter((c) => c.status === 'confirmed' || (c.status === 'submitted' && (c.recorded_by === member?.id || c.memberships?.member_id === member?.id)));
   const returnedRows = rows.filter((c) => c.status === 'rejected' && c.recorded_by === member?.id);
 
   // ---- Collection summary for the current period ----
@@ -148,8 +150,9 @@ export default function ConfirmContributions() {
   }
 
   async function onApprove(id: string) {
+    // Confirming only moves it to "Pending verification" — the Auditor's verification posts it.
     const ok = await approve.run(id);
-    if (ok !== undefined) all.refetch();
+    if (ok !== undefined) { all.refetch(); toast('Confirmed — waiting for the Auditor’s verification'); }
     else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
   }
 
@@ -159,7 +162,7 @@ export default function ConfirmContributions() {
     const id = returnTarget.id;
     setReturnTarget(null);
     const ok = await reject.run(id, reason || undefined);
-    if (ok !== undefined) all.refetch();
+    if (ok !== undefined) { all.refetch(); toast('Returned to the member'); }
     else if (reject.error) Alert.alert('Could not return', reject.error.message);
   }
 
@@ -194,7 +197,7 @@ export default function ConfirmContributions() {
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
             { key: 'record', label: 'Record new' },
-            { key: 'awaiting', label: 'Awaiting confirmation', count: awaitingRows.length },
+            { key: 'awaiting', label: 'Awaiting', count: awaitingRows.length },
             { key: 'returned', label: 'Returned', count: returnedRows.length, hot: returnedRows.length > 0 },
           ]}
           value={tab}
@@ -328,14 +331,14 @@ export default function ConfirmContributions() {
           </View>
         )}
 
-        {/* ================= AWAITING CONFIRMATION ================= */}
+        {/* ================= AWAITING (with the Auditor or Organizer) ================= */}
         {tab === 'awaiting' && (
           <View style={{ marginTop: 16 }}>
             {all.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} /> :
             awaitingRows.length === 0 ? (
               <View style={{ alignItems: 'center', paddingVertical: 40, gap: 6 }}>
                 <Text variant="h3" style={{ fontSize: 16 }}>Nothing waiting</Text>
-                <Text variant="body" color="secondary">Your own contribution and any walk-ins you record show up here until another officer confirms them.</Text>
+                <Text variant="body" color="secondary">Contributions you confirm or record wait here until they’re verified and posted.</Text>
               </View>
             ) : (
               <View style={[{ backgroundColor: intent.info.soft, borderRadius: 16, overflow: 'hidden' }]}>
@@ -346,7 +349,9 @@ export default function ConfirmContributions() {
                     </View>
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.info.text }} numberOfLines={1}>{nameOf(c)}</Text>
-                      <Text variant="caption" style={{ marginTop: 2, color: intent.info.text, opacity: 0.75 }}>Recorded by you {timeAgo(c.created_at)}</Text>
+                      <Text variant="caption" style={{ marginTop: 2, color: intent.info.text, opacity: 0.75 }}>
+                        {c.status === 'confirmed' ? `Waiting for verification · ${timeAgo(c.confirmed_at ?? c.created_at)}` : `Waiting for the Organizer · ${timeAgo(c.created_at)}`}
+                      </Text>
                     </View>
                     <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.info.text }}>{formatPeso(c.amount)}</Text>
                   </View>

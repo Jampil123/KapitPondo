@@ -1,11 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, Image, Modal, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { View, Pressable, ActivityIndicator, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { useRouter } from 'expo-router';
 import { useQuery, useAction } from '@/hooks/useApi';
 import {
   Users, AlertTriangle, SlidersHorizontal, CalendarClock,
-  Wallet, ScrollText, Receipt, CheckCircle2, Check, X, Clock3,
+  Wallet, ScrollText, CheckCircle2, Check, X, Clock3,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
@@ -18,18 +18,18 @@ import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useSummary } from '@/features/reporting/reporting.hooks';
-import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan, useRepayments, useConfirmRepayment, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan } from '@/features/lending/lending.hooks';
+import { useSignoffQueue } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
-import { useContributions, useApproveContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
+import { useContributions } from '@/features/contributions/contributions.hooks';
 import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
 import { listPendingMembers, listMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
-import type { Loan, LoanPayment } from '@/api/lending';
+import type { Loan } from '@/api/lending';
 import type { Penalty } from '@/api/penalties';
-import type { Contribution } from '@/api/contributions';
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -374,114 +374,17 @@ function GcashDecisionCard({ groupId, submittedAt, onPress, onChanged }: { group
   );
 }
 
-function TreasurerContributionCard({ groupId, contribution, onChanged }: { groupId: string; contribution: Contribution; onChanged: () => void }) {
-  const approve = useApproveContribution(groupId);
-  const reject = useRejectContribution(groupId);
-  const [rejecting, setRejecting] = useState(false);
-  const [viewingProof, setViewingProof] = useState(false);
-  const busy = approve.loading || reject.loading;
-  const name = contribution.memberships?.members?.full_name ?? 'Member';
-
-  async function onApprove() {
-    const ok = await approve.run(contribution.id);
-    if (ok !== undefined) onChanged();
-    else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
-  }
-  async function onRejectConfirm(reason: string) {
-    setRejecting(false);
-    const ok = await reject.run(contribution.id, reason || undefined);
-    if (ok !== undefined) onChanged();
-    else if (reject.error) Alert.alert('Could not return', reject.error.message);
-  }
-
+/** Records waiting on the Organizer's sign-off in the two-step flow (migration 0075):
+ * the Treasurer's own money, the Auditor's own, releasing the Treasurer's loan,
+ * verifying the release of the Auditor's loan. One card — the queue does the work. */
+function SignoffCard({ groupId, count, first }: { groupId: string; count: number; first: { name: string; label: string; amount: string | number | null } }) {
+  const router = useRouter();
   return (
-    <DecisionCard onPress={() => {}}>
+    <DecisionCard onPress={() => router.push({ pathname: '/(app)/[groupId]/signoffs' as any, params: { groupId } })}>
       <DecisionHead
-        type="Contribution — Treasurer-recorded"
-        name={name}
-        sub={`Recorded by the Treasurer · sent ${shortDate(contribution.created_at)}`}
-        amount={formatPeso(contribution.amount)}
-      />
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        {contribution.proof_signed_url ? (
-          <Pressable onPress={() => setViewingProof(true)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
-            <Image source={{ uri: contribution.proof_signed_url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          </Pressable>
-        ) : (
-          <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Receipt size={16} color={semantic.textMuted} />
-          </View>
-        )}
-        <View style={{ flex: 1 }} />
-        <QuickAction label="Return" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
-        <QuickAction label="Confirm" tone="ok" Icon={Check} onPress={onApprove} disabled={busy} />
-      </View>
-      <ReasonPrompt
-        visible={rejecting}
-        title={`Return ${name}'s contribution?`}
-        confirmLabel="Return"
-        destructive
-        onCancel={() => setRejecting(false)}
-        onConfirm={onRejectConfirm}
-      />
-      <Modal visible={viewingProof} transparent animationType="fade" onRequestClose={() => setViewingProof(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewingProof(false)}>
-          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <View style={{ flex: 1 }}>
-                <Text variant="label">{name}</Text>
-                <Text variant="caption" color="secondary">{formatPeso(contribution.amount)}</Text>
-              </View>
-              <Pressable onPress={() => setViewingProof(false)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-            </View>
-            {contribution.proof_signed_url ? (
-              <Image source={{ uri: contribution.proof_signed_url }} style={{ width: '100%', height: 360 }} resizeMode="contain" />
-            ) : null}
-          </View>
-        </Pressable>
-      </Modal>
-    </DecisionCard>
-  );
-}
-
-function TreasurerRepaymentCard({ groupId, payment, onPress, onChanged }: { groupId: string; payment: LoanPayment; onPress: () => void; onChanged: () => void }) {
-  const confirm = useConfirmRepayment(groupId);
-  const reject = useRejectRepayment(groupId);
-  const [rejecting, setRejecting] = useState(false);
-  const busy = confirm.loading || reject.loading;
-  const name = payment.loans?.membership?.members?.full_name ?? 'Member';
-
-  async function onConfirmPress() {
-    const ok = await confirm.run(payment.id);
-    if (ok !== undefined) onChanged();
-    else if (confirm.error) Alert.alert('Could not confirm', confirm.error.message);
-  }
-  async function onRejectConfirm(reason: string) {
-    setRejecting(false);
-    const ok = await reject.run(payment.id, reason || undefined);
-    if (ok !== undefined) onChanged();
-    else if (reject.error) Alert.alert('Could not return', reject.error.message);
-  }
-
-  return (
-    <DecisionCard onPress={onPress}>
-      <DecisionHead
-        type="Loan repayment — Treasurer-recorded"
-        name={name}
-        sub={`Recorded by the Treasurer · sent ${shortDate(payment.created_at)}`}
-        amount={formatPeso(payment.amount)}
-      />
-      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8 }}>
-        <QuickAction label="Return" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={busy} />
-        <QuickAction label="Confirm" tone="ok" Icon={Check} onPress={onConfirmPress} disabled={busy} />
-      </View>
-      <ReasonPrompt
-        visible={rejecting}
-        title={`Return ${name}'s repayment?`}
-        confirmLabel="Return"
-        destructive
-        onCancel={() => setRejecting(false)}
-        onConfirm={onRejectConfirm}
+        type={count === 1 ? 'Needs your sign-off' : `${count} need your sign-off`}
+        name={first.name}
+        sub={`${first.label}${first.amount != null ? ` · ${formatPeso(first.amount)}` : ''}${count > 1 ? ` and ${count - 1} more` : ''}`}
       />
     </DecisionCard>
   );
@@ -508,8 +411,7 @@ type DecisionItem =
   | { kind: 'member'; date: string; row: PendingMemberRow }
   | { kind: 'penalty'; date: string; penalty: Penalty }
   | { kind: 'gcash'; date: string }
-  | { kind: 'treasurer-contribution'; date: string; contribution: Contribution }
-  | { kind: 'treasurer-repayment'; date: string; payment: LoanPayment };
+  | { kind: 'signoff'; date: string };
 
 function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => void }) {
   const { group, membership } = useActiveGroup();
@@ -522,9 +424,7 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
   );
   const pendingPenalties = usePenalties(groupId, 'pending');
   const decidedPenalties = usePenalties(groupId, 'waived');
-  const pendingContribsQ = useContributions(groupId, { status: 'submitted' });
-  const pendingRepaymentsQ = useRepayments(groupId, 'submitted');
-  const membersRosterQ = useQuery(() => listMembers(groupId), [groupId]);
+  const signoff = useSignoffQueue(groupId);
 
   // The Owner can't decide on their own loan (no-self-approval rule — the
   // Treasurer reviews those instead, see lending.routes.js), so it must not
@@ -533,19 +433,16 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
   const members = (Array.isArray(pendingMembersQ.data) ? pendingMembersQ.data : []).map(normalizePendingMember);
   const penalties = pendingPenalties.data ?? [];
   const gcashPending = group?.treasurer_gcash_status === 'pending';
-  const roleByMemberId = useMemo(() => new Map((membersRosterQ.data ?? []).map((m) => [m.member_id, m.role])), [membersRosterQ.data]);
-  const treasurerContribs = (pendingContribsQ.data ?? []).filter((c) => c.recorded_by && roleByMemberId.get(c.recorded_by) === 'treasurer');
-  const treasurerRepayments = (pendingRepaymentsQ.data ?? []).filter((p) => p.recorded_by && roleByMemberId.get(p.recorded_by) === 'treasurer');
-  const total = loans.length + members.length + penalties.length + (gcashPending ? 1 : 0) + treasurerContribs.length + treasurerRepayments.length;
+  const signoffMine = signoff.mine;
+  const total = loans.length + members.length + penalties.length + (gcashPending ? 1 : 0) + signoffMine.length;
 
-  const loading = pendingLoans.loading || pendingMembersQ.loading || pendingPenalties.loading || pendingContribsQ.loading || pendingRepaymentsQ.loading;
+  const loading = pendingLoans.loading || pendingMembersQ.loading || pendingPenalties.loading || (signoff.loading && signoff.items.length === 0);
 
   function onChanged() {
     pendingLoans.refetch();
     pendingMembersQ.refetch();
     pendingPenalties.refetch();
-    pendingContribsQ.refetch();
-    pendingRepaymentsQ.refetch();
+    signoff.refetch();
     refreshGroups();
   }
 
@@ -555,11 +452,10 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
       ...members.map((row) => ({ kind: 'member' as const, date: row.date ?? new Date(0).toISOString(), row })),
       ...penalties.map((penalty) => ({ kind: 'penalty' as const, date: penalty.created_at, penalty })),
       ...(gcashPending ? [{ kind: 'gcash' as const, date: group?.treasurer_gcash_submitted_at ?? new Date(0).toISOString() }] : []),
-      ...treasurerContribs.map((contribution) => ({ kind: 'treasurer-contribution' as const, date: contribution.created_at, contribution })),
-      ...treasurerRepayments.map((payment) => ({ kind: 'treasurer-repayment' as const, date: payment.created_at, payment })),
+      ...(signoffMine.length ? [{ kind: 'signoff' as const, date: signoffMine[0].since }] : []),
     ];
     return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [loans, members, penalties, gcashPending, group?.treasurer_gcash_submitted_at, treasurerContribs, treasurerRepayments]);
+  }, [loans, members, penalties, gcashPending, group?.treasurer_gcash_submitted_at, signoffMine]);
 
   const visible = items.slice(0, 2);
 
@@ -590,11 +486,8 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
             if (item.kind === 'gcash') {
               return <GcashDecisionCard key="gcash-proposal" groupId={groupId} submittedAt={group?.treasurer_gcash_submitted_at ?? null} onPress={() => go('group/settings')} onChanged={onChanged} />;
             }
-            if (item.kind === 'treasurer-contribution') {
-              return <TreasurerContributionCard key={`treasurer-contrib-${item.contribution.id}`} groupId={groupId} contribution={item.contribution} onChanged={onChanged} />;
-            }
-            if (item.kind === 'treasurer-repayment') {
-              return <TreasurerRepaymentCard key={`treasurer-repay-${item.payment.id}`} groupId={groupId} payment={item.payment} onPress={() => go('loans/record-repayment')} onChanged={onChanged} />;
+            if (item.kind === 'signoff') {
+              return <SignoffCard key="signoff" groupId={groupId} count={signoffMine.length} first={signoffMine[0]} />;
             }
             const visibleOfKind = visible.filter((v) => v.kind === 'penalty').length;
             const moreCount = isLast && penalties.length > visibleOfKind ? penalties.length : undefined;

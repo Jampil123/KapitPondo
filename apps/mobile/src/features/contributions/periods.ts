@@ -146,7 +146,7 @@ export function currentPeriodIndex(
 
 function rowKind(row: Contribution): PeriodKind {
   if (row.status === 'approved') return 'paid';
-  if (row.status === 'submitted') return 'review';
+  if (row.status === 'submitted' || row.status === 'confirmed') return 'review';
   if (row.status === 'rejected') return 'rejected';
   if (row.is_late) return 'late';
   return 'due';

@@ -6,6 +6,7 @@ import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { semantic, intent } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
+import { signoffRoles, progressSteps } from '@/features/signoff/signoff';
 import { useLoans, useLoan } from '@/features/lending/lending.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
 import { AmountBlock, Badge, BlockedState, CloseHeader, SectionHead } from '@/features/payments/PaymentPage';
@@ -40,7 +41,7 @@ export default function RepaymentStatus() {
   const loans = useLoans(groupId!, { status: 'active' });
   const loan = (loans.data ?? []).find((l) => l.membership_id === membership?.id) ?? null;
   const detail = useLoan(groupId!, loan?.id);
-  const current = (detail.data?.payments ?? []).find((p) => p.status === 'submitted') ?? null;
+  const current = (detail.data?.payments ?? []).find((p) => p.status === 'submitted' || p.status === 'confirmed') ?? null;
 
   const loading = (loans.data === null && !loans.error) || (!!loan && detail.data === null && !detail.error);
   // Opened from the loan page itself, a "View my loan" button would just point back at it.
@@ -71,18 +72,14 @@ export default function RepaymentStatus() {
         <AmountBlock
           label="Submitted"
           amount={current.amount}
-          badge={<Badge tone="info" label="Under review" Icon={Clock3} />}
+          badge={<Badge tone="info" label={current.status === 'confirmed' ? 'Pending verification' : 'Under review'} Icon={Clock3} />}
           meta={<>Sent <Text style={{ fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{shortDate(current.created_at)}</Text>{current.external_reference ? ` · ref ${current.external_reference}` : ''}</>}
           note={loan?.purpose ?? undefined}
         />
 
         <SectionHead title="Progress" />
         <View style={{ gap: 4 }}>
-          {[
-            { done: true, now: false, title: 'You submitted your proof', sub: shortDate(current.created_at) },
-            { done: false, now: true, title: 'An officer is reviewing', sub: 'Checked against the amount and reference number' },
-            { done: false, now: false, title: 'Posted to the ledger', sub: 'Comes off what you still owe on your loan' },
-          ].map((s, i, arr) => (
+          {progressSteps(current, signoffRoles(membership?.role), 'Comes off what you still owe on your loan', shortDate).map((s, i, arr) => (
             <View key={s.title} style={{ flexDirection: 'row', gap: 12 }}>
               <View style={{ alignItems: 'center', width: 24 }}>
                 <View style={{

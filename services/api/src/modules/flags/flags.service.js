@@ -13,8 +13,8 @@ const { withSubjects } = require('../../lib/auditSubjects');
 const CLOSED_STATUSES = ['resolved', 'dismissed'];
 const SELECT = '*, raiser:members!raised_by(full_name), resolver:members!resolved_by(full_name)';
 
-const CONTRIBUTION_SELECT = 'id, amount, status, payment_method, external_reference, created_at, recorder:members!recorded_by(full_name), approver:members!approved_by(full_name), memberships!membership_id(members!member_id(full_name))';
-const PAYMENT_SELECT = 'id, amount, principal_portion, interest_portion, status, payment_method, external_reference, created_at, recorder:members!recorded_by(full_name), verifier:members!approved_by(full_name), loans(loan_no, membership:memberships!membership_id(members!member_id(full_name)))';
+const CONTRIBUTION_SELECT = 'id, amount, status, ledger_entry:ledger_entries!ledger_entry_id(entry_no), payment_method, external_reference, created_at, recorder:members!recorded_by(full_name), approver:members!approved_by(full_name), memberships!membership_id(members!member_id(full_name))';
+const PAYMENT_SELECT = 'id, amount, principal_portion, interest_portion, status, ledger_entry:ledger_entries!ledger_entry_id(entry_no), payment_method, external_reference, created_at, recorder:members!recorded_by(full_name), verifier:members!approved_by(full_name), loans(loan_no, membership:memberships!membership_id(members!member_id(full_name)))';
 const LOAN_SELECT = 'id, loan_no, principal, approved_principal, status, applied_at, disbursed_at, approver:members!approved_by(full_name), disburser:members!disbursed_by(full_name), membership:memberships!membership_id(members!member_id(full_name))';
 
 function flagRef(seq) {
@@ -36,6 +36,7 @@ async function recordSummaries(items) {
       kind: 'Contribution', name: c.memberships?.members?.full_name ?? null, amount: c.amount, status: c.status,
       posted_at: c.created_at, channel: c.payment_method, reference: c.external_reference,
       recorded_by: c.recorder?.full_name ?? null, verified_by: c.approver?.full_name ?? null,
+      entry_no: c.ledger_entry?.entry_no ?? null,
     }));
   }
 
@@ -49,6 +50,7 @@ async function recordSummaries(items) {
       posted_at: p.created_at, channel: p.payment_method, reference: p.external_reference,
       recorded_by: p.recorder?.full_name ?? null, verified_by: p.verifier?.full_name ?? null,
       principal: p.principal_portion, interest: p.interest_portion,
+      entry_no: p.ledger_entry?.entry_no ?? null,
     }));
   }
 
@@ -63,19 +65,6 @@ async function recordSummaries(items) {
       posted_at: l.disbursed_at ?? l.applied_at, channel: null, reference: null,
       recorded_by: l.approver?.full_name ?? null, verified_by: l.disburser?.full_name ?? null,
     }));
-  }
-
-  // The posting each record produced, if it's been posted.
-  const sourceIds = [...byId.keys()];
-  if (sourceIds.length) {
-    const { data, error } = await supabase
-      .from('ledger_entries').select('source_id, entry_no')
-      .in('source_id', sourceIds).neq('entry_type', 'reversal');
-    if (error) throw error;
-    data.forEach((e) => {
-      const r = byId.get(e.source_id);
-      if (r && r.entry_no == null) r.entry_no = e.entry_no;
-    });
   }
 
   return byId;
@@ -171,6 +160,14 @@ async function raiseFlag({ groupId, actorId, actorRole, entityType, entityId, re
   return flag;
 }
 
+/** Has this person already got an open flag on this record? Stops a member reporting the same walk-in twice. */
+async function hasOpenFlag({ entityId, raisedBy }) {
+  const { data, error } = await supabase
+    .from('audit_flags').select('id').eq('entity_id', entityId).eq('raised_by', raisedBy).eq('status', 'open').limit(1);
+  if (error) throw error;
+  return data.length > 0;
+}
+
 async function getFlag(id) {
   const { data, error } = await supabase.from('audit_flags').select(SELECT).eq('id', id).single();
   if (error) throw error;
@@ -205,4 +202,4 @@ async function closeFlag({ groupId, flagId, actorId, actorRole, status, note }) 
   return data;
 }
 
-module.exports = { CLOSED_STATUSES, flagRef, recordSummaries, listFlags, getFlagDetail, raiseFlag, getFlag, closeFlag };
+module.exports = { CLOSED_STATUSES, flagRef, recordSummaries, hasOpenFlag, listFlags, getFlagDetail, raiseFlag, getFlag, closeFlag };

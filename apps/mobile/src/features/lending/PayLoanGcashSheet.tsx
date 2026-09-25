@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Camera, Check, AlertTriangle, Copy, QrCode as QrCodeIcon, Hash } from 'lucide-react-native';
@@ -125,7 +126,7 @@ export function PayLoanGcashSheet({ visible, onClose, loanId, suggestedAmount, o
       const proof_url = await uploadImage('proofs', proofUri, 'repayment');
       const ok = await submit.run(loanId, { amount: amt, external_reference: reference || undefined, proof_url });
       if (ok !== undefined) {
-        Alert.alert('Submitted', 'Your repayment was submitted for confirmation.');
+        toast('Repayment submitted for confirmation');
         setReference('');
         setProofUri(null);
         resetScan();

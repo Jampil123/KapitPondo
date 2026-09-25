@@ -25,36 +25,23 @@ async function select(table, columns, ids) {
   });
 }
 
-// Non-reversal ledger postings produced by these source records.
-async function entryNos(sourceIds) {
-  const rows = await inChunks(sourceIds, async (chunk) => {
-    const { data, error } = await supabase
-      .from('ledger_entries').select('source_id, entry_no')
-      .in('source_id', chunk).neq('entry_type', 'reversal');
-    if (error) throw error;
-    return data;
-  });
-  return new Map(rows.map((e) => [e.source_id, e.entry_no]));
-}
-
 async function withSubjects(rows) {
   const ids = (...types) => [...new Set(rows.filter((r) => types.includes(r.entity_type) && r.entity_id).map((r) => r.entity_id))];
   const subjects = new Map();
 
   const contributionIds = ids('contribution');
   const paymentIds = ids('loan_payment');
-  const [contributions, payments, loans, reversals, flags, findings, postings] = await Promise.all([
-    select('contributions', 'id, memberships!membership_id(members!member_id(full_name))', contributionIds),
-    select('loan_payments', 'id, loans(loan_no, membership:memberships!membership_id(members!member_id(full_name)))', paymentIds),
+  const [contributions, payments, loans, reversals, flags, findings] = await Promise.all([
+    select('contributions', 'id, ledger_entry:ledger_entries!ledger_entry_id(entry_no), memberships!membership_id(members!member_id(full_name))', contributionIds),
+    select('loan_payments', 'id, ledger_entry:ledger_entries!ledger_entry_id(entry_no), loans(loan_no, membership:memberships!membership_id(members!member_id(full_name)))', paymentIds),
     select('loans', 'id, loan_no, membership:memberships!membership_id(members!member_id(full_name))', ids('loan', 'loan_decision', 'loan_disbursement')),
     select('ledger_reversal_requests', 'id, entry:ledger_entries!entry_id(entry_no, membership:memberships!membership_id(members!member_id(full_name))), reversal:ledger_entries!reversal_entry_id(entry_no)', ids('reversal_request')),
     select('audit_flags', 'id, seq', ids('audit_flag')),
     select('audit_findings', 'id, seq', ids('audit_finding')),
-    entryNos([...contributionIds, ...paymentIds]),
   ]);
 
-  contributions.forEach((c) => subjects.set(c.id, { name: c.memberships?.members?.full_name ?? null, entry: postings.get(c.id) ?? null }));
-  payments.forEach((p) => subjects.set(p.id, { name: p.loans?.membership?.members?.full_name ?? null, entry: postings.get(p.id) ?? null, loan: p.loans?.loan_no ?? null }));
+  contributions.forEach((c) => subjects.set(c.id, { name: c.memberships?.members?.full_name ?? null, entry: c.ledger_entry?.entry_no ?? null }));
+  payments.forEach((p) => subjects.set(p.id, { name: p.loans?.membership?.members?.full_name ?? null, entry: p.ledger_entry?.entry_no ?? null, loan: p.loans?.loan_no ?? null }));
   loans.forEach((l) => subjects.set(l.id, { name: l.membership?.members?.full_name ?? null, loan: l.loan_no }));
   reversals.forEach((r) => subjects.set(r.id, { name: r.entry?.membership?.members?.full_name ?? null, entry: r.entry?.entry_no ?? null, reversing_entry: r.reversal?.entry_no ?? null }));
   flags.forEach((f) => subjects.set(f.id, { ref: `FL-${pad(f.seq, 2)}` }));

@@ -23,6 +23,9 @@ import {
   listContributions,
   submitContribution,
   approveContribution,
+  confirmContribution,
+  verifyContribution,
+  disputeContribution,
   rejectContribution,
   type ContributionFilters,
   type SubmitContributionInput,
@@ -54,4 +57,16 @@ export function useRejectContribution(groupId: string) {
   return useAction((contributionId: string, reason?: string) =>
     rejectContribution(groupId, contributionId, reason),
   );
+}
+
+export function useConfirmContribution(groupId: string) {
+  return useAction((contributionId: string) => confirmContribution(groupId, contributionId));
+}
+
+export function useVerifyContribution(groupId: string) {
+  return useAction((contributionId: string) => verifyContribution(groupId, contributionId));
+}
+
+export function useDisputeContribution(groupId: string) {
+  return useAction((contributionId: string, note?: string) => disputeContribution(groupId, contributionId, note));
 }

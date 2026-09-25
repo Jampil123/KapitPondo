@@ -12,6 +12,7 @@ import {
 } from "@expo-google-fonts/poppins";
 import * as SplashScreen from "expo-splash-screen";
 import { AuthProvider, useAuth } from "../src/context/AuthContext";
+import { ToastHost } from "../src/components/ui/Toast";
 import { LoadingState } from "../src/components/shared/LoadingState";
 import "../global.css";
 
@@ -73,6 +74,7 @@ export default function RootLayout() {
       <AuthProvider>
         <RootNavigator />
       </AuthProvider>
+      <ToastHost />
     </SafeAreaProvider>
   );
 }

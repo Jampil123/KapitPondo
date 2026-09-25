@@ -1,14 +1,16 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { Wallet, Coins, Banknote, AlertTriangle } from 'lucide-react-native';
+import { Wallet, Coins, Banknote, AlertTriangle, Clock3 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
+import { useAuth } from '@/context/AuthContext';
 import { useLoans, useLiquidity, useDisburseLoan } from '@/features/lending/lending.hooks';
 import { headLabel, type Loan } from '@/api/lending';
 
@@ -37,20 +39,31 @@ export default function Disburse() {
   const liquidity = useLiquidity(groupId!);
   const loans = useLoans(groupId!, { status: 'approved' });
   const disburse = useDisburseLoan(groupId!);
+  const { member } = useAuth();
   const [disbursingId, setDisbursingId] = useState<string | null>(null);
+
+  // Why a loan can't be released from here yet (migration 0075), or null when it can.
+  function heldBack(l: Loan): string | null {
+    if (l.membership?.member_id === member?.id) return 'This is your loan — the Organizer releases it.';
+    if (l.review_required && !l.reviewed_at) {
+      const reviewer = l.membership?.role === 'auditor' ? 'your' : "the Auditor's";
+      return `Officer loan — waiting for ${reviewer} review before release.`;
+    }
+    return null;
+  }
 
   const list = loans.data ?? [];
   const available = Number(liquidity.data?.available_cash ?? 0);
   const totalToRelease = useMemo(() => list.reduce((s, l) => s + Number(l.approved_principal ?? l.principal), 0), [list]);
   const coversAll = available >= totalToRelease;
 
-  // Releasing posts a real ledger debit the instant it runs, with no undo
-  // from this screen — worth a confirmation, same as the approval dialog.
+  // Releasing hands the cash out for real, with no undo from this screen —
+  // worth a confirmation. The ledger posting follows once the release is verified.
   function onDisbursePress(l: Loan) {
     const amount = Number(l.approved_principal ?? l.principal);
     Alert.alert(
       'Release these funds?',
-      `${formatPeso(amount)} to ${loanName(l)}. This posts to the ledger immediately and can't be undone from here.`,
+      `${formatPeso(amount)} to ${loanName(l)}. It posts to the ledger once the release is verified.`,
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Release', onPress: () => onDisburse(l) },
@@ -62,7 +75,7 @@ export default function Disburse() {
     setDisbursingId(l.id);
     const ok = await disburse.run(l.id);
     setDisbursingId(null);
-    if (ok !== undefined) { loans.refetch(); liquidity.refetch(); }
+    if (ok !== undefined) { loans.refetch(); liquidity.refetch(); toast('Loan released — waiting for verification'); }
     else if (disburse.error) Alert.alert('Could not disburse', disburse.error.message);
   }
 
@@ -138,6 +151,13 @@ export default function Disburse() {
                     </Text>
                   </View>
 
+                  {heldBack(l) ? (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: intent.info.soft, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 }}>
+                      <Clock3 size={13} color={intent.info.strong} />
+                      <Text variant="caption" style={{ color: intent.info.strong, flex: 1 }}>{heldBack(l)}</Text>
+                    </View>
+                  ) : null}
+
                   {short ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: intent.danger.soft, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 10 }}>
                       <AlertTriangle size={13} color={intent.danger.text} />
@@ -147,8 +167,8 @@ export default function Disburse() {
 
                   <Pressable
                     onPress={() => onDisbursePress(l)}
-                    disabled={busy}
-                    style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11, opacity: busy ? 0.6 : 1 }}
+                    disabled={busy || !!heldBack(l)}
+                    style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11, opacity: busy || heldBack(l) ? 0.5 : 1 }}
                   >
                     {busy ? <ActivityIndicator size="small" color="#3E8E66" /> : <Banknote size={16} color="#3E8E66" strokeWidth={2.4} />}
                     <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Disburse</Text>

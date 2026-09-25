@@ -7,8 +7,9 @@ import {
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
-import { DashboardBand, glassPanel, onBandText } from '@/components/shared/DashboardBand';
+import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
@@ -16,13 +17,16 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useRepayments } from '@/features/lending/lending.hooks';
 import { useLoanAudits } from '@/features/loanAudits/loanAudits.hooks';
-import { useReversalRequests } from '@/features/ledger/ledger.hooks';
+import { useSignoffQueue } from '@/features/signoff/signoff';
+import { itemMatch } from '@/features/audit/VerificationQueue';
+import { matchLabel } from '@/features/signoff/proofMatch';
 import { useDistributions, useVerifyDistribution, useCancelDistribution } from '@/features/distribution/distribution.hooks';
 import { useAuditLog, useAuditTrailSince, useFlagPosting } from '@/features/auditlog/auditlog.hooks';
 import { useFindings } from '@/features/findings/findings.hooks';
 import { useFlags } from '@/features/flags/flags.hooks';
 import { FlagPrompt } from '@/features/flags/FlagPrompt';
 import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
+import { isPostingSignoff } from '@/features/auditlog/describe';
 import type { FlaggableEntityType } from '@/api/auditLog';
 
 const HERO_ROWS = 3;
@@ -50,25 +54,8 @@ function useAuditorData(groupId: string) {
   const { membership } = useActiveGroup();
   const contribs = useContributions(groupId, {});
   const repayments = useRepayments(groupId);
-  const reversals = useReversalRequests(groupId);
 
-  const pending = useMemo(() => ({
-    contribs: (contribs.data ?? []).filter((c) => c.status === 'submitted'),
-    repayments: (repayments.data ?? []).filter((p) => p.status === 'submitted'),
-    reversals: (reversals.data ?? []).filter((r) => r.status === 'pending_verification'),
-  }), [contribs.data, repayments.data, reversals.data]);
-
-  // Items that are the Auditor's own can't be verified by them (API enforces it too).
-  const isMine = useMemo(() => ({
-    contrib: (c: { membership_id: string }) => c.membership_id === membership?.id,
-    repayment: (p: { loans?: { membership_id: string } }) => p.loans?.membership_id === membership?.id,
-    reversal: (r: { entry?: { membership_id: string | null } }) => !!r.entry?.membership_id && r.entry.membership_id === membership?.id,
-  }), [membership?.id]);
-
-  return {
-    member, membership, contribs, repayments, reversals, pending, isMine,
-    loading: contribs.loading || repayments.loading || reversals.loading,
-  };
+  return { member, membership, contribs, repayments, loading: contribs.loading || repayments.loading };
 }
 
 /* ---------------- Main card ---------------- */
@@ -76,23 +63,21 @@ type WaitingRow = { key: string; name: string; kind: string; problem: string | n
 
 function VerificationHero({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const { pending, isMine, loading } = useAuditorData(groupId);
+  const queue = useSignoffQueue(groupId);
 
-  // Oldest first, same order as To review. `problem` is the first field that doesn't check out.
-  const rows: WaitingRow[] = useMemo(() => [
-    ...pending.contribs.filter((c) => !isMine.contrib(c)).map((c): WaitingRow => ({
-      key: `c-${c.id}`, name: c.memberships?.members?.full_name ?? 'Member', kind: 'Contribution',
-      problem: !c.proof_url ? 'no proof attached' : null, amount: c.amount, date: c.created_at,
-    })),
-    ...pending.repayments.filter((p) => !isMine.repayment(p)).map((p): WaitingRow => ({
-      key: `p-${p.id}`, name: p.loans?.membership?.members?.full_name ?? 'Member', kind: 'Loan repayment',
-      problem: !p.proof_url ? 'no proof attached' : null, amount: p.amount, date: p.created_at,
-    })),
-    ...pending.reversals.filter((r) => !isMine.reversal(r)).map((r): WaitingRow => ({
-      key: `r-${r.id}`, name: r.entry?.description ?? r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry', kind: 'Reversal',
-      problem: !r.entry ? 'no original linked' : null, amount: r.entry ? r.entry.amount : null, date: r.initiated_at,
-    })),
-  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()), [pending, isMine]);
+  // What's waiting on this Auditor's sign-off (features/signoff), oldest first.
+  // `problem` is the first field that doesn't check out.
+  const rows: WaitingRow[] = useMemo(() => queue.mine.map((i): WaitingRow => ({
+    key: i.key, name: i.name, kind: i.label, amount: i.amount, date: i.since,
+    // Same proof comparison as the queue row: null = fine ("all fields match").
+    problem: (() => {
+      if (i.kind !== 'contribution' && i.kind !== 'repayment') return null;
+      const m = itemMatch(i);
+      if (m.kind === 'match') return null;
+      return matchLabel(m).text.charAt(0).toLowerCase() + matchLabel(m).text.slice(1);
+    })(),
+  })), [queue.mine]);
+  const loading = queue.loading && queue.items.length === 0;
 
   return (
     <View style={{ paddingTop: 6 }}>
@@ -106,7 +91,7 @@ function VerificationHero({ groupId }: { groupId: string }) {
               <Text style={{ fontSize: 24, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6 }}>All clear</Text>
             </View>
             <Text style={{ fontSize: 12.5, lineHeight: 18, fontFamily: 'Poppins_500Medium', color: onBandText, marginTop: 6 }}>
-              No records are waiting for verification. New ones appear here when the Treasurer records them.
+              No records are waiting for verification. New ones appear here once the Treasurer confirms them.
             </Text>
           </View>
         ) : (
@@ -157,7 +142,7 @@ function useFlagPrompt(groupId: string) {
     setTarget(null);
     const ok = await flag.run({ entity_type: t.type, entity_id: t.id, reason, note: note || undefined, label: t.label });
     if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
-    else Alert.alert('Flagged', 'The Organizer has been notified.');
+    else toast('Flagged — the Organizer has been notified');
   }
 
   const prompt = (
@@ -174,8 +159,6 @@ function useFlagPrompt(groupId: string) {
 
 /* ---------------- Stat tiles + failed checks (replaces To review) ---------------- */
 const TRAIL_DAYS = 90;
-// Audit actions that count as "verified by you" — see the logAudit calls in contributions/lending/ledger/distribution routes.
-const VERIFY_ACTIONS = new Set(['approved:contribution', 'confirmed:loan_payment', 'verified:reversal_request', 'verified:distribution']);
 
 function StatTile({ value, label, onPress }: { value: number | null; label: string; onPress: () => void }) {
   return (
@@ -263,7 +246,7 @@ function useAuditorOverview(groupId: string, data: ReturnType<typeof useAuditorD
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
 
-    return entries.filter((e) => e.actor_id === member?.id && VERIFY_ACTIONS.has(`${e.action}:${e.entity_type}`) && new Date(e.created_at) >= monthStart).length;
+    return entries.filter((e) => e.actor_id === member?.id && isPostingSignoff(e) && new Date(e.created_at) >= monthStart).length;
   }, [trail.data, member?.id]);
 
   // Any flag, open or closed, takes a record off the failed-check cards — a dismissed one was looked at and found fine.
@@ -420,7 +403,10 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
 export function AuditorHero({ groupId }: { groupId: string }) {
   return (
     <DashboardBand>
-      <VerificationHero groupId={groupId} />
+      {/* Folds away under the header on scroll, same as the other dashboards. */}
+      <FoldTarget>
+        <VerificationHero groupId={groupId} />
+      </FoldTarget>
     </DashboardBand>
   );
 }

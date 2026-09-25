@@ -5,10 +5,15 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
 const { checkLatePenaltiesIfDue, splitPenaltyShare, coverPenalties, settlePenaltiesFor } = require('../penalties/penalties.service');
 const { logAudit } = require('../../lib/auditLog');
+const { notify } = require('../../lib/notifications');
+const officers = require('../../lib/officers');
+const flags = require('../flags/flags.service');
+const { readProofInBackground, readAndSaveProof } = require('../../lib/proofReading');
 
-// Submit a contribution — status 'submitted' either way, awaiting a
-// DIFFERENT officer's approval (segregation of duties, enforced below in the
-// /approve route regardless of who recorded it). Members record only their
+// Submit a contribution. Nothing posts here — every contribution goes
+// confirm (fund holder) → verify (independent check) before the ledger
+// (migration 0075). A walk-in recorded by the person who'd confirm it is
+// confirmed on recording and waits only for verification. Members record only their
 // own (no membership_id in the body — that's how this tells the two flows
 // apart). Officers using the "Record new" flow explicitly pass
 // membership_id — for a walk-in member (TC-018) OR for their own membership —
@@ -60,7 +65,8 @@ router.post('/groups/:groupId/contributions',
         penaltyApplied: split.penaltyShare,
         paymentMethod: payment_method,
         proofUrl: proof_url,
-        externalReference: external_reference,
+        // A walk-in with no slip photo gets a generated cash receipt number the Auditor can check against.
+        externalReference: external_reference || (isWalkIn && !proof_url ? `CASH-${Date.now().toString(36).toUpperCase()}` : undefined),
         recordedBy: req.member.id,
         isWalkIn,
       });
@@ -69,20 +75,34 @@ router.post('/groups/:groupId/contributions',
         action: 'recorded', entityType: 'contribution', entityId: contribution.id,
         before: null, after: { status: 'submitted', amount: contribution.amount, walk_in: isWalkIn },
       });
+      if (contribution.proof_url) readProofInBackground('contributions', contribution.id);
 
-      // A walk-in for someone else posts immediately (migration 0064); the
-      // officer's own contribution still waits for another officer.
+      let saved = contribution;
       if (isWalkIn && targetMembershipId !== req.membership.id) {
-        const ledgerEntry = await service.postWalkInContribution({ contributionId: contribution.id, recorderId: req.member.id });
-        await logAudit({
-          groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
-          action: 'approved', entityType: 'contribution', entityId: contribution.id,
-          before: { status: 'submitted' }, after: { status: 'approved', amount: contribution.amount, recorded_by: req.member.id, walk_in: true },
-        });
-        return res.status(201).json({ contribution: { ...contribution, status: 'approved' }, ledger_entry: ledgerEntry });
+        saved = await service.recordWalkIn({ contributionId: contribution.id, recorderId: req.member.id });
+        if (saved.status === 'confirmed') {
+          await logAudit({
+            groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+            action: 'confirmed', entityType: 'contribution', entityId: contribution.id,
+            before: { status: 'submitted' }, after: { status: 'confirmed', amount: contribution.amount, walk_in: true },
+          });
+        }
+        // The member is the third check on a walk-in: they hear about it and can say it's wrong.
+        const target = await service.getActiveMembership(targetMembershipId);
+        if (target) {
+          await notify({
+            memberId: target.member_id,
+            groupId: req.params.groupId,
+            type: 'contribution.walk_in_recorded',
+            title: 'Cash contribution recorded',
+            message: `${req.member.full_name ?? 'An officer'} recorded ₱${Number(contribution.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })} cash from you on ${new Date().toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}. Tap if this isn't right.`,
+          });
+        }
       }
+      await nudgeNextStep({ groupId: req.params.groupId, contribution: saved });
+      if (isWalkIn && targetMembershipId !== req.membership.id) return res.status(201).json({ contribution: saved });
       await coverPenalties({ penaltyIds: split.penaltyIds, contributionId: contribution.id });
-      res.status(201).json({ contribution });
+      res.status(201).json({ contribution: saved });
     } catch (err) { next(err); }
   }
 );
@@ -138,8 +158,9 @@ router.get('/groups/:groupId/contributions/check-reference',
   }
 );
 
-// Approve a contribution (officers only)
-router.post('/groups/:groupId/contributions/:id/approve',
+// The server's reading of the proof (0076) — for records submitted before
+// proofs were read automatically, or to retry an unreadable one.
+router.post('/groups/:groupId/contributions/:id/read-proof',
   requireAuth,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
@@ -148,38 +169,122 @@ router.post('/groups/:groupId/contributions/:id/approve',
       if (contribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
-      if (contribution.recorded_by === req.member.id) {
-        return res.status(403).json({ error: 'You cannot approve a contribution you recorded' });
-      }
-      if (contribution.membership_id === req.membership.id) {
-        return res.status(403).json({ error: 'You cannot approve your own contribution' });
-      }
-      const ledgerEntry = await service.approveContribution({
-        contributionId: req.params.id,
-        approverId: req.member.id,
-      });
+      const reading = await readAndSaveProof('contributions', contribution.id);
+      res.json({ reading });
+    } catch (err) { next(err); }
+  }
+);
+
+// Whoever's step it is now hears about it.
+async function nudgeNextStep({ groupId, contribution }) {
+  const payer = await service.getActiveMembership(contribution.membership_id);
+  if (!payer) return;
+  const payerRole = await officers.roleOf(groupId, payer.member_id);
+  const skip = [payer.member_id, contribution.recorded_by, contribution.confirmed_by].filter(Boolean);
+  if (contribution.status === 'submitted') {
+    await officers.notifyRole({ groupId, role: officers.confirmRole(payerRole), skip, type: 'contribution.to_confirm', title: 'Contribution to confirm', message: 'A contribution is waiting for you to confirm the money arrived.' });
+  } else if (contribution.status === 'confirmed') {
+    const recorderRole = contribution.recorded_by ? await officers.roleOf(groupId, contribution.recorded_by) : null;
+    await officers.notifyRole({ groupId, role: await officers.verifyRole(groupId, payerRole, recorderRole), skip, type: 'contribution.to_verify', title: 'Contribution to verify', message: 'A confirmed contribution is waiting for your verification.' });
+  }
+}
+
+const STEP_ERRORS = ['must be confirmed by', 'must be verified by', 'cannot confirm', 'cannot verify', 'cannot also verify', 'You cannot'];
+
+async function confirmStep(req, res, contribution) {
+  const saved = await service.confirmContribution({ contributionId: contribution.id, confirmerId: req.member.id });
+  await logAudit({
+    groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+    action: 'confirmed', entityType: 'contribution', entityId: contribution.id,
+    before: { status: contribution.status }, after: { status: 'confirmed', amount: contribution.amount, recorded_by: contribution.recorded_by },
+  });
+  await nudgeNextStep({ groupId: req.params.groupId, contribution: saved });
+  res.json({ message: 'Contribution confirmed — waiting for verification', contribution: saved });
+}
+
+async function verifyStep(req, res, contribution) {
+  const ledgerEntry = await service.verifyContribution({ contributionId: contribution.id, verifierId: req.member.id });
+  await logAudit({
+    groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+    action: 'verified', entityType: 'contribution', entityId: contribution.id,
+    before: { status: contribution.status }, after: { status: 'approved', amount: contribution.amount, recorded_by: contribution.recorded_by, confirmed_by: contribution.confirmed_by },
+  });
+  if (Number(contribution.penalty_applied) > 0) {
+    const settled = await settlePenaltiesFor({ contributionId: contribution.id, approverId: req.member.id });
+    for (const p of settled) {
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
-        action: 'approved', entityType: 'contribution', entityId: req.params.id,
-        before: { status: contribution.status }, after: { status: 'approved', amount: contribution.amount, recorded_by: contribution.recorded_by },
+        action: 'paid', entityType: 'penalty', entityId: p.id,
+        before: { status: 'pending' }, after: { status: 'paid', amount: p.amount, contribution_id: contribution.id },
       });
-      if (Number(contribution.penalty_applied) > 0) {
-        const settled = await settlePenaltiesFor({ contributionId: req.params.id, approverId: req.member.id });
-        for (const p of settled) {
-          await logAudit({
-            groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
-            action: 'paid', entityType: 'penalty', entityId: p.id,
-            before: { status: 'pending' }, after: { status: 'paid', amount: p.amount, contribution_id: req.params.id },
-          });
-        }
+    }
+  }
+  res.json({ message: 'Contribution verified and posted', ledgerEntry });
+}
+
+function stepRoute(pick) {
+  return async (req, res, next) => {
+    try {
+      const contribution = await service.getContribution(req.params.id);
+      if (contribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
-      res.json({ message: 'Contribution approved', ledgerEntry });
+      const step = pick(contribution);
+      if (!step) return res.status(409).json({ error: 'Contribution is not waiting for this step' });
+      await step(req, res, contribution);
     } catch (err) {
-      if (err.message && err.message.includes('must be confirmed by')) {
+      if (err.message && STEP_ERRORS.some((m) => err.message.includes(m))) {
         return res.status(403).json({ error: err.message });
       }
       next(err);
     }
+  };
+}
+
+const officerOnly = requireGroupRole(['treasurer', 'auditor', 'owner']);
+
+// Step 1 — confirm the money arrived (Treasurer; Organizer for the Treasurer's own).
+router.post('/groups/:groupId/contributions/:id/confirm', requireAuth, officerOnly,
+  stepRoute((c) => (c.status === 'submitted' ? confirmStep : null)));
+
+// Step 2 — verify and post (Auditor; Organizer for the Auditor's own).
+router.post('/groups/:groupId/contributions/:id/verify', requireAuth, officerOnly,
+  stepRoute((c) => (c.status === 'confirmed' ? verifyStep : null)));
+
+// Older clients: "approve" does whichever step is next.
+router.post('/groups/:groupId/contributions/:id/approve', requireAuth, officerOnly,
+  stepRoute((c) => (c.status === 'submitted' ? confirmStep : c.status === 'confirmed' ? verifyStep : null)));
+
+// The member's "This isn't right" on a contribution recorded for them — raises
+// a flag the Auditor sees; blocks nothing.
+router.post('/groups/:groupId/contributions/:id/dispute',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const contribution = await service.getContribution(req.params.id);
+      if (contribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Contribution does not belong to this group' });
+      }
+      if (contribution.membership_id !== req.membership.id) {
+        return res.status(403).json({ error: 'You can only dispute a contribution recorded for you' });
+      }
+      if (await flags.hasOpenFlag({ entityId: contribution.id, raisedBy: req.member.id })) {
+        return res.status(409).json({ error: "You've already reported this one — the Auditor is looking into it" });
+      }
+      const flag = await flags.raiseFlag({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        entityType: 'contribution', entityId: contribution.id,
+        reason: "Member says this isn't right", note: req.body?.note?.trim() || null,
+        label: `${req.member.full_name ?? 'A member'}'s contribution`,
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'auditor', skip: [req.member.id],
+        type: 'audit.flagged', title: 'A member disputed a contribution',
+        message: `${req.member.full_name ?? 'A member'} says a contribution recorded for them isn't right.`,
+      });
+      res.status(201).json({ message: 'Thanks — the Auditor will look into it', flag });
+    } catch (err) { next(err); }
   }
 );
 
@@ -194,6 +299,7 @@ router.post('/groups/:groupId/contributions/:id/reject',
         return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
       const updated = await service.rejectContribution({ contributionId: req.params.id, reason: req.body?.reason });
+      if (!updated) return res.status(409).json({ error: 'Contribution is not waiting for confirmation or verification' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'rejected', entityType: 'contribution', entityId: req.params.id,

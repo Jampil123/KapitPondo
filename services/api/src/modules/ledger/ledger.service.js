@@ -195,8 +195,17 @@ async function entryDetail({ groupId, entryId }) {
   if (error) throw error;
   if (!entry) return null;
 
-  const entityType = SOURCE_ENTITY[entry.source_type] ?? null;
-  const records = entityType && entry.source_id ? await recordSummaries([{ entity_type: entityType, entity_id: entry.source_id }]) : new Map();
+  // Repayment entries posted before 0075 point at the loan, not the payment —
+  // the payment's own ledger_entry_id finds it either way.
+  let entityType = SOURCE_ENTITY[entry.source_type] ?? null;
+  let sourceId = entry.source_id;
+  if (entry.entry_type === 'loan_repayment') {
+    const { data: payment, error: pErr } = await supabase.from('loan_payments').select('id').eq('ledger_entry_id', entry.id).maybeSingle();
+    if (pErr) throw pErr;
+    entityType = payment ? 'loan_payment' : null;
+    sourceId = payment?.id ?? null;
+  }
+  const records = entityType && sourceId ? await recordSummaries([{ entity_type: entityType, entity_id: sourceId }]) : new Map();
 
   const [{ data: reversedBy, error: rErr }, { data: requests, error: qErr }] = await Promise.all([
     supabase.from('ledger_entries').select('id, entry_no, posted_at').eq('reverses_entry_id', entryId).maybeSingle(),
@@ -205,7 +214,7 @@ async function entryDetail({ groupId, entryId }) {
   if (rErr) throw rErr;
   if (qErr) throw qErr;
 
-  const trailIds = [entry.id, entry.source_id, ...(requests ?? []).map((r) => r.id)].filter(Boolean);
+  const trailIds = [entry.id, sourceId, ...(requests ?? []).map((r) => r.id)].filter(Boolean);
   const { data: history, error: hErr } = await supabase
     .from('audit_log')
     .select('*, actor:members!actor_id(full_name)')
@@ -218,7 +227,8 @@ async function entryDetail({ groupId, entryId }) {
   return {
     entry,
     entity_type: entityType,
-    record: entry.source_id ? records.get(entry.source_id) ?? null : null,
+    source_id: sourceId,
+    record: sourceId ? records.get(sourceId) ?? null : null,
     reversed_by: reversedBy ?? null,
     history: await withSubjects(history),
   };

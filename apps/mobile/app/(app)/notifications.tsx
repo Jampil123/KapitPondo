@@ -56,9 +56,14 @@ export default function Notifications() {
   );
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
+  // Cash an officer recorded for you opens the page where you can say it isn't right.
+  const WALK_IN_TYPES = ['contribution.walk_in_recorded', 'loan.walk_in_recorded'];
+
   async function onPressRow(n: Notification) {
-    if (n.is_read) return;
-    await markRead(n.id);
+    if (!n.is_read) await markRead(n.id);
+    if (WALK_IN_TYPES.includes(n.type) && n.group_id) {
+      router.push({ pathname: '/(app)/[groupId]/recorded-for-me' as any, params: { groupId: n.group_id } });
+    }
   }
 
   async function onMarkAllRead() {

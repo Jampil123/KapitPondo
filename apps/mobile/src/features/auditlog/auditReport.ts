@@ -16,7 +16,7 @@ import { listFlags, type AuditFlag } from '../../api/flags';
 import { listLoanAudits, type LoanAudit } from '../../api/loanAudits';
 import { formatPeso } from '../../lib/money';
 import { shareCsv } from '../../lib/csv';
-import { describe, ROLE_LABEL } from './describe';
+import { describe, ROLE_LABEL, isPostingSignoff } from './describe';
 import { recordLabel } from '../flags/flagStatus';
 
 export type ReportSection = 'verified' | 'rejected' | 'flags' | 'findings' | 'loans';
@@ -43,8 +43,6 @@ export const SECTION_LABEL: Record<ReportSection, string> = {
   loans: 'Loan decision audits',
 };
 
-// Sign-offs on records — the same set the dashboard counts as "verified by you".
-const VERIFY = new Set(['approved:contribution', 'confirmed:loan_payment', 'verified:reversal_request', 'finalized:reversal_request', 'verified:distribution', 'approved:expense']);
 
 const startOf = (iso: string) => new Date(`${iso}T00:00:00`).toISOString();
 const endOf = (iso: string) => new Date(new Date(`${iso}T00:00:00`).getTime() + 86400000).toISOString();
@@ -75,7 +73,7 @@ export function useAuditReport(groupId: string, period: ReportPeriod) {
     };
     const byDate = (a: AuditLogEntry, b: AuditLogEntry) => (a.created_at < b.created_at ? -1 : 1);
     return {
-      verified: entries.filter((e) => VERIFY.has(`${e.action}:${e.entity_type}`)).sort(byDate),
+      verified: entries.filter(isPostingSignoff).sort(byDate),
       rejected: entries.filter((e) => e.action === 'rejected').sort(byDate),
       flags: flags.filter((f) => inRange(f.created_at)),
       findings: findings.filter((f) => inRange(f.created_at)),

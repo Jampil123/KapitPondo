@@ -6,6 +6,7 @@ import { Check, X, Flag } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
@@ -68,7 +69,7 @@ export default function LoanAuditDetail() {
     setFlagging(false);
     const ok = await flag.run({ entity_type: 'loan', entity_id: a!.loan_id, reason, note: note || undefined, label: `${a!.ref} · ${a!.borrower ?? 'Member'}` });
     if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
-    else Alert.alert('Flagged', 'The Organizer has been notified.');
+    else toast('Flagged — the Organizer has been notified');
   }
 
   return (

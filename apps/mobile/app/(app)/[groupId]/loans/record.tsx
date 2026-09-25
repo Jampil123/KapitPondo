@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, TextInput, Image, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,7 +24,7 @@ const METHODS: { key: PaymentMethod; icon: any; tileLabel: string; refLabel: str
   {
     key: 'cash', icon: Banknote, tileLabel: 'Cash',
     refLabel: 'Receipt or slip number', ph: 'e.g. slip 041',
-    dropTitle: 'Photo of the signed slip', dropSub: 'A slip the member signed, or a photo of the handover',
+    dropTitle: 'Photo of the signed slip', dropSub: 'The Auditor checks against this. No slip? A receipt number is generated for you.',
     required: false, warn: true,
   },
 ];
@@ -112,7 +113,9 @@ export default function RecordLoanRepayment() {
         proof_url,
       });
       if (ok !== undefined) {
-        Alert.alert('Recorded', `${loan.membership?.members?.full_name ?? 'Member'}'s repayment of ${formatPeso(amt)} was submitted for ${confirmer} to confirm.`);
+        toast(ok.payment?.status === 'confirmed'
+          ? `${formatPeso(amt)} recorded — waiting for the Auditor’s verification`
+          : `${formatPeso(amt)} recorded — waiting for ${confirmer} to confirm`);
         router.back();
       } else if (submit.error) {
         Alert.alert('Could not record', submit.error.message);
@@ -186,7 +189,7 @@ export default function RecordLoanRepayment() {
             </View>
 
             <View>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Cash receipt</Text>
+              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Cash acknowledgment slip</Text>
               <View style={[cardStyle, { padding: 13, gap: 13 }]}>
                 <View>
                   <Text variant="overline" color="secondary" style={{ marginBottom: 6 }}>

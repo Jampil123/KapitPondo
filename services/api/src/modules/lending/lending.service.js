@@ -140,7 +140,7 @@ async function availableCash(groupId) {
 async function checkEligibilityForMembership(membershipId, excludeLoanId = null) {
   const { data: membership, error: mErr } = await supabase
     .from('memberships')
-    .select('member_id, members!member_id(verification_status)')
+    .select('member_id, status, members!member_id(verification_status)')
     .eq('id', membershipId)
     .single();
   if (mErr) throw mErr;
@@ -148,6 +148,9 @@ async function checkEligibilityForMembership(membershipId, excludeLoanId = null)
   const reasons = [];
   if (membership.members.verification_status !== 'verified') {
     reasons.push('Member is not verified');
+  }
+  if (membership.status !== 'active') {
+    reasons.push('Member is not an active member of the group');
   }
 
   // One loan per head (migration 0065). Deciding on an existing loan never
@@ -185,9 +188,24 @@ async function checkEligibility(loanId) {
 // Owner-only lending decision. p_approved_principal lets TC-040 approve less
 // than requested when liquidity is short instead of only being able to
 // block/reject outright.
+// The cycle minimum that applies to a loan approved now: the running cycle's,
+// else the most recent one's. Null when no minimum is set.
+async function minimumLoanAmount(groupId) {
+  const today = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('cycles').select('minimum_loan_amount, start_date, end_date')
+    .eq('group_id', groupId).order('start_date', { ascending: false });
+  if (error) throw error;
+  const running = data.find((c) => c.start_date <= today && (!c.end_date || c.end_date >= today)) ?? data[0];
+  return running?.minimum_loan_amount != null ? Number(running.minimum_loan_amount) : null;
+}
+
 async function approveLoan({ loanId, approverId, interestRate, approvedPrincipal }) {
-  const { eligible, reasons } = await checkEligibility(loanId);
-  if (!eligible) {
+  const { eligible, reasons, loan } = await checkEligibility(loanId);
+  const min = await minimumLoanAmount(loan.group_id);
+  const amount = Number(approvedPrincipal ?? loan.principal);
+  if (min != null && amount < min) reasons.push(`Amount is below the ${min.toFixed(2)} minimum`);
+  if (!eligible || reasons.length) {
     throw Object.assign(new Error(reasons.join('; ')), { status: 409 });
   }
   const { data, error } = await supabase.rpc('approve_loan', {
@@ -213,7 +231,26 @@ async function approveLoan({ loanId, approverId, interestRate, approvedPrincipal
   return data;
 }
 
-// Treasurer or Owner: disburses an already-approved loan.
+// Before-release review of an officer's loan (migration 0075): clears it for
+// release, or sends it back to pending with the reviewer's note.
+async function reviewLoan({ loanId, reviewerId, cleared, note }) {
+  const { data, error } = await supabase.rpc('review_loan', {
+    p_loan_id: loanId, p_reviewer_id: reviewerId, p_cleared: cleared, p_note: note ?? null,
+  });
+  if (error) throw error;
+  return data;
+}
+
+// Verifying the release record is what posts the disbursement to the ledger.
+async function verifyLoanRelease({ loanId, verifierId }) {
+  const { data, error } = await supabase.rpc('verify_loan_release', { p_loan_id: loanId, p_verifier_id: verifierId });
+  if (error) throw error;
+  return data;
+}
+
+// Releases an approved loan: the cash goes out now, the ledger posting waits
+// for verification (verifyLoanRelease). The Treasurer releases, or the
+// Organizer when the Treasurer is the borrower — enforced in disburse_loan().
 async function disburseLoan({ loanId, disburserId }) {
   const { data, error } = await supabase.rpc('disburse_loan', {
     p_loan_id: loanId,
@@ -308,22 +345,30 @@ async function notifyRepaymentOutcome(loanId, { type, title, message }) {
   await notify({ memberId: membership.member_id, groupId: loan.group_id, type, title, message });
 }
 
-// A DIFFERENT officer confirms a member's submitted repayment claim — posts
-// the ledger credit and updates the loan balance (see confirm_loan_repayment()).
-async function confirmRepayment({ paymentId, approverId }) {
-  const before = await getRepayment(paymentId);
-  const { data, error } = await supabase.rpc('confirm_loan_repayment', {
-    p_payment_id: paymentId,
-    p_approver_id: approverId,
-  });
+// Step 1 — the fund holder confirms the repayment arrived. Posts nothing.
+async function confirmRepayment({ paymentId, confirmerId }) {
+  const { data, error } = await supabase.rpc('confirm_repayment', { p_payment_id: paymentId, p_confirmer_id: confirmerId });
   if (error) throw error;
+  return data;
+}
 
+// Step 2 — the independent check; posts the ledger credit and reduces the loan.
+async function verifyRepayment({ paymentId, verifierId }) {
+  const before = await getRepayment(paymentId);
+  const { data, error } = await supabase.rpc('verify_repayment', { p_payment_id: paymentId, p_verifier_id: verifierId });
+  if (error) throw error;
   await notifyRepaymentOutcome(before.loan_id, {
     type: 'loan.repayment_confirmed',
-    title: 'Repayment confirmed',
-    message: `Your repayment of ${before.amount} was confirmed.`,
+    title: 'Repayment posted',
+    message: `Your repayment of ${before.amount} was verified and posted.`,
   });
+  return data;
+}
 
+// Walk-in repayment recorded by the person who'd confirm it: confirmed on recording.
+async function recordWalkInRepayment({ paymentId, recorderId }) {
+  const { data, error } = await supabase.rpc('record_walk_in_repayment', { p_payment_id: paymentId, p_recorder_id: recorderId });
+  if (error) throw error;
   return data;
 }
 
@@ -333,9 +378,10 @@ async function rejectRepayment({ paymentId, reason }) {
     .from('loan_payments')
     .update({ status: 'rejected', rejection_reason: reason ?? null, updated_at: new Date().toISOString() })
     .eq('id', paymentId)
-    .eq('status', 'submitted')
+    // Either step can send it back.
+    .in('status', ['submitted', 'confirmed'])
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
 
   if (data) {
@@ -404,12 +450,16 @@ module.exports = {
   checkEligibilityForMembership,
   cancelLoan,
   approveLoan,
+  reviewLoan,
   disburseLoan,
+  verifyLoanRelease,
   submitRepayment,
   listRepayments,
   hasDuplicateExternalReference,
   getRepayment,
   confirmRepayment,
+  verifyRepayment,
+  recordWalkInRepayment,
   rejectRepayment,
   rejectLoan,
 };

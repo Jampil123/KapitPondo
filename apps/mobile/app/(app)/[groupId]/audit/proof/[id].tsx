@@ -6,6 +6,7 @@ import { Receipt, X, Flag, Send, Maximize2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { FlagPrompt } from '@/features/flags/FlagPrompt';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { CloseHeader, formatDateTime } from '@/features/payments/PaymentPage';
 import { DetailSection, StatusPill } from '@/features/activity/DetailCard';
 import { semantic, intent } from '@/theme/colors';
@@ -121,7 +122,7 @@ export default function ProofDetail() {
     setFlagging(false);
     const ok = await flag.run({ entity_type: type!, entity_id: id!, reason, note: note || undefined, label });
     if (ok === undefined) Alert.alert('Could not flag', flag.error?.message ?? 'Try again.');
-    else Alert.alert('Flagged', 'The Organizer has been notified.');
+    else toast('Flagged — the Organizer has been notified');
   }
 
   function onAsk() {
@@ -133,7 +134,7 @@ export default function ProofDetail() {
         text: 'Request', onPress: async () => {
           const ok = await ask.run({ entity_type: type!, entity_id: id!, recorded_by: recordedBy, label });
           if (ok === undefined) Alert.alert('Could not send', ask.error?.message ?? 'Try again.');
-          else Alert.alert('Sent', `${item.recordedByName ?? 'They'} will be notified.`);
+          else toast(`Proof requested from ${item.recordedByName ?? 'the recorder'}`);
         },
       },
     ]);

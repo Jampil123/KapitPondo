@@ -7,8 +7,8 @@
 --   * Confirm = the person holding the fund checks the money arrived:
 --       the Treasurer, or the Organizer when the Treasurer is the payer.
 --   * Verify  = the independent check, which is what posts to the ledger:
---       the Auditor, or the Organizer when the Auditor is the payer (or the
---       group has no Auditor).
+--       the Auditor, or the Organizer when the Auditor paid or recorded it
+--       (or the group has no Auditor).
 --   * Nobody confirms/verifies money they paid or recorded, and nobody does
 --     both steps on the same record.
 --   * A walk-in recorded by the person who would confirm it (usually the
@@ -81,11 +81,12 @@ returns text language sql immutable as $$
   select case when p_payer_role = 'treasurer' then 'owner' else 'treasurer' end;
 $$;
 
--- Money in: the verifying role (the one that posts).
-create or replace function money_in_verify_role(p_group_id uuid, p_payer_role text)
+-- Money in: the verifying role (the one that posts). The Organizer steps in
+-- when the Auditor paid or recorded the money, or the group has no Auditor.
+create or replace function money_in_verify_role(p_group_id uuid, p_payer_role text, p_recorder_role text default null)
 returns text language sql stable security definer as $$
   select case
-    when p_payer_role = 'auditor' or not group_has_role(p_group_id, 'auditor') then 'owner'
+    when p_payer_role = 'auditor' or p_recorder_role = 'auditor' or not group_has_role(p_group_id, 'auditor') then 'owner'
     else 'auditor'
   end;
 $$;
@@ -223,7 +224,7 @@ begin
 
   v_payer_role := member_group_role(v_c.group_id, v_payer);
   v_role       := member_group_role(v_c.group_id, p_verifier_id);
-  v_needed     := money_in_verify_role(v_c.group_id, v_payer_role);
+  v_needed     := money_in_verify_role(v_c.group_id, v_payer_role, member_group_role(v_c.group_id, v_c.recorded_by));
   if v_role is distinct from v_needed then
     raise exception 'This contribution must be verified by the %', role_label(v_needed);
   end if;
@@ -355,6 +356,41 @@ begin
 end;
 $$;
 
+-- Walk-in repayment: same rule as contributions — recorded by the person who'd
+-- confirm it, it's confirmed on recording.
+create or replace function record_walk_in_repayment(p_payment_id uuid, p_recorder_id uuid)
+returns loan_payments
+language plpgsql
+security definer
+as $$
+declare
+  v_p        loan_payments;
+  v_loan     loans;
+  v_borrower uuid;
+begin
+  select * into v_p from loan_payments where id = p_payment_id for update;
+  if not found then raise exception 'Repayment not found'; end if;
+  if v_p.status <> 'submitted'::loan_payment_status then raise exception 'Repayment is not pending'; end if;
+  if not v_p.is_walk_in or v_p.recorded_by is distinct from p_recorder_id then
+    raise exception 'Only a walk-in recorded by this officer can be confirmed on recording';
+  end if;
+
+  select * into v_loan from loans where id = v_p.loan_id;
+  select member_id into v_borrower from memberships where id = v_loan.membership_id;
+  if v_borrower <> p_recorder_id
+     and member_group_role(v_loan.group_id, p_recorder_id) = money_in_confirm_role(member_group_role(v_loan.group_id, v_borrower)) then
+    update loan_payments set
+      status       = 'confirmed'::loan_payment_status,
+      confirmed_by = p_recorder_id,
+      confirmed_at = now(),
+      updated_at   = now()
+    where id = p_payment_id
+    returning * into v_p;
+  end if;
+  return v_p;
+end;
+$$;
+
 -- The posting half of 0063's confirm_loan_repayment (same flat-rate split),
 -- now reached only after confirmation. New repayment entries point at the
 -- payment (source_type 'loan_payment'), not the loan.
@@ -393,7 +429,7 @@ begin
   if p_verifier_id = v_payment.recorded_by then raise exception 'You cannot verify a repayment you recorded'; end if;
   if p_verifier_id = v_payment.confirmed_by then raise exception 'The person who confirmed a repayment cannot also verify it'; end if;
 
-  v_needed := money_in_verify_role(v_loan.group_id, member_group_role(v_loan.group_id, v_borrower));
+  v_needed := money_in_verify_role(v_loan.group_id, member_group_role(v_loan.group_id, v_borrower), member_group_role(v_loan.group_id, v_payment.recorded_by));
   if member_group_role(v_loan.group_id, p_verifier_id) is distinct from v_needed then
     raise exception 'This repayment must be verified by the %', role_label(v_needed);
   end if;
