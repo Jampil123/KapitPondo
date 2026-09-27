@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { BellOff, CheckCircle2, XCircle, Bell, Settings } from 'lucide-react-native';
+import { BellOff, CheckCircle2, XCircle, Bell, Settings, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic } from '@/theme/colors';
 import { useNotifications } from '@/context/NotificationsContext';
 import type { Notification } from '@/api/notifications';
+import { routeForNotification } from '@/lib/notificationRoute';
 
 function iconFor(type: string) {
   if (type.endsWith('.verified')) return { Icon: CheckCircle2, color: '#3E8E66' };
@@ -23,7 +24,7 @@ function formatWhen(iso: string): string {
   return sameDay ? time : `${d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}, ${time}`;
 }
 
-function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
+function Row({ n, onPress, opens }: { n: Notification; onPress: () => void; opens: boolean }) {
   const { Icon, color } = iconFor(n.type);
   return (
     <Pressable
@@ -41,6 +42,7 @@ function Row({ n, onPress }: { n: Notification; onPress: () => void }) {
         {n.message ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{n.message}</Text> : null}
       </View>
       {!n.is_read ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: semantic.brand, marginTop: 6 }} /> : null}
+      {opens ? <ChevronRight size={16} color={semantic.textMuted} style={{ marginTop: 8 }} /> : null}
     </Pressable>
   );
 }
@@ -56,14 +58,10 @@ export default function Notifications() {
   );
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
-  // Cash an officer recorded for you opens the page where you can say it isn't right.
-  const WALK_IN_TYPES = ['contribution.walk_in_recorded', 'loan.walk_in_recorded'];
-
   async function onPressRow(n: Notification) {
-    if (!n.is_read) await markRead(n.id);
-    if (WALK_IN_TYPES.includes(n.type) && n.group_id) {
-      router.push({ pathname: '/(app)/[groupId]/recorded-for-me' as any, params: { groupId: n.group_id } });
-    }
+    if (!n.is_read) markRead(n.id);
+    const route = routeForNotification(n);
+    if (route) router.push(route as any);
   }
 
   async function onMarkAllRead() {
@@ -112,7 +110,7 @@ export default function Notifications() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }}>
           {notifications.map((n) => (
-            <Row key={n.id} n={n} onPress={() => onPressRow(n)} />
+            <Row key={n.id} n={n} onPress={() => onPressRow(n)} opens={!!routeForNotification(n)} />
           ))}
         </ScrollView>
       )}

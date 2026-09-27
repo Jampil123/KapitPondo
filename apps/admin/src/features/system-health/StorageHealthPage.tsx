@@ -283,7 +283,7 @@ export function StorageHealthPage() {
               <div>
                 <div className="text-sm font-semibold text-ink">{snapshot.orphanedFiles} orphaned files</div>
                 <p className="text-xs text-muted mt-0.5">
-                  {sweepNote ?? 'Uploaded but not referenced by any members/contributions/loan_payments/expenses row — informational, not a health signal'}
+                  {sweepNote ?? 'Uploaded but not referenced by any members/contributions/loan_payments row — informational, not a health signal'}
                 </p>
               </div>
             </div>

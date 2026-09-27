@@ -72,8 +72,7 @@ function statusForQueueDepth(v: number): HealthStatus {
   return v > 20 ? 'degraded' : 'operational';
 }
 
-// Oldest pending item age (hours) — real, from members.submitted_at (backfilled
-// from updated_at for pre-existing pending rows; see migration 0032).
+// Oldest pending item age (hours) — real, from identity_submissions.submitted_at.
 function statusForOldestAge(v: number): HealthStatus {
   return v > 24 ? 'degraded' : 'operational';
 }

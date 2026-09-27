@@ -18,8 +18,7 @@
  * HARD RULE (per the project's own design note): the AI never computes or
  * verifies money, and never writes anything. Every peso calculation and
  * every write in this app happens in system code (the approve_contribution /
- * auto_confirm_* / record_walkin_* SQL functions, the normal submit/approve
- * routes) — these two functions only read, extract, and draft.
+ * record_walkin_* SQL functions, the normal submit/approve routes) — these two functions only read, extract, and draft.
  */
 const { GoogleGenAI } = require('@google/genai');
 

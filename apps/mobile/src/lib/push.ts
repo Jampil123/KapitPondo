@@ -143,3 +143,29 @@ export async function unregisterPushToken(token: string | null) {
     // Ignore — the row will just go stale if this fails.
   }
 }
+
+/**
+ * Calls `onTap` with a push notification's data when the member taps it —
+ * including the tap that launched the app from closed. Returns an unsubscribe.
+ * A no-op where expo-notifications isn't available (Expo Go).
+ */
+export function onPushTap(onTap: (data: Record<string, unknown>) => void): () => void {
+  if (isExpoGo()) return () => {};
+  const Notifications = loadNotifications();
+  if (!Notifications) return () => {};
+  const handled = new Set<string>();
+  const handle = (response: import('expo-notifications').NotificationResponse | null) => {
+    if (!response) return;
+    const id = response.notification.request.identifier;
+    if (handled.has(id)) return;
+    handled.add(id);
+    onTap((response.notification.request.content.data ?? {}) as Record<string, unknown>);
+  };
+  try {
+    Notifications.getLastNotificationResponseAsync().then(handle).catch(() => {});
+    const sub = Notifications.addNotificationResponseReceivedListener(handle);
+    return () => sub.remove();
+  } catch {
+    return () => {};
+  }
+}

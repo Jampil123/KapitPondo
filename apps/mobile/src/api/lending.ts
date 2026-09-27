@@ -26,7 +26,7 @@ import type { ProofReading } from './contributions';
 export type LoanStatus = 'pending' | 'approved' | 'active' | 'paid' | 'rejected' | 'cancelled' | 'defaulted';
 /** 'confirmed' = money confirmed as received, waiting for the verification that posts it (migration 0075). */
 export type LoanPaymentStatus = 'scheduled' | 'submitted' | 'confirmed' | 'approved' | 'paid' | 'late' | 'partial' | 'rejected';
-export type PaymentMethod = 'paymongo' | 'gcash' | 'cash' | 'bank_transfer' | 'other';
+export type PaymentMethod = 'gcash' | 'cash' | 'bank_transfer' | 'other';
 
 export interface Loan {
   id: string;
@@ -129,21 +129,10 @@ export interface LoanPayment {
   is_walk_in: boolean;
   /** Raw member id of whoever recorded this — the borrower for a self-submission, or the officer for a walk-in. Null-safe: real column. */
   recorded_by: string | null;
-  /** Who recorded this repayment (the member who submitted it, or the officer who recorded it directly). Null for gateway-auto-confirmed payments — see auto_confirmed. */
+  /** Who recorded this repayment (the member who submitted it, or the officer who recorded it directly). */
   recorder: { full_name: string } | null;
-  /** The different officer who confirmed/verified it (segregation of duties) — null while 'submitted', and null for gateway-auto-confirmed payments. */
+  /** The different officer who confirmed/verified it (segregation of duties) — null while 'submitted'. */
   verifier: { full_name: string } | null;
-  /**
-   * Payment gateway fields — FUTURE PLAN, not live (see
-   * services/api/src/modules/payments). Always null/false today; once a
-   * real provider is wired up, a repayment paid through it arrives with
-   * auto_confirmed: true and no recorder/verifier, since the gateway's own
-   * signed webhook confirmation stands in for the human recorder/approver
-   * pair — and for the reference number, which no longer needs typing in.
-   */
-  gateway_provider: string | null;
-  gateway_reference: string | null;
-  auto_confirmed: boolean;
   /** Step 1 of 2 (migration 0075): who confirmed the repayment arrived. */
   confirmed_by?: string | null;
   confirmed_at?: string | null;

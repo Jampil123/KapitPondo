@@ -26,7 +26,8 @@ import { useAuth } from './AuthContext';
 import {
   listNotifications, markNotificationRead, markAllNotificationsRead, type Notification,
 } from '../api/notifications';
-import { registerForPushNotificationsAsync, unregisterPushToken } from '../lib/push';
+import { registerForPushNotificationsAsync, unregisterPushToken, onPushTap } from '../lib/push';
+import { routeForNotification } from '../lib/notificationRoute';
 
 interface NotificationsContextValue {
   notifications: Notification[];
@@ -147,6 +148,18 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Tapping a phone push opens the same screen as tapping the row in the list.
+  useEffect(() => {
+    if (!member) return;
+    return onPushTap((data) => {
+      const type = typeof data.type === 'string' ? data.type : null;
+      if (!type) return;
+      if (typeof data.notification_id === 'string') markRead(data.notification_id);
+      const route = routeForNotification({ type, group_id: typeof data.group_id === 'string' ? data.group_id : null, data });
+      router.push((route ?? { pathname: '/(app)/notifications' }) as any);
+    });
+  }, [member, markRead, router]);
+
   const markAllRead = useCallback(async () => {
     try {
       await markAllNotificationsRead();
@@ -172,7 +185,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           ]}
         >
           <Pressable
-            onPress={() => { dismissToast(); router.push('/(app)/notifications' as any); }}
+            onPress={() => {
+              dismissToast();
+              if (!toast.is_read) markRead(toast.id);
+              router.push((routeForNotification(toast) ?? { pathname: '/(app)/notifications' }) as any);
+            }}
             style={[
               { backgroundColor: semantic.surface, borderRadius: 14, padding: 14, flexDirection: 'row', gap: 10 },
               shadowToken.card,

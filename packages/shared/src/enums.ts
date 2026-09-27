@@ -13,6 +13,7 @@ export const VerificationStatus = {
   UNVERIFIED: 'unverified',
   PENDING: 'pending',
   VERIFIED: 'verified',
+  RESUBMISSION_REQUIRED: 'resubmission_required',
   REJECTED: 'rejected',
 } as const;
 export type VerificationStatus = (typeof VerificationStatus)[keyof typeof VerificationStatus];
@@ -58,7 +59,6 @@ export const DistributionStatus = {
 export type DistributionStatus = (typeof DistributionStatus)[keyof typeof DistributionStatus];
 
 export const PaymentMethod = {
-  PAYMONGO: 'paymongo',
   GCASH: 'gcash',
   CASH: 'cash',
   BANK_TRANSFER: 'bank_transfer',

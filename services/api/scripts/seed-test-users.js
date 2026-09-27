@@ -58,13 +58,21 @@ async function upsertAuthUser({ email, password }) {
   throw createErr;
 }
 
+// Admin access lives in platform_admins (the single source of truth).
+async function setAdmin(authUser, isAdmin) {
+  const { error } = isAdmin
+    ? await supabase.from('platform_admins').upsert({ user_id: authUser.id, email: authUser.email, active: true })
+    : await supabase.from('platform_admins').delete().eq('user_id', authUser.id);
+  if (error) throw new Error(`Set admin: ${error.message}`);
+}
+
 // ── Ensure a member row exists linked to this auth user ────
 
 async function upsertMember(authUser, { fullName, isAdmin }) {
   // Check for existing row
   const { data: existing, error: checkErr } = await supabase
     .from('members')
-    .select('id, auth_id, email, is_system_admin')
+    .select('id, auth_id, email')
     .eq('auth_id', authUser.id)
     .maybeSingle();
 
@@ -72,22 +80,20 @@ async function upsertMember(authUser, { fullName, isAdmin }) {
 
   if (existing) {
     // Always reset to a clean state so the e2e test can run from scratch
-    const patch = {
-      is_system_admin: isAdmin ?? false,
-      full_name: fullName,
-    };
+    const patch = { full_name: fullName };
     if (!isAdmin) {
       // Reset non-admin members to unverified so approval steps can be re-tested
       patch.verification_status = 'unverified';
-      patch.id_document_url = null;
-      patch.verified_by = null;
       patch.verified_at = null;
+      const { error: subErr } = await supabase.from('identity_submissions').delete().eq('member_id', existing.id);
+      if (subErr) throw new Error(`Clear submissions: ${subErr.message}`);
     }
     const { error: patchErr } = await supabase
       .from('members')
       .update(patch)
       .eq('id', existing.id);
     if (patchErr) throw new Error(`Patch member: ${patchErr.message}`);
+    await setAdmin(authUser, isAdmin);
     console.log(`  Reset member row: ${authUser.email} → member.id=${existing.id} (verification_status → ${patch.verification_status ?? 'unchanged'})`);
     return existing;
   }
@@ -100,13 +106,13 @@ async function upsertMember(authUser, { fullName, isAdmin }) {
       email: authUser.email,
       full_name: fullName,
       verification_status: 'unverified',
-      is_system_admin: isAdmin ?? false,
     })
-    .select('id, auth_id, email, is_system_admin')
+    .select('id, auth_id, email')
     .single();
 
   if (insertErr) throw new Error(`Insert member: ${insertErr.message}`);
   console.log(`  Created member row: ${authUser.email} → member.id=${inserted.id}`);
+  await setAdmin(authUser, isAdmin);
   return inserted;
 }
 

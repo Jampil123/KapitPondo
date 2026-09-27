@@ -1,10 +1,10 @@
 /**
  * apps/admin/src/features/verifications/VerificationsPage.tsx
- * The core Sysadmin workflow: queue (Pending/Verified/Rejected) + a detail
+ * The core Sysadmin workflow: queue (Pending/Verified/Requires Re-submission/Rejected) + a detail
  * drawer showing the submitted ID (via signed URL) with approve / reject.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Mail, Eye, Check, X, ShieldCheck, Users } from 'lucide-react';
+import { Search, Mail, Eye, Check, X, ShieldCheck, Users, RotateCcw } from 'lucide-react';
 import type { AccountStatus } from '@kapitpondo/shared';
 import { AccountBadge } from '../../components/StatusBadge';
 import { api } from '../../lib/api';
@@ -36,8 +36,12 @@ type Detail = { member: Applicant };
 const TABS: { key: AccountStatus; label: string }[] = [
   { key: 'pending', label: 'Pending' },
   { key: 'verified', label: 'Verified' },
+  { key: 'resubmission_required', label: 'Requires Re-submission' },
   { key: 'rejected', label: 'Rejected' },
 ];
+
+// Statuses that carry a reason for the member.
+const HAS_REASON: AccountStatus[] = ['resubmission_required', 'rejected'];
 
 function initials(n?: string) { return (n ?? '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'; }
 function kv(label: string, value?: string) {
@@ -55,7 +59,7 @@ export function VerificationsPage() {
   const [view, setView] = useState<View>('verification');
   const [tab, setTab] = useState<AccountStatus>('pending');
   const [rows, setRows] = useState<Applicant[]>([]);
-  const [counts, setCounts] = useState<Record<AccountStatus, number | null>>({ unverified: null, pending: null, verified: null, rejected: null });
+  const [counts, setCounts] = useState<Record<AccountStatus, number | null>>({ unverified: null, pending: null, verified: null, resubmission_required: null, rejected: null });
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -159,7 +163,7 @@ export function VerificationsPage() {
                   {kv('Registered', u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH') : undefined)}
                   {kv('ID type', u.id_type)}
                   {kv('Location', [u.city, u.province].filter(Boolean).join(', ') || undefined)}
-                  {u.verification_status === 'rejected' && <div className="col-span-2">{kv('Reason', u.verification_rejection_reason)}</div>}
+                  {HAS_REASON.includes(u.verification_status) && <div className="col-span-2">{kv('Reason', u.verification_rejection_reason)}</div>}
                 </div>
               </button>
               {u.verification_status === 'pending' && (
@@ -181,7 +185,8 @@ export function VerificationsPage() {
 
 function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () => void; onDone: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [rejecting, setRejecting] = useState(false);
+  // Which "not verified" outcome the admin is writing a reason for.
+  const [decision, setDecision] = useState<'resubmit' | 'reject' | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -198,10 +203,11 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
     try { await api.post(`/admin/verifications/${id}/approve`); onDone(); }
     catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
-  async function reject() {
-    if (!reason.trim()) return setErr('A rejection reason is required.');
+  async function decide() {
+    if (!reason.trim()) return setErr('A reason is required.');
     setBusy(true); setErr(null);
-    try { await api.post(`/admin/verifications/${id}/reject`, { reason: reason.trim() }); onDone(); }
+    const path = decision === 'resubmit' ? 'request-resubmission' : 'reject';
+    try { await api.post(`/admin/verifications/${id}/${path}`, { reason: reason.trim() }); onDone(); }
     catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -236,7 +242,7 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                 {kv('Sex', a?.sex ? a.sex.charAt(0).toUpperCase() + a.sex.slice(1) : undefined)}
                 {kv('ID number', a?.id_number)}
                 <div className="col-span-2">{kv('Location', [a?.city, a?.province].filter(Boolean).join(', ') || undefined)}</div>
-                {mode === 'rejected' && <div className="col-span-3">{kv('Reason', a?.verification_rejection_reason)}</div>}
+                {HAS_REASON.includes(mode) && <div className="col-span-3">{kv('Reason', a?.verification_rejection_reason)}</div>}
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted photos</div>
@@ -322,13 +328,17 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
             </div>
 
             {mode === 'pending' && (
-              rejecting ? (
+              decision ? (
                 <div className="p-6 border-t border-line space-y-3">
-                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Reason for rejection…"
+                  <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+                            placeholder={decision === 'resubmit' ? 'What should the member fix? (e.g. photo is blurry)' : 'Reason for rejection…'}
                             className="w-full rounded-xl bg-surface-alt p-3 text-sm text-ink outline-none focus:ring-2 focus:ring-brand" />
                   <div className="flex gap-3">
-                    <button onClick={() => setRejecting(false)} className="flex-1 rounded-lg border border-line py-2.5 text-sm font-semibold text-secondary">Cancel</button>
-                    <button onClick={reject} disabled={busy} className="flex-1 rounded-lg bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-60">Confirm reject</button>
+                    <button onClick={() => setDecision(null)} className="flex-1 rounded-lg border border-line py-2.5 text-sm font-semibold text-secondary">Cancel</button>
+                    <button onClick={decide} disabled={busy}
+                            className={`flex-1 rounded-lg py-2.5 text-sm font-semibold text-white disabled:opacity-60 ${decision === 'resubmit' ? 'bg-brand' : 'bg-danger'}`}>
+                      {decision === 'resubmit' ? 'Request re-submission' : 'Reject — final'}
+                    </button>
                   </div>
                 </div>
               ) : (
@@ -336,7 +346,10 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                   <button onClick={approve} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-3 text-sm font-semibold text-white disabled:opacity-60">
                     <Check size={16} /> Verify account
                   </button>
-                  <button onClick={() => setRejecting(true)} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-line py-3 text-sm font-semibold text-danger">
+                  <button onClick={() => setDecision('resubmit')} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-line py-3 text-sm font-semibold text-brand-dark">
+                    <RotateCcw size={16} /> Request re-submission
+                  </button>
+                  <button onClick={() => setDecision('reject')} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-line py-3 text-sm font-semibold text-danger">
                     <X size={16} /> Reject
                   </button>
                 </div>

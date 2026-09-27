@@ -1,4 +1,4 @@
-import { View, ScrollView, Modal, Pressable } from 'react-native';
+import { View, ScrollView, Modal, Pressable, StyleSheet } from 'react-native';
 import { X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic } from '../../theme/colors';
@@ -7,11 +7,10 @@ import { PRIVACY_POLICY_TITLE, PRIVACY_POLICY_EFFECTIVE_DATE, PRIVACY_POLICY_INT
 export function PrivacyPolicyModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable
-        style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }}
-        onPress={onClose}
-      >
-        <Pressable
+      <View style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }}>
+        {/* Backdrop sits behind the sheet, not around it, so it never competes with the ScrollView for touches. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View
           style={{
             backgroundColor: semantic.surface,
             borderTopLeftRadius: 22,
@@ -44,7 +43,7 @@ export function PrivacyPolicyModal({ visible, onClose }: { visible: boolean; onC
               <X size={17} color={semantic.textSecondary} />
             </Pressable>
           </View>
-          <ScrollView style={{ flex: 1, marginTop: 14 }} showsVerticalScrollIndicator={false}>
+          <ScrollView style={{ flex: 1, marginTop: 14 }} contentContainerStyle={{ paddingBottom: 8 }}>
             <Text variant="bodySmall" color="secondary" style={{ marginBottom: 16 }}>{PRIVACY_POLICY_INTRO}</Text>
             {PRIVACY_POLICY_SECTIONS.map((section) => (
               <View key={section.heading} style={{ marginBottom: 16 }}>
@@ -53,8 +52,8 @@ export function PrivacyPolicyModal({ visible, onClose }: { visible: boolean; onC
               </View>
             ))}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }

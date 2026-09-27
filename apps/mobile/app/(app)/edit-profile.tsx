@@ -10,7 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
-import { semantic, shadowToken, intent } from '@/theme/colors';
+import { semantic, intent } from '@/theme/colors';
 import { updateProfile } from '@/api/members';
 import { submitProfileUpdateRequest, listMyProfileUpdateRequests, type ProfileUpdateField, type ProfileUpdateReason, type ProfileUpdateRequest } from '@/api/profileUpdateRequests';
 import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
@@ -18,16 +18,21 @@ import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employme
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
 import { uploadImage, uploadAvatar } from '@/lib/upload';
+import { AddressPickerSheet } from '@/components/ui/AddressPickerSheet';
+import { loadProvinces, loadCities, loadBarangays } from '@/api/address';
+import { REGIONS, regionCode } from '@/constants/phAddress';
 
 const BAND_TOP = '#4C7C90';
+const HEADER_STYLE = { position: 'absolute', top: 0, left: 0, right: 0, alignItems: 'center', paddingTop: 4, paddingBottom: 30 } as const;
 
 type PickerOption = { label: string; value: string };
+type AddressKey = 'region' | 'province' | 'city' | 'barangay';
 
 type FieldConfig = {
   key: ProfileUpdateField;
   label: string;
   placeholder?: string;
-  kind: 'text' | 'picker';
+  kind: 'text' | 'picker' | 'address';
   options?: PickerOption[];
 };
 
@@ -40,10 +45,10 @@ const PERSONAL_FIELDS: FieldConfig[] = [
 ];
 
 const ADDRESS_FIELDS: FieldConfig[] = [
-  { key: 'region', label: 'Region', placeholder: 'Region IV-A (CALABARZON)', kind: 'text' },
-  { key: 'province', label: 'Province', placeholder: 'Laguna', kind: 'text' },
-  { key: 'city', label: 'City / Municipality', placeholder: 'Calamba', kind: 'text' },
-  { key: 'barangay', label: 'Barangay', placeholder: 'Barangay Halang', kind: 'text' },
+  { key: 'region', label: 'Region', kind: 'address' },
+  { key: 'province', label: 'Province', kind: 'address' },
+  { key: 'city', label: 'City / Municipality', kind: 'address' },
+  { key: 'barangay', label: 'Barangay', kind: 'address' },
   { key: 'street_address', label: 'Street Address', placeholder: 'House No., Street, Subdivision', kind: 'text' },
   { key: 'zip_code', label: 'Zip Code', placeholder: '4027', kind: 'text' },
 ];
@@ -90,12 +95,12 @@ function PickerSheet({
             <Text variant="h3" style={{ flex: 1, fontSize: 17 }}>{title}</Text>
             <Pressable onPress={onClose} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
           </View>
-          <View style={{ gap: 8 }}>
-            {options.map((t) => (
+          <View>
+            {options.map((t, i) => (
               <Pressable
                 key={t.value}
                 onPress={() => onSelect(t.value)}
-                style={[{ flexDirection: 'row', alignItems: 'center', backgroundColor: semantic.background, borderRadius: 14, padding: 14 }, shadowToken.card]}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderTopWidth: i > 0 ? 1 : 0, borderTopColor: semantic.border }}
               >
                 <Text variant="label" style={{ flex: 1 }}>{t.label}</Text>
                 {selected === t.value ? <Check size={18} color={semantic.brandDark} /> : null}
@@ -131,6 +136,7 @@ export default function EditProfile() {
   const [employmentStatus, setEmploymentStatus] = useState<string | null>(member?.employment_status ?? null);
   const [employmentPickerOpen, setEmploymentPickerOpen] = useState(false);
   const [occupation, setOccupation] = useState(member?.occupation ?? '');
+  const [addressPicker, setAddressPicker] = useState<AddressKey | null>(null);
   const [saving, setSaving] = useState(false);
   const canSave = !!firstName.trim() && !!lastName.trim();
 
@@ -147,6 +153,7 @@ export default function EditProfile() {
 
   // ---- profile photo (cosmetic, not KYC data — stays editable regardless of verification status) ----
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [bandHeight, setBandHeight] = useState(170);
 
   async function pickAvatar() {
     if (!member) return;
@@ -203,7 +210,43 @@ export default function EditProfile() {
     }
   }
 
+  // Region → province → city → barangay: each list depends on the one before,
+  // and changing a level clears the levels under it.
+  const address: Record<AddressKey, { value: string; title: string; needs: string | null; getOptions: () => Promise<PickerOption[]> }> = {
+    region: { value: region, title: 'Select region', needs: null, getOptions: async () => REGIONS },
+    province: { value: province, title: 'Select province', needs: null, getOptions: () => loadProvinces(regionCode(region)) },
+    city: { value: city, title: 'Select city / municipality', needs: province ? null : 'province', getOptions: () => loadCities(province) },
+    barangay: { value: barangay, title: 'Select barangay', needs: city ? null : 'city', getOptions: () => loadBarangays(province, city) },
+  };
+
+  function selectAddress(key: AddressKey, value: string) {
+    setAddressPicker(null);
+    if (address[key].value === value) return;
+    if (key === 'region') { setRegion(value); setProvince(''); setCity(''); setBarangay(''); }
+    if (key === 'province') { setProvince(value); setCity(''); setBarangay(''); }
+    if (key === 'city') { setCity(value); setBarangay(''); }
+    if (key === 'barangay') setBarangay(value);
+  }
+
   function renderEditableField(f: FieldConfig) {
+    if (f.kind === 'address') {
+      const a = address[f.key as AddressKey];
+      return (
+        <View key={f.key} style={{ marginBottom: 15 }}>
+          <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>{f.label}</Text>
+          <Pressable
+            onPress={() => setAddressPicker(f.key as AddressKey)}
+            disabled={!!a.needs}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 14, opacity: a.needs ? 0.55 : 1 }}
+          >
+            <Text variant="body" style={{ flex: 1, color: a.value ? semantic.textPrimary : semantic.textMuted }} numberOfLines={1}>
+              {a.value || (a.needs ? `Select ${a.needs} first` : `Select ${f.label.toLowerCase()}`)}
+            </Text>
+            <ChevronDown size={18} color={semantic.textMuted} />
+          </Pressable>
+        </View>
+      );
+    }
     if (f.kind === 'picker') {
       const value = f.key === 'source_of_funds' ? sourceOfFunds : employmentStatus;
       const setOpen = f.key === 'source_of_funds' ? setSourcePickerOpen : setEmploymentPickerOpen;
@@ -225,8 +268,7 @@ export default function EditProfile() {
     const stateMap: Record<string, [string, (v: string) => void]> = {
       first_name: [firstName, setFirstName], middle_name: [middleName, setMiddleName], last_name: [lastName, setLastName],
       birthday: [birthday, setBirthday], nationality: [nationality, setNationality],
-      region: [region, setRegion], province: [province, setProvince], city: [city, setCity],
-      barangay: [barangay, setBarangay], street_address: [streetAddress, setStreetAddress], zip_code: [zipCode, setZipCode],
+      street_address: [streetAddress, setStreetAddress], zip_code: [zipCode, setZipCode],
       occupation: [occupation, setOccupation],
     };
     const [value, setValue] = stateMap[f.key];
@@ -258,7 +300,7 @@ export default function EditProfile() {
       <View style={{ marginBottom: 18 }}>
         <SectionLabel>{title}</SectionLabel>
         {isVerified ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, paddingHorizontal: 16 }, shadowToken.card]}>
+          <View>
             {fields.map((f, i) => (
               <View key={f.key} style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: semantic.border }}>
                 {renderLockedField(f)}
@@ -266,11 +308,36 @@ export default function EditProfile() {
             ))}
           </View>
         ) : (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, shadowToken.card]}>
-            {fields.map(renderEditableField)}
-          </View>
+          <View>{fields.map(renderEditableField)}</View>
         )}
       </View>
+    );
+  }
+
+  // Rendered twice: the visible band sits BEHIND the ScrollView so the sheet's
+  // rounded corners tuck over it (same as the profile page), and an invisible
+  // copy on top catches taps on the photo, which the ScrollView would swallow.
+  function renderHeaderContent() {
+    return (
+      <>
+        <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
+          <Avatar name={member?.full_name} uri={member?.avatar_url} size={92} />
+          <View
+            style={{
+              position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15,
+              backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+              borderWidth: 2, borderColor: BAND_TOP,
+            }}
+          >
+            {uploadingAvatar ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <Camera size={14} color={semantic.brandDark} />}
+          </View>
+        </Pressable>
+        <Pressable onPress={pickAvatar} disabled={uploadingAvatar} hitSlop={8} style={{ marginTop: 12 }}>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: 'rgba(255,255,255,0.92)' }}>
+            {uploadingAvatar ? 'Uploading…' : 'Change photo'}
+          </Text>
+        </Pressable>
+      </>
     );
   }
 
@@ -279,76 +346,69 @@ export default function EditProfile() {
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
         <AppBar title="Edit Profile" backgroundColor={BAND_TOP} tintColor="#fff" />
 
-        <View style={{ alignItems: 'center', paddingTop: 4, paddingBottom: 22 }}>
-          <Pressable onPress={pickAvatar} disabled={uploadingAvatar}>
-            <Avatar name={member?.full_name} uri={member?.avatar_url} size={92} />
-            <View
-              style={{
-                position: 'absolute', bottom: 0, right: 0, width: 30, height: 30, borderRadius: 15,
-                backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-                borderWidth: 2, borderColor: BAND_TOP,
-              }}
-            >
-              {uploadingAvatar ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <Camera size={14} color={semantic.brandDark} />}
-            </View>
-          </Pressable>
-          <Pressable onPress={pickAvatar} disabled={uploadingAvatar} hitSlop={8} style={{ marginTop: 12 }}>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: 'rgba(255,255,255,0.92)' }}>
-              {uploadingAvatar ? 'Uploading…' : 'Change photo'}
-            </Text>
-          </Pressable>
-        </View>
-
-        <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ padding: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-          {isVerified ? (
-            <>
-              <View style={{ flexDirection: 'row', gap: 10, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 13, marginBottom: 18 }}>
-                <Lock size={16} color={intent.warning.text} style={{ marginTop: 1 }} />
-                <Text variant="caption" style={{ color: intent.warning.text, flex: 1, lineHeight: 18 }}>
-                  Verified information is locked. Tap a field below to request a change.
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => router.push('/(app)/my-update-requests' as any)}
-                style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surface, borderRadius: 16, padding: 14, marginBottom: 18 }, shadowToken.card]}
-              >
-                <View style={{ flex: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13.5 }}>My update requests</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                    {pendingCount > 0 ? `${pendingCount} awaiting review` : 'Track status and history'}
-                  </Text>
-                </View>
-                <ChevronRight size={18} color={semantic.textMuted} />
-              </Pressable>
-            </>
-          ) : null}
-
-          {renderSection('Personal Information', PERSONAL_FIELDS)}
-
-          <SectionLabel>Contact Information</SectionLabel>
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, marginBottom: 18, gap: 4 }, shadowToken.card]}>
-            <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Phone size={16} color={semantic.textMuted} />
-              <Text variant="body" style={{ flexShrink: 1 }}>{member?.phone ? formatPH(member.phone) : '—'}</Text>
-            </View>
-            <Text variant="caption" color="secondary" style={{ marginBottom: 10 }}>Cannot be changed</Text>
-
-            <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Email Address</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Mail size={16} color={semantic.textMuted} />
-              <Text variant="body" style={{ flexShrink: 1 }} numberOfLines={1}>{member?.email || '—'}</Text>
-            </View>
-            <Text variant="caption" color="secondary">Manage from the Email Address screen</Text>
+        <View style={{ flex: 1 }}>
+          <View onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)} style={HEADER_STYLE}>
+            {renderHeaderContent()}
           </View>
 
-          {renderSection('Residential Address', ADDRESS_FIELDS)}
-          {renderSection('Financial Information', FINANCIAL_FIELDS)}
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+            <View style={{ height: bandHeight }} />
+            <View style={{ flex: 1, backgroundColor: semantic.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -18, padding: 20, paddingBottom: 40 }}>
 
-          {!isVerified ? <Button label="Save Changes" onPress={onSave} loading={saving} disabled={!canSave} /> : null}
-        </ScrollView>
+              {isVerified ? (
+                <>
+                  <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
+                    <Lock size={14} color={intent.warning.text} style={{ marginTop: 2 }} />
+                    <Text variant="caption" style={{ color: intent.warning.text, flex: 1, lineHeight: 18 }}>
+                      Verified information is locked. Tap a field below to request a change.
+                    </Text>
+                  </View>
+
+                  <Pressable
+                    onPress={() => router.push('/(app)/my-update-requests' as any)}
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 13, borderTopWidth: 1, borderBottomWidth: 1, borderColor: semantic.border, marginBottom: 22 }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text variant="label" style={{ fontSize: 13.5 }}>My update requests</Text>
+                      <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
+                        {pendingCount > 0 ? `${pendingCount} awaiting review` : 'Track status and history'}
+                      </Text>
+                    </View>
+                    <ChevronRight size={18} color={semantic.textMuted} />
+                  </Pressable>
+                </>
+              ) : null}
+
+              {renderSection('Personal Information', PERSONAL_FIELDS)}
+
+              <SectionLabel>Contact Information</SectionLabel>
+              <View style={{ marginBottom: 18, gap: 4 }}>
+                <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Phone size={16} color={semantic.textMuted} />
+                  <Text variant="body" style={{ flexShrink: 1 }}>{member?.phone ? formatPH(member.phone) : '—'}</Text>
+                </View>
+                <Text variant="caption" color="secondary" style={{ marginBottom: 10 }}>Cannot be changed</Text>
+
+                <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Email Address</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Mail size={16} color={semantic.textMuted} />
+                  <Text variant="body" style={{ flexShrink: 1 }} numberOfLines={1}>{member?.email || '—'}</Text>
+                </View>
+                <Text variant="caption" color="secondary">Manage from the Email Address screen</Text>
+              </View>
+
+              {renderSection('Residential Address', ADDRESS_FIELDS)}
+              {renderSection('Financial Information', FINANCIAL_FIELDS)}
+
+              {!isVerified ? <Button label="Save Changes" onPress={onSave} loading={saving} disabled={!canSave} /> : null}
+            </View>
+          </ScrollView>
+
+          <View pointerEvents="box-none" style={[HEADER_STYLE, { opacity: 0 }]}>
+            {renderHeaderContent()}
+          </View>
+        </View>
       </SafeAreaView>
 
       <PickerSheet
@@ -367,6 +427,15 @@ export default function EditProfile() {
         selected={employmentStatus}
         onSelect={(v) => { setEmploymentStatus(v); setEmploymentPickerOpen(false); }}
         onClose={() => setEmploymentPickerOpen(false)}
+        insets={insets}
+      />
+      <AddressPickerSheet
+        visible={!!addressPicker}
+        title={addressPicker ? address[addressPicker].title : ''}
+        getOptions={addressPicker ? address[addressPicker].getOptions : async () => []}
+        selected={addressPicker ? address[addressPicker].value : null}
+        onSelect={(v) => addressPicker && selectAddress(addressPicker, v)}
+        onClose={() => setAddressPicker(null)}
         insets={insets}
       />
 

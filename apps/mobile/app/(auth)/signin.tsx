@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { View, ScrollView } from 'react-native';
-import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Phone, Lock } from 'lucide-react-native';
@@ -8,11 +7,21 @@ import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader, LogoMark, Wordmark } from '@/components/shared/ScreenHeader';
-import { semantic } from '@/theme/colors';
+import { semantic, intent } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 import { recordCurrentLogin } from '@/lib/loginActivity';
+import { toE164PH } from '@/lib/phone';
 
 const PREFIX = '+63 ';
+
+// Plain-language version of the sign-in errors Supabase and the network give.
+function signInMessage(e: unknown): string {
+  const msg = (e as Error)?.message ?? '';
+  if (/invalid login credentials/i.test(msg)) return 'Incorrect phone number or password.';
+  if (/not confirmed/i.test(msg)) return "This number isn't verified yet. Sign up again to get a new code.";
+  if (/network|fetch|timed? ?out/i.test(msg)) return "Can't reach the server. Check your connection and try again.";
+  return msg || 'Sign in failed. Please try again.';
+}
 
 function formatPhone(raw: string): string {
   if (!raw.startsWith('+63')) return PREFIX;
@@ -30,18 +39,22 @@ export default function SignIn() {
   const [phone, setPhone] = useState(PREFIX);
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const canSubmit = phone.trim() && password.length > 0;
+  const [errors, setErrors] = useState<{ phone?: string; password?: string; form?: string }>({});
 
   async function onSignIn() {
-    if (!canSubmit) return;
+    const next = {
+      phone: toE164PH(phone) ? undefined : 'Enter a valid mobile number, e.g. +63 917 123 4567.',
+      password: password ? undefined : 'Enter your password.',
+    };
+    setErrors(next);
+    if (next.phone || next.password) return;
     setLoading(true);
     try {
       await signInWithPassword(phone, password);
       recordCurrentLogin();
       router.replace('/(app)/groups' as any);
     } catch (e) {
-      Alert.alert('Sign in failed', (e as Error).message);
+      setErrors({ form: signInMessage(e) });
     } finally {
       setLoading(false);
     }
@@ -63,14 +76,16 @@ export default function SignIn() {
           placeholder="+63 900 000 0000"
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={(t) => setPhone(formatPhone(t))}
+          onChangeText={(t) => { setPhone(formatPhone(t)); setErrors((x) => ({ ...x, phone: undefined, form: undefined })); }}
+          error={errors.phone}
           leading={<Phone size={18} color={semantic.textMuted} />}
         />
         <PasswordField
           label="Password"
           placeholder="Enter your password"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(t) => { setPassword(t); setErrors((x) => ({ ...x, password: undefined, form: undefined })); }}
+          error={errors.password}
           leading={<Lock size={18} color={semantic.textMuted} />}
         />
 
@@ -80,7 +95,13 @@ export default function SignIn() {
           </Text>
         </View>
 
-        <Button label="Sign In" onPress={onSignIn} loading={loading} disabled={!canSubmit} />
+        {errors.form ? (
+          <View style={{ backgroundColor: intent.danger.soft, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 12, marginBottom: 12 }}>
+            <Text variant="caption" style={{ color: intent.danger.text }}>{errors.form}</Text>
+          </View>
+        ) : null}
+
+        <Button label="Sign In" onPress={onSignIn} loading={loading} />
       </ScrollView>
     </SafeAreaView>
   );

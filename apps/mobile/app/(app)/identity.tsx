@@ -20,8 +20,7 @@ import { submitIdentity, extractIdFields } from '@/api/members';
 import { idTypeLabel } from '@/constants/idTypes';
 import { SOURCE_OF_FUNDS, sourceOfFundsLabel } from '@/constants/sourceOfFunds';
 import { EMPLOYMENT_STATUSES, employmentStatusLabel } from '@/constants/employmentStatus';
-import { searchProvinces, searchCities, searchBarangays } from '@/constants/phAddress';
-import { fetchProvinces, fetchCities, fetchBarangays, checkZip, type AddressOption } from '@/api/address';
+import { loadProvinces, loadCities, loadBarangays, checkZip } from '@/api/address';
 import { SEX_OPTIONS, sexLabel } from '@/constants/sex';
 import { useAuth } from '@/context/AuthContext';
 import { formatPH } from '@/lib/phone';
@@ -137,28 +136,6 @@ function BirthdayField({ label, value, onChange }: { label: string; value: strin
       ) : null}
     </View>
   );
-}
-
-async function loadProvinces(): Promise<AddressOption[]> {
-  try {
-    return await fetchProvinces();
-  } catch {
-    return searchProvinces('');
-  }
-}
-async function loadCities(province: string): Promise<AddressOption[]> {
-  try {
-    return await fetchCities(province);
-  } catch {
-    return searchCities(province, '');
-  }
-}
-async function loadBarangays(province: string, city: string): Promise<AddressOption[]> {
-  try {
-    return await fetchBarangays(province, city);
-  } catch {
-    return searchBarangays(city, '');
-  }
 }
 
 export default function Identity() {
@@ -731,7 +708,7 @@ export default function Identity() {
       <AddressPickerSheet
         visible={provincePickerOpen}
         title="Select province"
-        getOptions={loadProvinces}
+        getOptions={() => loadProvinces()}
         selected={province}
         onSelect={(v) => { setProvince(v); setCity(''); setBarangay(''); setProvincePickerOpen(false); }}
         onClose={() => setProvincePickerOpen(false)}

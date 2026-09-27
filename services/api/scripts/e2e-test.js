@@ -3,7 +3,7 @@
 //
 // Prerequisites (do this once before running):
 //   1. Pre-create 3 Supabase Auth users and fill in CONFIG below.
-//   2. Set is_system_admin = true on the Admin's row in the `members` table.
+//   2. Add the Admin to `platform_admins` (seed-test-users.js does this).
 //   3. Start the backend:  node services/api/server.ts  (or however you run it)
 //   4. Run:  node services/api/scripts/e2e-test.js
 //
@@ -294,26 +294,6 @@ async function main() {
       "(segregation: recorder B ≠ approver A)"
     );
   } catch (err) { bail("B record loan repayment (A as approver)", err); }
-
-  // ── Step 11: B (treasurer) records an expense; A (owner) approves ──────────
-
-  try {
-    const { expense } = await api('POST', `/api/groups/${group.id}/expenses`, bTok, {
-      amount: 50,
-      category: 'supplies',
-      description: 'E2E office supplies',
-    });
-    console.log(`  Expense ID: ${expense.id}`);
-
-    // A is owner, and A ≠ B (the recorder) → segregation satisfied
-    await api(
-      'POST', `/api/groups/${group.id}/expenses/${expense.id}/approve`, aTok
-    );
-    pass(
-      "Member B (treasurer) recorded expense; Member A (owner) approved it " +
-      "(segregation: recorder B ≠ approver A)"
-    );
-  } catch (err) { bail("B record expense, A (owner) approve", err); }
 
   // ── Step 12: Owner fetches group summary report and member balances ─────────
 

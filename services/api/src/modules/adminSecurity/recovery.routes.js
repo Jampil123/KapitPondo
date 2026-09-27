@@ -36,15 +36,23 @@ function recordFailure(key) {
   }
 }
 
+// The member row for an active platform admin with this email, or null.
 async function findAdminMember(email) {
   const { data, error } = await supabaseAdmin
     .from('members')
-    .select('id, auth_id, email, is_system_admin')
+    .select('id, auth_id, email')
     .eq('email', email)
-    .eq('is_system_admin', true)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  if (!data) return null;
+  const { data: admin, error: adminErr } = await supabaseAdmin
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', data.auth_id)
+    .eq('active', true)
+    .maybeSingle();
+  if (adminErr) throw adminErr;
+  return admin ? data : null;
 }
 
 router.get('/admin/recover/questions', async (req, res, next) => {

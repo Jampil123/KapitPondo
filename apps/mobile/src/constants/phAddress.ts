@@ -2,10 +2,8 @@
  * constants/phAddress.ts
  * ----------------------------------------------------------------------------
  * Real PH province/city/barangay data (PSGC, via the `psgc` npm package) for
- * the identity wizard's address pickers (step 3). Region stays a free-text
- * field elsewhere in the form — only province/city/barangay are constrained
- * to this dataset, since province -> city -> barangay is the part of the
- * hierarchy this data actually supports reliably.
+ * the address pickers (identity wizard, edit profile), plus the fixed list of
+ * 17 regions and which region each province belongs to.
  *
  * KNOWN LIMITATION: municipalities.json only names each city/municipality's
  * PROVINCE, and barangays.json only names each barangay's CITY/MUNICIPALITY —
@@ -21,6 +19,7 @@
 import provincesData from 'psgc/dist/data/provinces.json';
 import municipalitiesData from 'psgc/dist/data/municipalities.json';
 import barangaysData from 'psgc/dist/data/barangays.json';
+import regionsData from 'psgc/dist/data/regions.json';
 
 type ProvinceRow = { name: string; region: string };
 type MunicipalityRow = { name: string; province: string; city?: boolean };
@@ -57,4 +56,30 @@ export function searchBarangays(cityName: string, query: string): AddressOption[
   return toOptions(
     barangays.filter((b) => b.citymun === cityName && matches(b.name, query)).map((b) => b.name),
   );
+}
+
+type RegionRow = { name: string; designation: string };
+
+/** Stored value is e.g. "Region IV-A (CALABARZON)"; `code` matches provinces.json's `region`. */
+export const REGIONS: (AddressOption & { code: string })[] = (regionsData as RegionRow[]).map((r) => {
+  const value = `${r.designation} (${r.name})`;
+  return { label: value, value, code: r.designation };
+});
+
+// Live PSGC province names that the bundled dataset spells differently.
+const PROVINCE_REGION_ALIASES: Record<string, string> = {
+  samar: 'Region VIII',
+  'davao de oro': 'Region XI',
+  maguindanao: 'BARMM',
+};
+const regionByProvince = new Map(provinces.map((p) => [p.name.toLowerCase(), p.region]));
+
+export function regionCodeOfProvince(provinceName: string): string | undefined {
+  const key = provinceName.trim().toLowerCase();
+  return regionByProvince.get(key) ?? PROVINCE_REGION_ALIASES[key];
+}
+
+/** The region code for a stored region value, or undefined for free text that isn't in REGIONS. */
+export function regionCode(regionValue: string | null | undefined): string | undefined {
+  return REGIONS.find((r) => r.value === regionValue)?.code;
 }

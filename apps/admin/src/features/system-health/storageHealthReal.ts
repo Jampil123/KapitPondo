@@ -15,7 +15,7 @@
 
 export type HealthStatus = 'operational' | 'degraded' | 'down';
 export type MetricKey = 'storageCapacity' | 'retrievalLatency';
-export type ProofCategory = 'idVerification' | 'contributionProof' | 'loanReference' | 'expenseReceipt';
+export type ProofCategory = 'idVerification' | 'contributionProof' | 'loanReference';
 
 export type MetricReading = {
   key: MetricKey;
@@ -38,9 +38,8 @@ export const CATEGORY_LABELS: Record<ProofCategory, string> = {
   idVerification: 'ID Verification',
   contributionProof: 'Contribution Proof',
   loanReference: 'Loan Reference',
-  expenseReceipt: 'Expense Receipt',
 };
-export const CATEGORY_ORDER: ProofCategory[] = ['idVerification', 'contributionProof', 'loanReference', 'expenseReceipt'];
+export const CATEGORY_ORDER: ProofCategory[] = ['idVerification', 'contributionProof', 'loanReference'];
 
 export type IncidentEntry = {
   id: string;
@@ -107,7 +106,7 @@ function reading(key: MetricKey, label: string, value: number | null, unit: stri
   return { key, label, value, unit, status, previousValue, collecting };
 }
 
-const EMPTY_CATEGORY_VOLUME: Record<ProofCategory, number> = { idVerification: 0, contributionProof: 0, loanReference: 0, expenseReceipt: 0 };
+const EMPTY_CATEGORY_VOLUME: Record<ProofCategory, number> = { idVerification: 0, contributionProof: 0, loanReference: 0 };
 
 export function mapSnapshot(api: StorageHealthApiResponse, prev: StorageHealthSnapshot | null): StorageHealthSnapshot {
   if (!api.reachable) {

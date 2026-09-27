@@ -23,7 +23,6 @@ const penaltiesRoutes = require('./modules/penalties/penalties.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
 const announcementsRoutes = require('./modules/announcements/announcements.routes');
 const directMessagesRoutes = require('./modules/directMessages/directMessages.routes');
-const paymentsRoutes = require('./modules/payments/payments.routes'); // PayMongo checkout + webhook — see payments.routes.js
 const aiRoutes = require('./modules/ai/ai.routes'); // Gemini: proof-photo field extraction
 const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: plain OCR text extraction
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
@@ -37,16 +36,9 @@ const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
 app.use(cors());
-// `verify` stashes the exact request bytes on req.rawBody — payments.routes.js's
-// PayMongo webhook needs those (not the re-serialized JSON object) to check
-// the Paymongo-Signature HMAC. Harmless for every other route, which never
-// reads req.rawBody.
 // `limit` raised from Express's 100kb default — ai.routes.js's proof-photo
 // endpoint takes a base64-encoded image inline in the JSON body.
-app.use(express.json({
-  limit: '10mb',
-  verify: (req, res, buf) => { req.rawBody = buf; },
-}));
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/', (req, res) => res.send('KapitPondo API is running'));
 app.use('/health', healthRoute);
@@ -73,7 +65,6 @@ app.use('/api', penaltiesRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', announcementsRoutes);
 app.use('/api', directMessagesRoutes);
-app.use('/api', paymentsRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', ocrRoutes);
 app.use('/api', adminSecurityRoutes);

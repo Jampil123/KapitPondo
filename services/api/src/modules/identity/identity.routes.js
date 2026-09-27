@@ -23,6 +23,19 @@ function requireExtractionConfigured(req, res, next) {
   next();
 }
 
+// Gemini can take 25s+ even on a tiny image; the app gives up at 30s, and
+// uploading a full photo over mobile data eats into that. Past this budget
+// the route stops waiting and uses the OCR fallback (~1s) instead.
+const AI_TIMEOUT_MS = 12_000;
+
+function withTimeout(promise, ms) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 // Heuristic only, for logging — every AI failure falls back to OCR below
 // regardless of what kind of error this was, so this never changes behavior,
 // it just makes the server log say WHY the fallback happened.
@@ -64,7 +77,7 @@ router.post('/me/identity/extract-fields', requireAuth, requireExtractionConfigu
 
     if (process.env.GEMINI_API_KEY) {
       try {
-        const fields = await structureIdImage({ imageBase64: image_base64, mediaType: media_type });
+        const fields = await withTimeout(structureIdImage({ imageBase64: image_base64, mediaType: media_type }), AI_TIMEOUT_MS);
         return res.json({ fields });
       } catch (err) {
         console.warn(
@@ -175,7 +188,7 @@ router.post('/me/identity', requireAuth, async (req, res, next) => {
       occupation,
     });
     if (!member) {
-      return res.status(409).json({ error: 'Cannot submit — already verified, or member not found' });
+      return res.status(409).json({ error: 'Cannot submit — already verified, in review, or rejected' });
     }
     res.json({ message: 'Identity submitted for review', member });
   } catch (err) { next(err); }
@@ -183,7 +196,7 @@ router.post('/me/identity', requireAuth, async (req, res, next) => {
 
 // --- System Administrator only ---
 
-// The verification queue (default: pending; pass ?status=verified|rejected to filter)
+// The verification queue (default: pending; pass ?status=verified|resubmission_required|rejected to filter)
 router.get('/admin/verifications', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
     const members = await service.listForReview(req.query.status || 'pending');
@@ -214,11 +227,30 @@ router.post('/admin/verifications/:id/approve', requireAuth, requireSystemAdmin,
   } catch (err) { next(err); }
 });
 
-// Reject
+// Ask the member to fix something and submit again
+router.post('/admin/verifications/:id/request-resubmission', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const reason = String(req.body?.reason ?? '').trim();
+    if (!reason) return res.status(400).json({ error: 'A reason is required so the member knows what to fix.' });
+    const member = await service.requestResubmission({
+      memberId: req.params.id,
+      reviewerId: req.member.id,
+      actorAuthId: req.authUser.id,
+      reason,
+    });
+    if (!member) {
+      return res.status(409).json({ error: 'Member is not pending verification' });
+    }
+    res.json({ message: 'Re-submission requested', member });
+  } catch (err) { next(err); }
+});
+
+// Reject (final — the member can't resubmit)
 router.post('/admin/verifications/:id/reject', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
     const member = await service.rejectMember({
       memberId: req.params.id,
+      reviewerId: req.member.id,
       actorAuthId: req.authUser.id,
       reason: req.body?.reason,
     });

@@ -10,7 +10,7 @@ import { FlagStatusPill, statusLine } from '@/features/flags/flagStatus';
 import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import type { AuditFlag } from '@/api/flags';
 
-const CHANNEL: Record<string, string> = { paymongo: 'PayMongo', gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
+const CHANNEL: Record<string, string> = { gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
 
 // The record's own state, in the words the rest of the app uses.
 const RECORD_STATUS: Record<string, { label: string; tone: 'success' | 'warning' | 'danger' | 'neutral' }> = {

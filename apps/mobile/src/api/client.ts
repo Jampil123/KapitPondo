@@ -106,8 +106,11 @@ export async function apiFetch<T = unknown>(path: string, options: ApiOptions = 
       signal: controller.signal,
     });
   } catch (e) {
-    // Network-level failure (server down, wrong LAN IP, no connection, or a
-    // cold-start hang that hit the timeout above).
+    // Our own timeout fired: the server is reachable but slow.
+    if (controller.signal.aborted) {
+      throw new ApiError(0, `The server took too long to respond (over ${Math.round(timeoutMs / 1000)}s). Please try again.`, 'TIMEOUT', e);
+    }
+    // Network-level failure (server down, wrong LAN IP, no connection).
     throw new ApiError(0, 'Network request failed. Check your connection and API URL.', 'NETWORK', e);
   } finally {
     clearTimeout(timer);

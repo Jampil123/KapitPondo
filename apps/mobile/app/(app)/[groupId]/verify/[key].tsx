@@ -16,7 +16,7 @@ import { useSignoffActions, PRIMARY_LABEL, canSendBack, sendBackLabel } from '@/
 import { itemMatch } from '@/features/audit/VerificationQueue';
 import type { ProofField } from '@/features/signoff/proofMatch';
 
-const METHOD: Record<string, string> = { gcash: 'E-wallet', paymongo: 'E-wallet', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
+const METHOD: Record<string, string> = { gcash: 'E-wallet', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
 
 function recordedLine(i: SignoffItem) {
   if (!i.recordedAt) return null;

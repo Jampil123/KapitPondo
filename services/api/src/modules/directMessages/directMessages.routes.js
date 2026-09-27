@@ -75,6 +75,7 @@ router.post('/groups/:groupId/direct-messages', requireAuth,
         type: 'direct_message',
         title: req.member.full_name ?? 'New message',
         message: !trimmed && imageUrl ? '📷 Photo' : trimmed,
+        data: { sender_id: req.member.id },
       });
 
       res.status(201).json({ message });

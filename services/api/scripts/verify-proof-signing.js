@@ -1,5 +1,5 @@
 // Live verification that proof_url gets exchanged for a viewable signed URL
-// on contributions, expenses, and loan repayments — the fix for "let the
+// on contributions and loan repayments — the fix for "let the
 // auditor view the submitted proof."
 const { createClient } = require('@supabase/supabase-js');
 
@@ -47,17 +47,6 @@ async function main() {
   console.log('proof_url:', c.proof_url);
   console.log('proof_signed_url:', c.proof_signed_url);
   console.log(c.proof_signed_url ? 'PASS: contribution proof got a signed URL' : 'INFO: signing returned null (bucket may not exist yet) — but no crash, degrades safely');
-
-  console.log('\n--- record an expense WITH a proof_url ---');
-  r = await call('POST', `/groups/${groupId}/expenses`, a.token, { amount: 500, category: 'Meeting Venue', proof_url: 'proofs/test-expense.jpg' });
-  console.log('created expense proof_url:', r.json.expense?.proof_url ?? r.json);
-
-  console.log('\n--- list expenses — check proof_signed_url ---');
-  r = await call('GET', `/groups/${groupId}/expenses`, a.token);
-  const e = r.json.expenses[0];
-  console.log('proof_url:', e.proof_url);
-  console.log('proof_signed_url:', e.proof_signed_url);
-  console.log(e.proof_signed_url ? 'PASS: expense proof got a signed URL' : 'INFO: signing returned null — no crash either way');
 }
 
 main().catch((e) => { console.error('FAILED:', e); process.exit(1); });

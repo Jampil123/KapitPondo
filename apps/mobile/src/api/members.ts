@@ -10,7 +10,7 @@
  */
 import { api } from './client';
 
-export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'resubmission_required' | 'rejected';
 
 export interface NotificationPreferences {
   payments: boolean;
@@ -26,7 +26,6 @@ export interface Member {
   full_name: string | null;
   email: string | null;
   phone: string | null;
-  is_system_admin: boolean;
   avatar_url: string | null;
   verification_status: VerificationStatus;
   verification_rejection_reason: string | null;
@@ -35,6 +34,8 @@ export interface Member {
   id_document_qr_data: string | null;
   id_type: string | null;
   selfie_url: string | null;
+  /** From the latest ID submission (identity_submissions), merged in by the API. */
+  submitted_at: string | null;
   /** Short-lived signed URLs — present on GET /api/me/profile (and the admin
    *  equivalent), absent from list endpoints that only select a few columns. */
   id_document_signed_url?: string | null;
@@ -59,7 +60,6 @@ export interface Member {
   notification_preferences: NotificationPreferences;
   consent_version: string | null;
   consent_accepted_at: string | null;
-  submitted_at: string | null;
   created_at: string;
 }
 
@@ -124,7 +124,7 @@ export interface SubmitIdentityInput {
 
 /**
  * POST /api/me/identity — submit or resubmit an ID document.
- * Only valid when status is `unverified` or `rejected`; sets status to `pending`.
+ * Only valid when status is `unverified` or `resubmission_required`; sets status to `pending`.
  */
 export async function submitIdentity(input: SubmitIdentityInput) {
   const res = await api.post<{ message: string; member: Member }>('/api/me/identity', input);

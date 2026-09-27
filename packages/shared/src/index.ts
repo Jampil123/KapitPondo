@@ -8,7 +8,6 @@ export type {
   CycleStatus,
   ContributionStatus,
   LoanStatus,
-  ExpenseStatus,
   DistributionStatus,
   GroupRole,
   PlatformRole,

@@ -65,7 +65,8 @@ async function isCategoryEnabled(memberId, type) {
   return prefs[category] !== false;
 }
 
-async function sendPush(memberId, { title, message, type }) {
+// `data` lets the app open the matching screen when the push is tapped.
+async function sendPush(memberId, { title, message, data }) {
   const { data: tokens, error } = await supabase
     .from('push_tokens').select('token').eq('member_id', memberId);
   if (error || !tokens?.length) return;
@@ -74,7 +75,7 @@ async function sendPush(memberId, { title, message, type }) {
     to: t.token,
     title: title ?? 'KapitPondo',
     body: message ?? '',
-    data: { type },
+    data,
     sound: 'default',
   }));
 
@@ -92,21 +93,23 @@ async function sendPush(memberId, { title, message, type }) {
   }
 }
 
-async function notify({ memberId, groupId = null, type, title, message }) {
+// `data` is optional extra context for navigation, e.g. { sender_id } for a DM.
+async function notify({ memberId, groupId = null, type, title, message, data = null }) {
   if (!memberId || !type) return;
   if (!(await isCategoryEnabled(memberId, type))) return;
-  const { error } = await supabase.from('notifications').insert({
+  const { data: row, error } = await supabase.from('notifications').insert({
     member_id: memberId,
     group_id: groupId,
     type,
     title: title ?? null,
     message: message ?? null,
-  });
+    data,
+  }).select('id').single();
   if (error) {
     console.error(`[notifications] failed to write "${type}" for member ${memberId}:`, error.message);
     return;
   }
-  await sendPush(memberId, { title, message, type });
+  await sendPush(memberId, { title, message, data: { type, group_id: groupId, notification_id: row.id, ...(data ?? {}) } });
 }
 
 module.exports = { notify };

@@ -91,7 +91,7 @@ export default function RepaymentDetail() {
           title="Record"
           rows={[
             ['Sent', formatDateTime(new Date(p.created_at))],
-            ['Recorded by', p.auto_confirmed ? `Paid via ${p.gateway_provider ?? 'payment gateway'}` : p.recorder?.full_name],
+            ['Recorded by', p.recorder?.full_name],
             ['Confirmed by', p.verifier?.full_name],
             ['Posted', posted ? shortDate(p.paid_date) : null],
             ['Returned', p.status === 'rejected' ? shortDate(p.updated_at) : null],

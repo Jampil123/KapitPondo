@@ -2,8 +2,8 @@
  * apps/admin/src/context/AdminAuthContext.tsx
  * ----------------------------------------------------------------------------
  * Admin auth: sign in via Supabase, then confirm the account is a system
- * admin by calling GET /admin/me (services/api checks members.is_system_admin
- * via the requireSystemAdmin middleware). A logged-in user who is NOT a
+ * admin by calling GET /admin/me (services/api checks platform_admins via
+ * the requireSystemAdmin middleware). A logged-in user who is NOT a
  * sysadmin is treated as unauthorized (no admin access).
  */
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';

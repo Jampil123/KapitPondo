@@ -194,7 +194,7 @@ function useFailedChecks(groupId: string, data: ReturnType<typeof useAuditorData
       });
     });
 
-    (contribs.data ?? []).filter((c) => c.status === 'approved' && !c.auto_confirmed).forEach((c) => {
+    (contribs.data ?? []).filter((c) => c.status === 'approved').forEach((c) => {
       const payer = c.memberships?.members?.full_name ?? 'Member';
       const approver = c.approver?.full_name;
       const reason = same(approver, payer) ? 'Self-verified'

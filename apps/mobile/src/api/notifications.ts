@@ -13,6 +13,8 @@ export interface Notification {
   type: string;
   title: string | null;
   message: string | null;
+  /** Extra context for navigation, e.g. { sender_id } on a direct message. */
+  data: Record<string, unknown> | null;
   is_read: boolean;
   created_at: string;
 }

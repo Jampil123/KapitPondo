@@ -12,7 +12,6 @@ export interface Member {
   full_name: string;
   email: string | null;
   phone: string | null;
-  is_system_admin: boolean;
   verification_status: VerificationStatus;
   verification_rejection_reason: string | null;
   id_document_url: string | null;

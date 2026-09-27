@@ -18,6 +18,7 @@ export const verificationStatus: Record<string, StatusMeta> = {
   unverified: { intent: 'neutral', label: 'Unverified' },
   pending:    { intent: 'warning', label: 'Pending' },
   verified:   { intent: 'success', label: 'Verified' },
+  resubmission_required: { intent: 'warning', label: 'Requires Re-submission' },
   rejected:   { intent: 'danger',  label: 'Rejected' },
 };
 

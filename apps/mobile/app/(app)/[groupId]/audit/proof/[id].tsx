@@ -73,7 +73,7 @@ export default function ProofDetail() {
         ] as [string, string | null][],
         record: [
           ['Submitted', when(p.created_at)],
-          ['Recorded by', p.recorder?.full_name ?? (p.auto_confirmed ? 'Payment gateway' : null)],
+          ['Recorded by', p.recorder?.full_name],
           ['Verified by', p.verifier?.full_name ?? null],
           ['Posted', outcome === 'posted' ? when(p.paid_date) : null],
         ] as [string, string | null][],
@@ -95,7 +95,7 @@ export default function ProofDetail() {
       ] as [string, string | null][],
       record: [
         ['Submitted', when(c.created_at)],
-        ['Recorded by', c.recorder?.full_name ?? (c.auto_confirmed ? 'Payment gateway' : null)],
+        ['Recorded by', c.recorder?.full_name],
         ['Verified by', c.approver?.full_name ?? null],
         ['Posted', outcome === 'posted' ? when(c.paid_date) : null],
       ] as [string, string | null][],

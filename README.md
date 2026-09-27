@@ -118,13 +118,13 @@ Each app is started with its own script. Run these in separate terminal windows/
 
 ### Exposing the API Publicly (Webhooks)
 
-Some integrations (e.g. PayMongo) need to reach the API over a public URL that `localhost` can't provide. For local testing, tunnel the API port with `cloudflared`:
+Some integrations (e.g. third-party webhooks) need to reach the API over a public URL that `localhost` can't provide. For local testing, tunnel the API port with `cloudflared`:
 
 ```bash
 cloudflared tunnel --url http://localhost:4000
 ```
 
-This prints a public HTTPS URL (e.g. `https://<random>.trycloudflare.com`) that forwards to your local API. Free quick tunnels generate a new random URL each time they're started, so any webhook endpoint registered against it (PayMongo, etc.) must be updated whenever the tunnel restarts.
+This prints a public HTTPS URL (e.g. `https://<random>.trycloudflare.com`) that forwards to your local API. Free quick tunnels generate a new random URL each time they're started, so any webhook endpoint registered against it must be updated whenever the tunnel restarts.
 
 ## Documentation
 

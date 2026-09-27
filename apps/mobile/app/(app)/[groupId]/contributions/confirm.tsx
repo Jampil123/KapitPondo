@@ -25,7 +25,7 @@ import { PeriodSwitcher } from '@/features/contributions/PeriodSwitcher';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
 
-const METHOD_LABEL: Record<string, string> = { paymongo: 'PayMongo', gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
+const METHOD_LABEL: Record<string, string> = { gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
 
 function nameOf(c: Contribution): string {
   return c.memberships?.members?.full_name ?? 'Member';

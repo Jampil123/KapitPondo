@@ -6,14 +6,13 @@
  */
 
 // ---- Account / identity (what the Sysadmin acts on) ----
-export type AccountStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+export type AccountStatus = 'unverified' | 'pending' | 'verified' | 'resubmission_required' | 'rejected';
 
 // ---- Group-side vocabularies ----
 export type MembershipStatus = 'pending' | 'active' | 'suspended' | 'withdrawn' | 'rejected';
 export type CycleStatus = 'draft' | 'active' | 'finalizing' | 'closed';
 export type ContributionStatus = 'due' | 'submitted' | 'approved' | 'rejected';
 export type LoanStatus = 'pending' | 'approved' | 'active' | 'paid' | 'rejected' | 'defaulted';
-export type ExpenseStatus = 'submitted' | 'approved' | 'rejected';
 export type DistributionStatus = 'draft' | 'previewed' | 'finalized';
 
 // ---- Roles ----
@@ -27,6 +26,7 @@ export const ACCOUNT_STATUS: Record<AccountStatus, { label: string; intent: Inte
   unverified: { label: 'Unverified', intent: 'neutral' },
   pending: { label: 'Pending', intent: 'warning' },
   verified: { label: 'Verified', intent: 'success' },
+  resubmission_required: { label: 'Requires Re-submission', intent: 'primary' },
   rejected: { label: 'Rejected', intent: 'danger' },
 };
 

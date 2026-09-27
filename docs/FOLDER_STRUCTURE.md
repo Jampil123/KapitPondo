@@ -6,7 +6,7 @@
 
 ## What Is KapitPondo?
 
-KapitPondo is a **cooperative savings and contribution management system**. It lets members pool money into a group fund, track contributions per cycle, apply for loans from the fund, record expenses, and distribute year-end dividends. Officers (owner, treasurer, auditor) manage approvals; a system admin handles identity verification at the platform level.
+KapitPondo is a **cooperative savings and contribution management system**. It lets members pool money into a group fund, track contributions per cycle, apply for loans from the fund, and distribute year-end dividends. Officers (owner, treasurer, auditor) manage approvals; a system admin handles identity verification at the platform level.
 
 ---
 
@@ -22,7 +22,7 @@ kapitpondo/                   ← npm workspaces root
 ├── packages/
 │   └── shared/               ← Shared TypeScript types, enums, Supabase client
 ├── supabase/
-│   ├── migrations/           ← PostgreSQL migrations (9 files)
+│   ├── migrations/           ← PostgreSQL migrations (17 files, one per area)
 │   └── seed.sql
 ├── package.json              ← Root workspace config (npm workspaces)
 └── tsconfig.json
@@ -181,17 +181,22 @@ packages/shared/
 
 ```
 supabase/
-├── migrations/
-│   ├── 0001_initial_schema.sql          ← All tables, triggers, indexes
-│   ├── 0002_grants_functions_trigger.sql
-│   ├── 0003_drop_duplicate_functions.sql
-│   ├── 0004_fix_enum_casts.sql
-│   ├── 0005_create_group_uses_auth_uid.sql
-│   ├── 0006_get_or_create_member_rpc.sql
-│   ├── 0007_rls_policies.sql
-│   ├── 0008_join_group_by_code_rpc.sql
-│   └── 0009_approval_rpcs.sql
-└── seed.sql
+├── README.md                        ← migration layout + how to update an existing DB
+├── migrations/                      ← one file per area (tables, then functions, then security)
+│   ├── 0001_foundation.sql          ← extensions, enums, shared triggers, default grants
+│   ├── 0002_identity.sql            ← members + platform/admin tables
+│   ├── 0003_groups.sql              ← groups, memberships, cycles, accounts
+│   ├── 0004_ledger.sql              ← ledger_entries, contributions, penalties, reversals
+│   ├── 0005_lending.sql             ← loans, loan_payments
+│   ├── 0006_distributions.sql
+│   ├── 0007_oversight.sql           ← audit_log, audit_flags, audit_findings
+│   ├── 0008_communication.sql       ← notifications, chat, announcements
+│   ├── 0009_fn_access.sql … 0014_fn_admin.sql   ← SQL functions by area
+│   ├── 0015_security.sql            ← RLS, policies, function grants
+│   ├── 0016_storage.sql
+│   └── 0017_realtime.sql
+├── seed.sql
+└── seed_admin.sql
 ```
 
 ---
@@ -373,22 +378,6 @@ Record a loan repayment. Body: `{ amount, payment_method?, proof_url?, external_
 
 ---
 
-### Module: `expenses` — `/api`
-
-**`POST /api/groups/:groupId/expenses`** — `requireGroupRole(['treasurer','owner'])`
-Record an expense. Body: `{ amount, category?, description?, proof_url? }`. Created with `status: submitted`.
-
-**`GET /api/groups/:groupId/expenses`** — `requireGroupRole(['treasurer','auditor','owner'])`
-List expenses. Optional `?status=` filter.
-
-**`POST /api/groups/:groupId/expenses/:id/approve`** — `requireGroupRole(['owner','auditor'])`
-Approve an expense. Guard: approver cannot be the recorder. Calls service which calls SQL RPC `approve_expense(...)`. Returns ledger entry.
-
-**`POST /api/groups/:groupId/expenses/:id/reject`** — `requireGroupRole(['owner','auditor'])`
-Reject an expense.
-
----
-
 ### Module: `distribution` — `/api`
 
 **`PATCH /api/groups/:groupId/memberships/:id/heads`** — `requireGroupRole(['owner'])`
@@ -490,10 +479,9 @@ Recent platform-wide ledger activity. Optional `?limit=` (default 50).
 | `loan_status` | `pending`, `approved`, `active`, `paid`, `rejected`, `defaulted` |
 | `loan_payment_status` | `scheduled`, `submitted`, `approved`, `paid`, `late`, `partial` |
 | `distribution_status` | `draft`, `previewed`, `finalized` |
-| `expense_status` | `submitted`, `approved`, `rejected` |
 | `ledger_direction` | `credit`, `debit` |
 | `ledger_entry_type` | `contribution`, `loan_disbursement`, `loan_repayment`, `distribution`, `expense`, `penalty`, `fee`, `adjustment`, `reversal` |
-| `payment_method` | `paymongo`, `gcash`, `cash`, `bank_transfer`, `other` |
+| `payment_method` | `gcash`, `cash`, `bank_transfer`, `other` |
 | `account_type` | `savings`, `share_capital` |
 
 ### Core Tables
@@ -511,7 +499,6 @@ Recent platform-wide ledger activity. Optional `?limit=` (default 50).
 | `loan_payments` | Loan repayment schedule and actuals |
 | `distributions` | Year-end dividend declaration |
 | `distribution_allocations` | Per-member share of a distribution |
-| `expenses` | Group operational expense claims |
 | `audit_log` | Immutable action log (actor, entity, before/after JSON) |
 | `notifications` | In-app notifications per member |
 
@@ -519,7 +506,7 @@ Recent platform-wide ledger activity. Optional `?limit=` (default 50).
 
 - Money: always `numeric(14,2)` — no floats
 - Ledger: append-only enforced by `BEFORE UPDATE` and `BEFORE DELETE` triggers that raise exceptions
-- Segregation of duties: `CHECK` constraints on `contributions`, `loan_payments`, `expenses` ensure `recorded_by <> approved_by`
+- Segregation of duties: `CHECK` constraints on `contributions` and `loan_payments` ensure `recorded_by <> approved_by`
 - One active cycle per group: partial unique index on `cycles(group_id) WHERE status = 'active'`
 - Approval flows: critical operations (`approve_contribution`, `approve_and_disburse_loan`, `record_loan_repayment`, `close_cycle`) are implemented as PostgreSQL RPCs called via `supabase.rpc()`
 
@@ -575,7 +562,7 @@ EXPO_PUBLIC_API_URL=<production-api-url>   # used in prod builds only
 | Role | Scope | Capabilities |
 |---|---|---|
 | `member` | Per group | View own contributions, loans, balance; apply for loans; submit contributions |
-| `treasurer` | Per group | All member abilities + record expenses, approve contributions/loans, manage cycles |
-| `auditor` | Per group | Read-only officer view of all group data; can approve/reject contributions and expenses |
+| `treasurer` | Per group | All member abilities + approve contributions/loans, manage cycles |
+| `auditor` | Per group | Read-only officer view of all group data; can approve/reject contributions |
 | `owner` | Per group | All officer abilities + manage roles, finalize distributions, reverse ledger entries |
 | `system_admin` | Platform | Identity verification queue; platform monitoring and audit feed |

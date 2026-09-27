@@ -18,7 +18,7 @@ import { ENTRY_TYPE_LABEL } from '@/features/audit/GroupLedgerView';
 import { entryRef } from '@/api/ledger';
 import { loanRef } from '@/api/loanAudits';
 
-const CHANNEL: Record<string, string> = { paymongo: 'PayMongo', gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
+const CHANNEL: Record<string, string> = { gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
 
 function longDate(iso: string | null | undefined) {
   if (!iso) return null;

@@ -23,7 +23,6 @@ export const ACTION_COPY: Partial<Record<LedgerEntryType, string>> = {
 };
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
-  paymongo: 'Online payment',
   gcash: 'GCash',
   cash: 'Cash',
   bank_transfer: 'Bank transfer',

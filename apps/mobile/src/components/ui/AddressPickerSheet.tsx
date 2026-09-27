@@ -10,7 +10,7 @@
  * No search box — just a scrollable list of whatever getOptions() returns.
  */
 import { useEffect, useState } from 'react';
-import { View, Modal, Pressable, FlatList, ActivityIndicator } from 'react-native';
+import { View, Modal, Pressable, FlatList, ActivityIndicator, StyleSheet } from 'react-native';
 import { Check, X } from 'lucide-react-native';
 import { Text } from './Text';
 import { semantic } from '../../theme/colors';
@@ -47,8 +47,10 @@ export function AddressPickerSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={onClose}>
-        <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 16, paddingBottom: insets.bottom + 16, maxHeight: '78%' }}>
+      <View style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }}>
+        {/* Backdrop behind the sheet, not around it, so it never competes with the list for scroll touches. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityLabel="Close" />
+        <View style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingHorizontal: 18, paddingTop: 16, paddingBottom: insets.bottom + 16, maxHeight: '78%' }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }}>
             <Text variant="h3" style={{ flex: 1, fontSize: 17 }}>{title}</Text>
             <Pressable onPress={onClose} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
@@ -86,8 +88,8 @@ export function AddressPickerSheet({
               )}
             />
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
