@@ -24,6 +24,8 @@ const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: p
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
 const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
+const adminReportsRoutes = require('./modules/adminReports/adminReports.routes'); // Reports & Analytics (sysadmin, read-only)
+const problemReportsRoutes = require('./modules/problemReports/problemReports.routes'); // Problems / complaints workflow
 const errorHandler = require('./middleware/errorHandler');
 const app = express();
 
@@ -64,6 +66,8 @@ app.use('/api', ocrRoutes);
 app.use('/api', adminSecurityRoutes);
 app.use('/api', recoveryRoutes);
 app.use('/api', auditLogRoutes);
+app.use('/api', adminReportsRoutes);
+app.use('/api', problemReportsRoutes);
 
 // Error handler stays last.
 app.use(errorHandler);

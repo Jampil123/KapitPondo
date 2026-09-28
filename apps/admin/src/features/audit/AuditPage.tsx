@@ -1,13 +1,23 @@
 /**
  * apps/admin/src/features/audit/AuditPage.tsx — system activity monitor.
- * Real feed from GET /admin/monitoring/audit. Filters by the action prefix we
- * actually emit (account.verified / rejected / id_viewed).
+ * Audit trail table: Date/Time · Administrator · Action · Target · Result,
+ * from GET /admin/monitoring/audit (names resolved server-side). Filters by
+ * the action prefix we actually emit (account.verified / rejected / id_viewed).
  */
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
-import { Clock, ShieldCheck, Eye, XCircle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../../lib/api';
 
-type AuditEntry = { id: string; actor_id?: string; action: string; target_type: string; target_id?: string; metadata?: Record<string, unknown>; created_at: string };
+type AuditEntry = {
+  id: string;
+  actor_id?: string;
+  actor_name?: string | null;
+  action: string;
+  target_type: string;
+  target_id?: string;
+  target_name?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+};
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -16,11 +26,39 @@ const FILTERS = [
   { key: 'account.id_viewed', label: 'ID views' },
 ];
 
-function actionMeta(action: string): { label: string; tone: string; Icon: ComponentType<{ size?: number }> } {
-  if (action === 'account.verified') return { label: 'Verification', tone: 'bg-success-bg text-success', Icon: CheckCircle2 };
-  if (action === 'account.rejected') return { label: 'Rejection', tone: 'bg-danger-bg text-danger', Icon: XCircle };
-  if (action === 'account.id_viewed') return { label: 'ID view', tone: 'bg-surface-alt text-brand-dark', Icon: Eye };
-  return { label: action, tone: 'bg-surface-alt text-secondary', Icon: ShieldCheck };
+// action → the verb phrase shown in the Action column, and the outcome shown
+// in Result. Unknown actions fall back to a prettified form of the action
+// itself rather than being hidden.
+const ACTION_META: Record<string, { action: string; result: string; tone: string }> = {
+  'account.verified': { action: 'Verify Account', result: 'Verified', tone: 'bg-success-bg text-success' },
+  'account.rejected': { action: 'Reject Account', result: 'Rejected', tone: 'bg-danger-bg text-danger' },
+  'account.id_viewed': { action: 'Review ID Document', result: 'Viewed', tone: 'bg-surface-alt text-secondary' },
+  'account.suspended': { action: 'Suspend Account', result: 'Suspended', tone: 'bg-danger-bg text-danger' },
+  'account.reinstated': { action: 'Reinstate Account', result: 'Reinstated', tone: 'bg-success-bg text-success' },
+};
+
+function titleCase(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function meta(e: AuditEntry) {
+  const known = ACTION_META[e.action];
+  if (known) return known;
+  const verb = e.action.includes('.') ? e.action.split('.').slice(1).join(' ') : e.action;
+  const pretty = titleCase(verb.replace(/[._]/g, ' '));
+  return { action: pretty, result: pretty, tone: 'bg-surface-alt text-secondary' };
+}
+
+// "User Maria Santos" / "Group Lucena Group" / "Account 8785dc7e" when the
+// record no longer exists.
+function target(e: AuditEntry) {
+  const kind = e.target_type === 'account' ? 'User' : titleCase(e.target_type ?? 'Record');
+  if (e.target_name) return `${kind} ${e.target_name}`;
+  return e.target_id ? `${kind} ${e.target_id.slice(0, 8)}` : '—';
+}
+
+function dateTime(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
 export function AuditPage() {
@@ -44,6 +82,9 @@ export function AuditPage() {
     idviews: entries.filter((e) => e.action === 'account.id_viewed').length,
   }), [entries]);
 
+  const th = 'px-5 py-3 font-medium whitespace-nowrap';
+  const td = 'px-5 py-3.5 whitespace-nowrap';
+
   return (
     <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
       <div className="grid grid-cols-4 gap-4 mb-6">
@@ -64,29 +105,40 @@ export function AuditPage() {
         ))}
       </div>
 
-      <div className="rounded-2xl bg-surface border border-line overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center text-muted text-sm">Loading…</div>
-        ) : rows.length === 0 ? (
-          <div className="p-12 text-center text-muted text-sm">No activity recorded.</div>
-        ) : rows.map((e, i, a) => {
-          const meta = actionMeta(e.action);
-          const reason = e.metadata?.reason;
-          return (
-            <div key={e.id} className={`grid items-center gap-3.5 px-6 py-3.5 ${i < a.length - 1 ? 'border-b border-line' : ''}`} style={{ gridTemplateColumns: 'auto 120px 1fr auto auto' }}>
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${meta.tone}`}><meta.Icon size={18} /></div>
-              <span className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium ${meta.tone}`}>{meta.label}</span>
-              <div>
-                <div className="text-[13.5px] text-ink">{e.target_type} {e.target_id ? `· ${e.target_id.slice(0, 8)}` : ''}{reason ? ` — ${String(reason)}` : ''}</div>
-                <div className="text-[11.5px] text-muted">{e.actor_id ? `by ${e.actor_id.slice(0, 8)}` : ''}</div>
-              </div>
-              {e.action === 'account.rejected' ? (
-                <span className="inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[10.5px] font-semibold bg-warning-bg text-warning">Warning</span>
-              ) : <span />}
-              <div className="flex items-center gap-1.5 text-xs text-muted whitespace-nowrap"><Clock size={14} /> {new Date(e.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
-            </div>
-          );
-        })}
+      <div className="rounded-2xl bg-surface border border-line overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-xs text-muted">
+              <th className={th}>Date/Time</th>
+              <th className={th}>Administrator</th>
+              <th className={th}>Action</th>
+              <th className={th}>Target</th>
+              <th className={th}>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td colSpan={5} className="px-5 py-12 text-center text-muted">Loading…</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan={5} className="px-5 py-12 text-center text-muted">No activity recorded.</td></tr>
+            ) : rows.map((e) => {
+              const m = meta(e);
+              const reason = e.metadata?.reason ? String(e.metadata.reason) : null;
+              return (
+                <tr key={e.id} className="border-b border-line last:border-0">
+                  <td className={`${td} text-secondary`}>{dateTime(e.created_at)}</td>
+                  <td className={`${td} text-ink`}>{e.actor_name ?? (e.actor_id ? `Admin ${e.actor_id.slice(0, 8)}` : '—')}</td>
+                  <td className={`${td} text-ink`}>{m.action}</td>
+                  <td className={`${td} text-ink`}>{target(e)}</td>
+                  <td className={td}>
+                    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${m.tone}`}>{m.result}</span>
+                    {reason ? <span className="ml-2 text-[11.5px] text-muted">{reason}</span> : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

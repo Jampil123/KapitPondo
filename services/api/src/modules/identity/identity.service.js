@@ -1,5 +1,5 @@
 const supabase = require('../../config/supabase');
-const { notify } = require('../../lib/notifications');
+const { notify, notifyAdmins } = require('../../lib/notifications');
 
 // `id_document_url` is actually a PATH inside the private `id-documents`
 // bucket (see apps/mobile/src/lib/upload.ts) — it must be exchanged for a
@@ -70,6 +70,13 @@ async function submitDocument({
     .select()
     .maybeSingle();
   if (error) throw error;
+  if (data) {
+    await notifyAdmins({
+      type: 'identity.submitted',
+      title: 'New verification request',
+      message: `${data.full_name ?? 'A member'} submitted their ID for review.`,
+    });
+  }
   return data;
 }
 
@@ -114,16 +121,120 @@ async function updateProfile({
   return data;
 }
 
+// Whether members.suspended_at exists (migration 0057). Starts unknown and is
+// latched to false the first time Postgres says the column isn't there, so the
+// admin queue degrades to its pre-suspension behaviour instead of 500ing.
+let suspensionAvailable = null;
+function isMissingSuspensionColumn(error) {
+  return error?.code === '42703' || /suspended_at/.test(error?.message ?? '');
+}
+
 // Sysadmin: list members by verification status (default: pending queue).
-// status === 'all' returns every member regardless of verification status.
+//   'all'             — every member
+//   'suspended'       — platform-suspended accounts (migration 0057)
+//   'group_suspended' — members a group's officers suspended inside a group
+//   anything else     — that verification_status
 async function listForReview(status = 'pending') {
-  let q = supabase
-    .from('members')
-    .select('id, full_name, email, phone, id_document_url, verification_status, created_at, id_type, city, province')
-    .order('created_at', { ascending: true });
-  if (status !== 'all') q = q.eq('verification_status', status);
+  // The suspension columns only exist once migration 0057 is applied; until
+  // then this falls back to the base columns so the queue keeps working.
+  const BASE = 'id, full_name, email, phone, id_document_url, verification_status, created_at, id_type, city, province';
+  const columns = suspensionAvailable === false ? BASE : `${BASE}, suspended_at, suspended_by, suspension_reason`;
+
+  if (status === 'suspended' && suspensionAvailable === false) return [];
+
+  let q = supabase.from('members').select(columns).order('created_at', { ascending: true });
+
+  if (status === 'suspended') {
+    q = q.not('suspended_at', 'is', null);
+  } else if (status === 'group_suspended') {
+    // Suspension lives on the membership, so start from those rows.
+    const { data: suspended, error: mErr } = await supabase
+      .from('memberships')
+      .select('member_id, updated_at, groups:group_id(name, fund_code)')
+      .eq('status', 'suspended');
+    if (mErr) throw mErr;
+    if (!suspended.length) return [];
+
+    const { data, error } = await supabase.from('members').select(columns)
+      .in('id', [...new Set(suspended.map((m) => m.member_id))]);
+    if (error) {
+      if (isMissingSuspensionColumn(error)) { suspensionAvailable = false; return listForReview(status); }
+      throw error;
+    }
+
+    // Attach which group(s) each member is suspended in, for the admin table.
+    return data.map((m) => {
+      const rows = suspended.filter((s) => s.member_id === m.id);
+      return {
+        ...m,
+        suspended_groups: rows.map((s) => s.groups?.name).filter(Boolean),
+        group_suspended_since: rows.map((s) => s.updated_at).sort().pop() ?? null,
+      };
+    });
+  } else if (status !== 'all') {
+    q = q.eq('verification_status', status);
+  }
+
   const { data, error } = await q;
+  if (error) {
+    if (isMissingSuspensionColumn(error)) { suspensionAvailable = false; return listForReview(status); }
+    throw error;
+  }
+  return data;
+}
+
+// Sysadmin suspends an account: platform access is withdrawn until reinstated
+// (middleware/auth.js blocks the suspended member on their next request).
+// Verification status is left alone — suspension is a separate axis.
+async function suspendMember({ memberId, adminMemberId, actorAuthId, reason }) {
+  const { data, error } = await supabase
+    .from('members')
+    .update({
+      suspended_at: new Date().toISOString(),
+      suspended_by: adminMemberId,
+      suspension_reason: reason ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', memberId)
+    .is('suspended_at', null) // already-suspended accounts are a no-op, not a re-suspend
+    .select()
+    .maybeSingle();
   if (error) throw error;
+  if (data) {
+    await writeAudit(actorAuthId, 'account.suspended', memberId, { reason: reason ?? null });
+    await notify({
+      memberId,
+      type: 'account.suspended',
+      title: 'Account suspended',
+      message: reason ? `Your account has been suspended: ${reason}` : 'Your account has been suspended. Contact support for help.',
+    });
+  }
+  return data;
+}
+
+async function reinstateMember({ memberId, actorAuthId }) {
+  const { data, error } = await supabase
+    .from('members')
+    .update({
+      suspended_at: null,
+      suspended_by: null,
+      suspension_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', memberId)
+    .not('suspended_at', 'is', null)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  if (data) {
+    await writeAudit(actorAuthId, 'account.reinstated', memberId, null);
+    await notify({
+      memberId,
+      type: 'account.reinstated',
+      title: 'Account reinstated',
+      message: 'Your account has been reinstated. You can sign in again.',
+    });
+  }
   return data;
 }
 
@@ -223,4 +334,5 @@ async function getMyProfile(memberId) {
 module.exports = {
   submitDocument, updateProfile, listForReview, getMember,
   approveMember, rejectMember, getMyProfile,
+  suspendMember, reinstateMember,
 };

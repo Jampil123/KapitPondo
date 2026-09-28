@@ -1,16 +1,19 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, Boxes, Activity, Database, Shield, HardDrive, Cog, HeartPulse } from 'lucide-react';
+import { LayoutDashboard, Users, Boxes, Activity, BarChart3, Database, Shield, HardDrive, Cog, HeartPulse } from 'lucide-react';
 import kapitlogo from '../../assets/images/KapitPondoL.png';
+import type { AdminMe } from '../../context/AdminAuthContext';
+import { AccountMenu } from './AccountMenu';
 
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: 'pending_verifications' };
 
 const HOME_NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/verifications', label: 'Users', icon: Users, badgeKey: 'pending_verifications' },
-  { to: '/groups', label: 'Groups', icon: Boxes },
+  { to: '/groups', label: 'Fund Groups', icon: Boxes },
   { to: '/audit', label: 'Activity', icon: Activity },
+  { to: '/reports', label: 'Reports', icon: BarChart3 },
 ];
 
 const SYSTEM_HEALTH_NAV: NavItem[] = [
@@ -72,15 +75,22 @@ function NavSection({ title, items, pending, expanded }: {
   );
 }
 
-export function Sidebar({ pending, pinned }: { pending: number | null; pinned: boolean }) {
+type SidebarProps = {
+  pending: number | null;
+  admin: AdminMe | null;
+  onSignOut: () => void | Promise<void>;
+};
+
+export function Sidebar({ pending, admin, onSignOut }: SidebarProps) {
   const [hovering, setHovering] = useState(false);
-  const expanded = pinned || hovering;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const expanded = hovering || menuOpen;
 
   return (
     <aside
-      className={`sticky top-0 h-screen shrink-0 flex flex-col text-white overflow-hidden transition-[width] duration-200 ease-in-out ${
-        expanded ? 'w-62' : 'w-[72px]'
-      }`}
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
+      className="sticky top-0 h-screen shrink-0 flex flex-col text-white overflow-hidden transition-[width] duration-200 ease-in-out"
       style={{ width: expanded ? 248 : 72, background: '#2A3E4B' }}
     >
       <div className={`flex items-center pt-6 pb-7 ${expanded ? 'gap-3 px-6' : 'justify-center px-0'}`}>
@@ -93,10 +103,14 @@ export function Sidebar({ pending, pinned }: { pending: number | null; pinned: b
         ) : null}
       </div>
 
-      <nav className="flex-1 px-3.5 overflow-y-auto overflow-x-hidden">
+      <nav className="flex-1 px-3.5 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <NavSection title="Home" items={HOME_NAV} pending={pending} expanded={expanded} />
         <NavSection title="Platform Health" items={SYSTEM_HEALTH_NAV} pending={pending} expanded={expanded} />
       </nav>
+
+      <div className="px-3.5 pb-5">
+        <AccountMenu admin={admin} onSignOut={onSignOut} expanded={expanded} onOpenChange={setMenuOpen} />
+      </div>
     </aside>
   );
 }

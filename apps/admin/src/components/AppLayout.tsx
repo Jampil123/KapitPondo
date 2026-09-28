@@ -14,8 +14,9 @@ import { Topbar } from './layout/Topbar';
 const TOPBAR_META: Record<string, { title: string; subtitle: string }> = {
   '/': { title: 'Dashboard', subtitle: 'Platform overview & account verification.' },
   '/verifications': { title: 'Users', subtitle: 'Account verification queue.' },
-  '/groups': { title: 'Groups', subtitle: 'Active savings groups and their fund health.' },
+  '/groups': { title: 'Fund Group Monitoring', subtitle: 'Read-only overview of every fund group on the platform.' },
   '/audit': { title: 'Activity', subtitle: 'System activity monitor — every admin action.' },
+  '/reports': { title: 'Reports & Analytics', subtitle: 'Generate system-wide user, fund group and activity reports.' },
   '/settings': { title: 'Settings', subtitle: 'Your admin account and console preferences.' },
   '/system/database': { title: 'Database', subtitle: 'Database health & performance.' },
   '/system/auth-service': { title: 'Auth Service', subtitle: 'Authentication service health.' },
@@ -28,7 +29,6 @@ export function AppLayout() {
   const nav = useNavigate();
   const location = useLocation();
   const [pending, setPending] = useState<number | null>(null);
-  const [sidebarPinned, setSidebarPinned] = useState(false);
   const meta = TOPBAR_META[location.pathname] ?? TOPBAR_META['/'];
 
   useEffect(() => {
@@ -41,16 +41,10 @@ export function AppLayout() {
 
   return (
     <div className="flex h-full min-h-screen">
-      <Sidebar pending={pending} pinned={sidebarPinned} />
+      <Sidebar pending={pending} admin={admin} onSignOut={async () => { await signOut(); nav('/login'); }} />
 
       <main className="flex-1 overflow-auto bg-bg">
-        <Topbar
-          title={meta.title}
-          subtitle={meta.subtitle}
-          admin={admin}
-          onSignOut={async () => { await signOut(); nav('/login'); }}
-          onMenuClick={() => setSidebarPinned((v) => !v)}
-        />
+        <Topbar title={meta.title} subtitle={meta.subtitle} admin={admin} />
         <Outlet />
       </main>
     </div>

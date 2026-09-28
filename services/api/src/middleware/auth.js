@@ -29,6 +29,18 @@ async function requireAuth(req, res, next) {
       return res.status(403).json({ error: 'No member profile linked to this account' });
     }
 
+    // Platform suspension (migration 0057) withdraws access until an admin
+    // reinstates the account. `suspended_at` is absent until that migration
+    // runs, in which case this is simply never true.
+    if (member.suspended_at) {
+      return res.status(403).json({
+        error: member.suspension_reason
+          ? `Your account is suspended: ${member.suspension_reason}`
+          : 'Your account is suspended. Contact support for help.',
+        suspended: true,
+      });
+    }
+
     req.authUser = data.user;
     req.member = member;
     next();
