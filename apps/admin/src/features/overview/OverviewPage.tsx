@@ -1,18 +1,20 @@
 /**
  * apps/admin/src/features/overview/OverviewPage.tsx — the admin dashboard.
- * KPI cards + pending-verifications + recent activity from the real API.
+ * KPI cards + pending-verifications from the real API. (Recent activity
+ * lives on the Activity page — see features/audit.)
  * Honest placeholder: growth chart (needs a time-series endpoint) — labelled,
  * not faked. System health now lives under its own sidebar section.
  */
 import { useEffect, useRef, useState, type ComponentType } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Users, Boxes, ShieldCheck, Flag, Check, X, ChevronRight, Search, Activity } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Users, Boxes, ShieldCheck, Flag, Check, X, ChevronRight, Search, Activity, Archive, CircleCheck } from 'lucide-react';
 import { api } from '../../lib/api';
 
 // Mirrors the real platform_overview() SQL function (services/api monitoring.service.js).
 type Overview = { total_members: number; verified_members: number; total_groups: number; active_cycles: number };
 type Applicant = { id: string; full_name?: string; email?: string; phone?: string };
-type AuditEntry = { id: string; action: string; target_type: string; created_at: string; metadata?: Record<string, unknown> };
+// GET /admin/monitoring/fund-group-stats — group counts by status.
+type FundGroupStats = { total: number; active: number; archived: number };
 
 // Matches services/api monitoring.service.js `search()`.
 type SearchMember = { id: string; full_name?: string; email?: string; phone?: string; verification_status?: string };
@@ -25,20 +27,21 @@ const TONE: Record<string, string> = {
   ok: 'bg-success-bg text-success',
   warn: 'bg-warning-bg text-warning',
   danger: 'bg-danger-bg text-danger',
+  muted: 'bg-surface-alt text-muted',
 };
 
-function Kpi({ label, value, delta, icon: Icon, tone }: { label: string; value: string; delta: string; icon: ComponentType<{ size?: number }>; tone: string }) {
+function Kpi({ label, value, delta, icon: Icon, tone, to }: { label: string; value: string; delta: string; icon: ComponentType<{ size?: number }>; tone: string; to: string }) {
   return (
-    <div className="rounded-2xl bg-surface border border-line p-5">
-      <div className="flex items-start justify-between">
-        <div>
+    <Link to={to} className="block rounded-2xl bg-surface border border-line p-5 transition hover:border-brand hover:shadow-md focus-visible:outline-2 focus-visible:outline-brand">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <div className="text-2xl font-bold text-ink">{value}</div>
           <div className="text-xs text-secondary mt-1">{label}</div>
         </div>
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${TONE[tone]}`}><Icon size={20} /></div>
+        <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${TONE[tone]}`}><Icon size={20} /></div>
       </div>
       <div className="text-[11px] text-muted mt-3">{delta}</div>
-    </div>
+    </Link>
   );
 }
 
@@ -56,12 +59,32 @@ function Card({ title, action, children }: { title: string; action?: React.React
 
 function initials(n?: string) { return (n ?? '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'; }
 
+function pct(part: number, whole: number) { return whole === 0 ? '0%' : `${Math.round((part / whole) * 100)}%`; }
+
+// One figure in the Fund Group Statistics card; links into the (read-only)
+// Fund Group Monitoring page, filtered to the status it counts.
+function GroupStat({ label, value, hint, icon: Icon, tone, to }: {
+  label: string; value: number | undefined; hint: string;
+  icon: ComponentType<{ size?: number }>; tone: string; to: string;
+}) {
+  return (
+    <Link to={to} className="flex items-start gap-3.5 px-5 py-4 hover:bg-surface-alt">
+      <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${TONE[tone]}`}><Icon size={20} /></div>
+      <div className="min-w-0">
+        <div className="text-2xl font-bold text-ink leading-tight">{value === undefined ? '—' : value}</div>
+        <div className="text-xs text-secondary mt-0.5">{label}</div>
+        <div className="text-[11px] text-muted mt-1">{hint}</div>
+      </div>
+    </Link>
+  );
+}
+
 export function OverviewPage() {
   const nav = useNavigate();
   const [m, setM] = useState<Overview | null>(null);
   const [pending, setPending] = useState<Applicant[]>([]);
   const [pendingCount, setPendingCount] = useState<number | null>(null);
-  const [activity, setActivity] = useState<AuditEntry[]>([]);
+  const [fundStats, setFundStats] = useState<FundGroupStats | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [query, setQuery] = useState('');
@@ -104,14 +127,14 @@ export function OverviewPage() {
   }, [query]);
 
   async function load() {
-    const [overview, verifs, audit] = await Promise.allSettled([
+    const [overview, verifs, fundGroups] = await Promise.allSettled([
       api.get<{ overview: Overview }>('/admin/monitoring/overview'),
       api.get<{ members: Applicant[] }>('/admin/verifications?status=pending'),
-      api.get<{ audit: AuditEntry[] }>('/admin/monitoring/audit?limit=6'),
+      api.get<{ stats: FundGroupStats }>('/admin/monitoring/fund-group-stats'),
     ]);
     if (overview.status === 'fulfilled') setM(overview.value.overview);
     if (verifs.status === 'fulfilled') { setPending(verifs.value.members.slice(0, 4)); setPendingCount(verifs.value.members.length); }
-    if (audit.status === 'fulfilled') setActivity(audit.value.audit);
+    if (fundGroups.status === 'fulfilled') setFundStats(fundGroups.value.stats);
   }
   // Standard data-fetch-on-mount effect; the setState calls inside `load` are
   // async (after the awaited requests resolve), not synchronous in the effect body.
@@ -125,14 +148,17 @@ export function OverviewPage() {
   }
 
   const kpis = [
-    { label: 'Total Users', value: m ? String(m.total_members) : '—', delta: `${m?.verified_members ?? '—'} verified`, icon: Users, tone: 'accent' },
-    { label: 'Total Groups', value: m ? String(m.total_groups) : '—', delta: `${m?.active_cycles ?? '—'} active cycles`, icon: Boxes, tone: 'ok' },
-    { label: 'Pending Verifications', value: pendingCount === null ? '—' : String(pendingCount), delta: 'Needs review', icon: ShieldCheck, tone: 'warn' },
-    { label: 'Reports / Flags', value: '0', delta: 'No flag system yet', icon: Flag, tone: 'danger' },
+    { label: 'Total Users', value: m ? String(m.total_members) : '—', delta: `${m?.verified_members ?? '—'} verified`, icon: Users, tone: 'accent', to: '/verifications?view=all' },
+    { label: 'Total Groups', value: m ? String(m.total_groups) : '—', delta: `${m?.active_cycles ?? '—'} active cycles`, icon: Boxes, tone: 'ok', to: '/groups' },
+    { label: 'Pending Verifications', value: pendingCount === null ? '—' : String(pendingCount), delta: 'Needs review', icon: ShieldCheck, tone: 'warn', to: '/verifications' },
+    // No flag system yet — the Activity log is the closest real record of admin actions.
+    { label: 'Reports / Flags', value: '0', delta: 'No flag system yet', icon: Flag, tone: 'danger', to: '/audit' },
   ];
 
   return (
-    <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
+    // @container: the grids below react to the width the sidebar leaves us,
+    // not the viewport, so expanding the sidebar reflows the dashboard.
+    <div className="@container mx-auto max-w-8xl px-4 sm:px-8 pt-6 pb-8">
 
       <div className="relative max-w-[380px] mb-5" ref={searchRef}>
         <div className="flex items-center gap-2.5 bg-surface-alt rounded-xl px-3.5 py-2.5">
@@ -207,52 +233,45 @@ export function OverviewPage() {
         ) : null}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 @md:grid-cols-2 @4xl:grid-cols-4 gap-4 mb-6">
         {kpis.map((k) => <Kpi key={k.label} {...k} />)}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          <Card title="Platform growth">
-            <div className="p-8 text-center text-muted text-sm">Time-series charts will appear here once a growth endpoint is added.</div>
-          </Card>
+      <div className="space-y-6">
+        <Card title="Fund Group Statistics"
+              action={<Link to="/groups" className="flex items-center gap-1 text-xs font-semibold text-brand-dark">View all <ChevronRight size={14} /></Link>}>
+          <div className="grid grid-cols-1 @md:grid-cols-3 divide-y @md:divide-y-0 @md:divide-x divide-line">
+            <GroupStat label="Total Fund Groups" value={fundStats?.total} hint="Active + archived" icon={Boxes} tone="accent" to="/groups" />
+            <GroupStat label="Active Fund Groups" value={fundStats?.active} hint={`${fundStats ? pct(fundStats.active, fundStats.total) : '—'} of all groups`} icon={CircleCheck} tone="ok" to="/groups?status=active" />
+            <GroupStat label="Archived Fund Groups" value={fundStats?.archived} hint={`${fundStats ? pct(fundStats.archived, fundStats.total) : '—'} of all groups`} icon={Archive} tone="muted" to="/groups?status=archived" />
+          </div>
+        </Card>
 
-          <Card title="Pending verifications"
-                action={<button onClick={() => nav('/verifications')} className="flex items-center gap-1 text-xs font-semibold text-brand-dark">View all <ChevronRight size={14} /></button>}>
-            {pending.length === 0 ? (
-              <div className="p-8 text-center text-muted text-sm">No accounts awaiting review.</div>
-            ) : pending.map((u, i) => (
-              <div key={u.id} className={`flex items-center gap-3 px-5 py-3 ${i < pending.length - 1 ? 'border-b border-line' : ''}`}>
-                <div className="w-10 h-10 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-xs font-semibold">{initials(u.full_name)}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-ink truncate">{u.full_name ?? 'Applicant'}</div>
-                  <div className="text-[11px] text-muted truncate">{u.phone ?? u.email ?? u.id}</div>
-                </div>
-                <button onClick={() => approve(u.id)} disabled={busyId === u.id}
-                        className="w-9 h-9 rounded-lg bg-success-bg text-success flex items-center justify-center disabled:opacity-50" title="Approve">
-                  <Check size={18} />
-                </button>
-                <button onClick={() => nav('/verifications')} className="w-9 h-9 rounded-lg bg-danger-bg text-danger flex items-center justify-center" title="Review / reject">
-                  <X size={18} />
-                </button>
-              </div>
-            ))}
-          </Card>
-        </div>
+        <Card title="Platform growth">
+          <div className="p-8 text-center text-muted text-sm">Time-series charts will appear here once a growth endpoint is added.</div>
+        </Card>
 
-        <div className="space-y-6">
-          <Card title="Recent activity"
-                action={<button onClick={() => nav('/audit')} className="text-muted"><ChevronRight size={16} /></button>}>
-            {activity.length === 0 ? (
-              <div className="p-6 text-center text-muted text-sm">No activity yet.</div>
-            ) : activity.map((e, i) => (
-              <div key={e.id} className={`px-5 py-3 ${i < activity.length - 1 ? 'border-b border-line' : ''}`}>
-                <div className="text-[13px] text-ink">{e.action.replace(/[._]/g, ' ')}</div>
-                <div className="text-[11px] text-muted">{new Date(e.created_at).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+        <Card title="Pending verifications"
+              action={<button onClick={() => nav('/verifications')} className="flex items-center gap-1 text-xs font-semibold text-brand-dark">View all <ChevronRight size={14} /></button>}>
+          {pending.length === 0 ? (
+            <div className="p-8 text-center text-muted text-sm">No accounts awaiting review.</div>
+          ) : pending.map((u, i) => (
+            <div key={u.id} className={`flex items-center gap-3 px-5 py-3 ${i < pending.length - 1 ? 'border-b border-line' : ''}`}>
+              <div className="w-10 h-10 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-xs font-semibold">{initials(u.full_name)}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[13px] font-semibold text-ink truncate">{u.full_name ?? 'Applicant'}</div>
+                <div className="text-[11px] text-muted truncate">{u.phone ?? u.email ?? u.id}</div>
               </div>
-            ))}
-          </Card>
-        </div>
+              <button onClick={() => approve(u.id)} disabled={busyId === u.id}
+                      className="w-9 h-9 rounded-lg bg-success-bg text-success flex items-center justify-center disabled:opacity-50" title="Approve">
+                <Check size={18} />
+              </button>
+              <button onClick={() => nav('/verifications')} className="w-9 h-9 rounded-lg bg-danger-bg text-danger flex items-center justify-center" title="Review / reject">
+                <X size={18} />
+              </button>
+            </div>
+          ))}
+        </Card>
       </div>
     </div>
   );

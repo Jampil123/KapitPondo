@@ -261,4 +261,34 @@ router.post('/admin/verifications/:id/reject', requireAuth, requireSystemAdmin, 
   } catch (err) { next(err); }
 });
 
+// Suspend an account (platform-wide). Distinct from a group officer
+// suspending a membership inside one fund group.
+router.post('/admin/accounts/:id/suspend', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    if (req.params.id === req.member.id) {
+      return res.status(400).json({ error: 'You cannot suspend your own account' });
+    }
+    const member = await service.suspendMember({
+      memberId: req.params.id,
+      adminMemberId: req.member.id,
+      actorAuthId: req.authUser.id,
+      reason: req.body?.reason,
+    });
+    if (!member) return res.status(409).json({ error: 'Account is already suspended, or not found' });
+    res.json({ message: 'Account suspended', member });
+  } catch (err) { next(err); }
+});
+
+// Lift a suspension.
+router.post('/admin/accounts/:id/reinstate', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const member = await service.reinstateMember({
+      memberId: req.params.id,
+      actorAuthId: req.authUser.id,
+    });
+    if (!member) return res.status(409).json({ error: 'Account is not suspended, or not found' });
+    res.json({ message: 'Account reinstated', member });
+  } catch (err) { next(err); }
+});
+
 module.exports = router;

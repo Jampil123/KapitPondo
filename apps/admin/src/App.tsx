@@ -14,6 +14,7 @@ import { OverviewPage } from './features/overview/OverviewPage';
 import { VerificationsPage } from './features/verifications/VerificationsPage';
 import { AuditPage } from './features/audit/AuditPage';
 import { GroupsPage } from './features/groups/GroupsPage';
+import { ReportsPage } from './features/reports/ReportsPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 import { SystemHealthPage } from './features/system-health/SystemHealthPage';
 import { DatabasePage } from './features/system-health/DatabasePage';
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="verifications" element={<VerificationsPage />} />
         <Route path="groups" element={<GroupsPage />} />
         <Route path="audit" element={<AuditPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="system/database" element={<DatabasePage />} />
         <Route path="system/database-health" element={<DatabaseHealthPage />} />

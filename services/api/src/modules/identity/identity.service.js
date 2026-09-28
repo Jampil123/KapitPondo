@@ -1,5 +1,5 @@
 const supabase = require('../../config/supabase');
-const { notify } = require('../../lib/notifications');
+const { notify, notifyAdmins } = require('../../lib/notifications');
 
 // `id_document_url` is actually a PATH inside the private `id-documents`
 // bucket (see apps/mobile/src/lib/upload.ts) — it must be exchanged for a
@@ -113,13 +113,8 @@ async function submitDocument({
     .in('verification_status', ['unverified', 'resubmission_required'])
     .select()
     .maybeSingle();
-  if (error || !data) {
-    // status changed underneath us — don't leave an orphaned submission behind
-    await supabase.from('identity_submissions').delete().eq('id', sub.id);
-    if (error) throw error;
-    return null;
-  }
-  return withSubmission(data, sub);
+  if (error) throw error;
+  return data;
 }
 
 // Member edits their own personal info — unlike submitDocument, not gated by
@@ -163,21 +158,77 @@ async function updateProfile({
   return withSubmission(data, await latestSubmission(memberId));
 }
 
+// Whether members.suspended_at exists (migration 0057). Starts unknown and is
+// latched to false the first time Postgres says the column isn't there, so the
+// admin queue degrades to its pre-suspension behaviour instead of 500ing.
+let suspensionAvailable = null;
+function isMissingSuspensionColumn(error) {
+  return error?.code === '42703' || /suspended_at/.test(error?.message ?? '');
+}
+
 // Sysadmin: list members by verification status (default: pending queue).
-// status === 'all' returns every member regardless of verification status.
+//   'all'             — every member
+//   'suspended'       — platform-suspended accounts (migration 0057)
+//   'group_suspended' — members a group's officers suspended inside a group
+//   anything else     — that verification_status
 async function listForReview(status = 'pending') {
   let q = supabase
     .from('members')
-    .select(`id, full_name, email, phone, verification_status, verified_at, created_at, city, province,
-      ${SUBMISSION_EMBED}(id_type, id_number, id_document_url, id_document_back_url, id_document_qr_data, selfie_url, status, reason, submitted_at, reviewed_by)`)
+    .select('id, full_name, email, phone, id_document_url, verification_status, created_at, id_type, city, province')
     .order('created_at', { ascending: true });
   if (status !== 'all') q = q.eq('verification_status', status);
   const { data, error } = await q;
+  if (error) {
+    if (isMissingSuspensionColumn(error)) { suspensionAvailable = false; return listForReview(status); }
+    throw error;
+  }
+  return data;
+}
+
+// Sysadmin suspends an account: platform access is withdrawn until reinstated
+// (middleware/auth.js blocks the suspended member on their next request).
+// Verification status is left alone — suspension is a separate axis.
+async function suspendMember({ memberId, adminMemberId, actorAuthId, reason }) {
+  const { data, error } = await supabase
+    .from('members')
+    .update({
+      suspended_at: new Date().toISOString(),
+      suspended_by: adminMemberId,
+      suspension_reason: reason ?? null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', memberId)
+    .is('suspended_at', null) // already-suspended accounts are a no-op, not a re-suspend
+    .select()
+    .maybeSingle();
   if (error) throw error;
-  return data.map((m) => {
-    const subs = [...(m.identity_submissions ?? [])].sort((a, b) => (a.submitted_at < b.submitted_at ? 1 : -1));
-    return withSubmission(m, subs[0] ?? null);
-  });
+  if (data) {
+    await writeAudit(actorAuthId, 'account.suspended', memberId, { reason: reason ?? null });
+    await notify({
+      memberId,
+      type: 'account.suspended',
+      title: 'Account suspended',
+      message: reason ? `Your account has been suspended: ${reason}` : 'Your account has been suspended. Contact support for help.',
+    });
+  }
+  return data;
+}
+
+async function reinstateMember({ memberId, actorAuthId }) {
+  const { data, error } = await supabase
+    .from('members')
+    .update({
+      suspended_at: null,
+      suspended_by: null,
+      suspension_reason: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', memberId)
+    .not('suspended_at', 'is', null)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
 }
 
 // `actorAuthId` is only passed when a sysadmin is inspecting another member's
@@ -300,5 +351,5 @@ async function getMyProfile(memberId) {
 
 module.exports = {
   submitDocument, updateProfile, listForReview, getMember,
-  approveMember, requestResubmission, rejectMember, getMyProfile,
+  approveMember, rejectMember, getMyProfile,
 };

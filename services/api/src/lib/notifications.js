@@ -112,4 +112,16 @@ async function notify({ memberId, groupId = null, type, title, message, data = n
   await sendPush(memberId, { title, message, data: { type, group_id: groupId, notification_id: row.id, ...(data ?? {}) } });
 }
 
-module.exports = { notify };
+// Fans one notification out to every system admin (members.is_system_admin)
+// — drives the admin console's topbar bell. Same fire-and-forget contract.
+async function notifyAdmins({ type, title, message }) {
+  const { data: admins, error } = await supabase
+    .from('members').select('id').eq('is_system_admin', true);
+  if (error) {
+    console.error(`[notifications] failed to look up admins for "${type}":`, error.message);
+    return;
+  }
+  await Promise.all((admins ?? []).map((a) => notify({ memberId: a.id, type, title, message })));
+}
+
+module.exports = { notify, notifyAdmins };

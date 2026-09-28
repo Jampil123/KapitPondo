@@ -28,6 +28,22 @@ router.get('/admin/monitoring/groups', requireAuth, requireSystemAdmin, async (r
   } catch (err) { next(err); }
 });
 
+// Fund Group Monitoring — read-only (GET only; no approve/reject routes here)
+router.get('/admin/monitoring/fund-groups', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const groups = await service.fundGroupsMonitoring();
+    res.json({ groups });
+  } catch (err) { next(err); }
+});
+
+// Fund Group Statistics for the dashboard — counts only, read-only
+router.get('/admin/monitoring/fund-group-stats', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  try {
+    const stats = await service.fundGroupStats();
+    res.json({ stats });
+  } catch (err) { next(err); }
+});
+
 // System-wide (sysadmin) audit feed
 router.get('/admin/monitoring/audit', requireAuth, requireSystemAdmin, async (req, res, next) => {
   try {
