@@ -17,6 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { headLabel, type PaymentMethod } from '@/api/lending';
 import { useLoan, useSubmitRepayment } from '@/features/lending/lending.hooks';
+import { remainingInterest } from '@/features/lending/remainingInterest';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
@@ -69,6 +70,11 @@ export default function RecordLoanRepayment() {
   const isSelf = !!loan && loan.membership?.member_id === member?.id;
   const outstanding = Number(loan?.outstanding_balance ?? 0);
   const rate = Number(loan?.interest_rate ?? 0);
+  const payments = data?.payments ?? [];
+  const interestLeft = remainingInterest(loan, payments);
+  // Claims still under review count against the balance too — same cap as the server.
+  const inFlight = payments.filter((p) => p.status === 'submitted' || p.status === 'confirmed').reduce((s, p) => s + Number(p.amount), 0);
+  const maxAmount = Math.max(0, Math.round((outstanding + interestLeft - inFlight) * 100) / 100);
 
   const [amount, setAmount] = useState('');
   // Walk-in payments are almost always cash, so there's no method picker.
@@ -80,15 +86,20 @@ export default function RecordLoanRepayment() {
   const methodCfg = METHODS.find((m) => m.key === method)!;
   const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
 
+  // Flat rate, split like one monthly installment — same rule as verify_repayment (migration 0063).
   const alloc = useMemo(() => {
-    if (!amtNum) return null;
-    const interest = Math.min(Math.round(outstanding * rate * 100) / 100, amtNum);
+    if (!amtNum || !loan) return null;
+    const loanAmount = Number(loan.approved_principal ?? loan.principal ?? 0);
+    const monthInterest = Math.round(loanAmount * rate * 100) / 100;
+    const monthly = loan.term_months ? loanAmount / loan.term_months + monthInterest : 0;
+    const interest = monthly > 0 ? Math.min(Math.round((amtNum * monthInterest / monthly) * 100) / 100, interestLeft, amtNum) : 0;
     const principal = Math.min(amtNum - interest, outstanding);
     const balanceAfter = Math.max(outstanding - principal, 0);
     return { interest, principal, balanceAfter, settles: balanceAfter <= 0.01 };
-  }, [amtNum, outstanding, rate]);
+  }, [amtNum, loan, outstanding, rate, interestLeft]);
 
   const needsRef = methodCfg.required && !reference.trim();
+  const tooMuch = amtNum > maxAmount + 0.005;
 
   async function pickProof() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -101,6 +112,7 @@ export default function RecordLoanRepayment() {
     if (!loan) return;
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter the amount received.');
+    if (tooMuch) return Alert.alert('Amount too high', `Only ${formatPeso(maxAmount)} is left to repay on this loan.`);
     if (needsRef) return Alert.alert('Reference needed', `Enter a ${methodCfg.refLabel.toLowerCase()}.`);
     setSaving(true);
     try {
@@ -127,7 +139,7 @@ export default function RecordLoanRepayment() {
     }
   }
 
-  const disabled = !amtNum || needsRef || !loan;
+  const disabled = !amtNum || needsRef || tooMuch || !loan;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
@@ -144,7 +156,7 @@ export default function RecordLoanRepayment() {
                 <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{loan.membership?.members?.full_name ?? 'Member'}</Text>
                 {loan.head_no > 1 ? <Text variant="caption" color="secondary">{headLabel(loan.head_no, loan.head_name)}</Text> : null}
                 <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
-                  {formatPeso(outstanding)} outstanding{isSelf ? ' · you' : ''}
+                  {formatPeso(maxAmount)} left to repay{isSelf ? ' · you' : ''}
                 </Text>
               </View>
             </View>
@@ -163,7 +175,7 @@ export default function RecordLoanRepayment() {
                     value={amount}
                     onChangeText={setAmount}
                     keyboardType="numeric"
-                    placeholder={String(outstanding)}
+                    placeholder={maxAmount.toFixed(2)}
                     placeholderTextColor={semantic.textMuted}
                     style={{ flex: 1, fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}
                   />
@@ -221,7 +233,7 @@ export default function RecordLoanRepayment() {
 
             <Button label="Record repayment" onPress={onSubmit} loading={saving} disabled={disabled} />
             <Text variant="caption" color="secondary" style={{ textAlign: 'center', marginTop: -8 }}>
-              {!amtNum ? 'Enter the amount received' : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required` : `Goes to ${confirmer} for confirmation`}
+              {!amtNum ? 'Enter the amount received' : tooMuch ? `Only ${formatPeso(maxAmount)} is left to repay` : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required` : `Goes to ${confirmer} for confirmation`}
             </Text>
           </>
         )}

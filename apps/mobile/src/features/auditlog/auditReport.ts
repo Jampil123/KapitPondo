@@ -59,11 +59,12 @@ function day(iso: string | null) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-/** Everything the report can include for the period, loaded once. */
+/** Everything the report can include for the period, loaded once. An empty groupId loads nothing (callers who can't see the audit report). */
 export function useAuditReport(groupId: string, period: ReportPeriod) {
   const from = startOf(period.from);
   const to = endOf(period.to);
   const fn = useCallback(async (): Promise<AuditReportData> => {
+    if (!groupId) return { verified: [], rejected: [], flags: [], findings: [], loans: [], truncated: false };
     const [{ entries, truncated }, findings, flags, loans] = await Promise.all([
       exportAuditLog(groupId, { from, to }), listFindings(groupId), listFlags(groupId), listLoanAudits(groupId),
     ]);

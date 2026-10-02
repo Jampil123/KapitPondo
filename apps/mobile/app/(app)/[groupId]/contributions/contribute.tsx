@@ -94,8 +94,12 @@ export default function Contribute() {
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const submit = useSubmitContribution(groupId!);
   const officers = useQuery(() => listOfficers(groupId!), [groupId]);
-  const hasFundOfficer = !!officers.data?.officers.some((o) => o.role === 'treasurer' || o.role === 'auditor');
-  const noOfficers = !officers.loading && !hasFundOfficer;
+  // Both are needed: the Treasurer confirms receipt, the Auditor verifies and posts.
+  const missingOfficers = (['treasurer', 'auditor'] as const)
+    .filter((r) => !officers.data?.officers.some((o) => o.role === r))
+    .map((r) => (r === 'treasurer' ? 'Treasurer' : 'Auditor'));
+  const noOfficers = !officers.loading && missingOfficers.length > 0;
+  const noOfficersText = `This group has no ${missingOfficers.join(' or ')} yet. Contributions open once the Organizer appoints one.`;
 
   const rows = (contribs.data ?? []).filter((c: Contribution) => c.membership_id === membership?.id);
   const heads = membership?.heads ?? 1;
@@ -187,7 +191,7 @@ export default function Contribute() {
 
   async function onSubmit() {
     if (!cycle) return Alert.alert('No active cycle', 'There is no active cycle to contribute to yet.');
-    if (noOfficers) return Alert.alert('No officer assigned', 'This group has no treasurer or auditor to confirm payments yet. Contact the group organizer before submitting.');
+    if (noOfficers) return Alert.alert('Officers not appointed', noOfficersText);
     if (!hasTreasurerGcash) return Alert.alert('No GCash number set up', "The treasurer hasn't set up a verified GCash number yet. Check back once one has been approved before submitting.");
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid contribution amount.');
@@ -294,8 +298,8 @@ export default function Contribute() {
         <BlockedState
           icon={Users}
           tone="warning"
-          title="No officer assigned"
-          body="This group has no treasurer or auditor yet, so there's no one to confirm your payment. Contact the group organizer before submitting."
+          title="Officers not appointed"
+          body={noOfficersText}
         />
       </SafeAreaView>
     );

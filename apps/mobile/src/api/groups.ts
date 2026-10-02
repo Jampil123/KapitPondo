@@ -43,6 +43,8 @@ export interface MyGroup {
   id: string;
   role: GroupRole;
   status: MembershipStatus;
+  /** Why the membership is suspended — "Withdrawal in progress" while withdrawing. */
+  status_reason?: string | null;
   heads: number;
   /** Null while status is still 'pending' — set the moment an owner approves. */
   joined_at: string | null;
@@ -164,12 +166,95 @@ export interface GroupMember {
   status: MembershipStatus;
   heads: number;
   joined_at: string | null;
+  /** Why the member is suspended (set by the Organizer), or "Withdrawal in progress". */
+  status_reason?: string | null;
   members: { id: string; full_name: string | null; avatar_url?: string | null; email: string | null; verification_status: string } | null;
 }
 
-export async function listMembers(groupId: string) {
-  const res = await api.get<{ members: GroupMember[] }>(`/api/groups/${groupId}/members`);
+/** Active members; `includeSuspended` adds suspended ones (the manage-members view). */
+export async function listMembers(groupId: string, opts: { includeSuspended?: boolean } = {}) {
+  const res = await api.get<{ members: GroupMember[] }>(`/api/groups/${groupId}/members`, opts.includeSuspended ? { include: 'suspended' } : undefined);
   return res.members ?? [];
+}
+
+// --- Suspend / reactivate / withdraw (UC-GM-04) -------------------------------
+
+/** What a member would be paid on withdrawing now. payout = capital − loan_owed − penalties. */
+export interface Settlement {
+  /** Contributions posted since the last year-end share. */
+  capital: number;
+  /** Loan principal left + interest not yet paid. */
+  loan_owed: number;
+  /** Unpaid penalties. */
+  penalties: number;
+  payout: number;
+  /** Anything that stops a withdrawal right now. */
+  blockers: string[];
+}
+
+export type WithdrawalStatus = 'pending_release' | 'released' | 'verified' | 'cancelled';
+
+export interface Withdrawal {
+  id: string;
+  group_id: string;
+  membership_id: string;
+  status: WithdrawalStatus;
+  capital: number;
+  loan_owed: number;
+  penalties: number;
+  payout: number;
+  note: string | null;
+  initiated_by: string;
+  initiated_at: string;
+  released_by: string | null;
+  released_at: string | null;
+  verified_by: string | null;
+  verified_at: string | null;
+  initiator?: { full_name: string | null } | null;
+  releaser?: { full_name: string | null } | null;
+  verifier?: { full_name: string | null } | null;
+  membership?: { member_id: string; members: { full_name: string | null; avatar_url?: string | null } | null } | null;
+}
+
+export interface MemberStanding {
+  membership: {
+    id: string; member_id: string; role: GroupRole; status: MembershipStatus; heads: number;
+    status_reason: string | null; status_changed_at: string | null;
+    members: { full_name: string | null; avatar_url?: string | null } | null;
+  };
+  settlement: Settlement;
+  withdrawal: Withdrawal | null;
+}
+
+/** GET — the member, their settlement if they withdrew now, and their latest withdrawal. Officers. */
+export function getMemberStanding(groupId: string, membershipId: string) {
+  return api.get<MemberStanding>(`/api/groups/${groupId}/memberships/${membershipId}/standing`);
+}
+/** POST — Organizer. Reason is shown to the member. */
+export function suspendMembership(groupId: string, membershipId: string, reason: string) {
+  return api.post(`/api/groups/${groupId}/memberships/${membershipId}/suspend`, { reason });
+}
+export function reactivateMembership(groupId: string, membershipId: string) {
+  return api.post(`/api/groups/${groupId}/memberships/${membershipId}/reactivate`);
+}
+/** POST — Organizer starts it; the Treasurer releases the payout, the Auditor verifies. */
+export function startWithdrawal(groupId: string, membershipId: string, note?: string) {
+  return api.post<{ withdrawal: Withdrawal }>(`/api/groups/${groupId}/memberships/${membershipId}/withdraw`, { note });
+}
+/** GET — withdrawals waiting for release or verification. Officers. */
+export async function listWithdrawals(groupId: string) {
+  const res = await api.get<{ withdrawals: Withdrawal[] }>(`/api/groups/${groupId}/withdrawals`);
+  return res.withdrawals ?? [];
+}
+export function releaseWithdrawal(groupId: string, id: string) {
+  return api.post<{ withdrawal: Withdrawal }>(`/api/groups/${groupId}/withdrawals/${id}/release`);
+}
+export function verifyWithdrawal(groupId: string, id: string) {
+  return api.post<{ withdrawal: Withdrawal }>(`/api/groups/${groupId}/withdrawals/${id}/verify`);
+}
+/** POST — Organizer, before the cash is released. */
+export function cancelWithdrawal(groupId: string, id: string, reason: string) {
+  return api.post<{ withdrawal: Withdrawal }>(`/api/groups/${groupId}/withdrawals/${id}/cancel`, { reason });
 }
 export function approveMember(groupId: string, memberId: string) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/approve`);

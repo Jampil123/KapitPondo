@@ -1,14 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, ScrollView, type NativeSyntheticEvent, type NativeScrollEvent } from 'react-native';
+import { View, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { useRouter } from 'expo-router';
 import { useQuery, useAction } from '@/hooks/useApi';
 import {
   Users, AlertTriangle, SlidersHorizontal, CalendarClock,
-  Wallet, ScrollText, CheckCircle2, Check, X, Clock3,
+  Wallet, ScrollText, CheckCircle2, Check, X, Clock3, Download,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
+import { ScrollTileRow, type TileAction } from '@/components/shared/ScrollTileRow';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent, steel, shadowToken } from '@/theme/colors';
@@ -22,9 +23,10 @@ import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan } from '@/f
 import { useSignoffQueue } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
+import { useAuth } from '@/context/AuthContext';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
-import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
+import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
 import { listPendingMembers, listMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
@@ -298,8 +300,10 @@ function MembershipDecisionCard({ groupId, row, onPress, onChanged, moreCount }:
 
 function PenaltyDecisionCard({ groupId, penalty, onPress, onChanged, moreCount }: { groupId: string; penalty: Penalty; onPress: () => void; onChanged: () => void; moreCount?: number }) {
   const waive = useWaivePenalty(groupId);
+  const { member } = useAuth();
   const [waiving, setWaiving] = useState(false);
   const name = penalty.membership?.members?.full_name ?? 'Member';
+  const own = penalty.membership?.member_id === member?.id;
 
   async function onWaiveConfirm(reason: string) {
     setWaiving(false);
@@ -313,7 +317,9 @@ function PenaltyDecisionCard({ groupId, penalty, onPress, onChanged, moreCount }
       <DecisionHead type="Penalty review" name={name} sub={`${penalty.reason} · applied ${shortDate(penalty.created_at)}`} amount={formatPeso(penalty.amount)} />
       {/* Penalties only support "waive" — there's no separate approve/confirm step. */}
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-        <QuickAction label="Waive" tone="danger" Icon={X} onPress={() => setWaiving(true)} disabled={waive.loading} />
+        {own
+          ? <Text variant="caption" color="muted">Your own penalty. The Auditor waives it.</Text>
+          : <QuickAction label="Waive" tone="danger" Icon={X} onPress={() => setWaiving(true)} disabled={waive.loading} />}
       </View>
       {moreCount ? (
         <Pressable onPress={onPress} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
@@ -325,8 +331,10 @@ function PenaltyDecisionCard({ groupId, penalty, onPress, onChanged, moreCount }
       <ReasonPrompt
         visible={waiving}
         title={`Waive ${name}'s penalty?`}
+        placeholder="Reason for waiving this penalty (required)"
         confirmLabel="Waive"
         destructive
+        required
         onCancel={() => setWaiving(false)}
         onConfirm={onWaiveConfirm}
       />
@@ -659,121 +667,33 @@ function Gate({ done, label }: { done: boolean; label: string }) {
   );
 }
 
-const PRIMARY_ACTIONS: { label: string; icon: any; key: string }[] = [
-  { label: 'Manage Officers', icon: Users, key: 'members/officers' },
-  { label: 'Group Ledger', icon: ScrollText, key: 'reports/group-ledger' },
-  { label: 'Member Balances', icon: Wallet, key: 'reports/member-balances' },
-  { label: 'Configure Cycle', icon: SlidersHorizontal, key: 'cycles/configure' },
+const MANAGE_ACTIONS: TileAction[] = [
+  { label: 'Manage Officers', icon: Users, route: 'members/officers' },
+  { label: 'Group Ledger', icon: ScrollText, route: 'reports/group-ledger' },
+  { label: 'Member Balances', icon: Wallet, route: 'reports/member-balances' },
+  { label: 'Configure Cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
+  { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },
+  { label: 'Audit Trail', icon: Clock3, route: 'audit/log' },
+  { label: 'Reports & Export', icon: Download, route: 'reports/export' },
 ];
-const ALL_ACTIONS: { label: string; icon: any; key: string }[] = [
-  ...PRIMARY_ACTIONS,
-  { label: 'Year-End Distribution', icon: CalendarClock, key: 'distribution/year-end' },
-];
-
-/**
- * Every manage action in one horizontally-scrollable row, with a thin
- * "scroll level" track beneath it showing how far through the row you are —
- * standalone tiles don't hint that there's more off-screen, this does.
- */
-function ManageRow({ go }: { go: (r: string) => void }) {
-  const [trackWidth, setTrackWidth] = useState(0);
-  const [visibleWidth, setVisibleWidth] = useState(0);
-  const [contentWidth, setContentWidth] = useState(0);
-  const [scrollX, setScrollX] = useState(0);
-
-  const scrollable = contentWidth > visibleWidth + 1;
-  const thumbWidth = scrollable ? Math.max(28, (visibleWidth / contentWidth) * trackWidth) : trackWidth;
-  const maxScrollX = Math.max(1, contentWidth - visibleWidth);
-  const maxThumbTravel = Math.max(0, trackWidth - thumbWidth);
-  const thumbLeft = scrollable ? Math.min(maxThumbTravel, (scrollX / maxScrollX) * maxThumbTravel) : 0;
-
-  // Exactly 4 tiles fill the row's full width (same edges as the cards above/
-  // below it) — same math as the original static 4-up grid, just computed
-  // from the measured width instead of a '23%' flex width, since a
-  // horizontal ScrollView's content isn't stretched to fit its viewport.
-  const GAP = 10;
-  const tileWidth = visibleWidth > 0 ? (visibleWidth - GAP * 3) / 4 : 84;
-
-  return (
-    <View style={{ marginTop: 14 }}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        onLayout={(e) => setVisibleWidth(e.nativeEvent.layout.width)}
-        onContentSizeChange={(w) => setContentWidth(w)}
-        onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => setScrollX(e.nativeEvent.contentOffset.x)}
-        scrollEventThrottle={16}
-        contentContainerStyle={{ gap: GAP, paddingVertical: 6 }}
-      >
-        {ALL_ACTIONS.map((a) => (
-          <Pressable
-            key={a.key}
-            onPress={() => go(a.key)}
-            style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
-          >
-            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
-            <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      {scrollable ? (
-        <View
-          onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
-          style={{ width: 56, height: 3, borderRadius: 1.5, backgroundColor: semantic.border, marginTop: 18, alignSelf: 'center', overflow: 'hidden' }}
-        >
-          <View style={{ width: thumbWidth, height: '100%', borderRadius: 1.5, backgroundColor: semantic.brand, transform: [{ translateX: thumbLeft }] }} />
-        </View>
-      ) : null}
-    </View>
-  );
-}
 
 /* ---------------- Activity — what officers decided (audit log), not money movements ---------------- */
-const ACTIVITY_TONE: Record<string, { bg: string; fg: string }> = {
-  good: { bg: intent.success.soft, fg: intent.success.text },
-  bad: { bg: intent.danger.soft, fg: intent.danger.text },
-  neutral: { bg: semantic.surfaceAlt, fg: semantic.brandDark },
-};
-
-function RecentActivity({ groupId, go }: { groupId: string; go: (r: string) => void }) {
+function RecentActivity({ groupId }: { groupId: string }) {
   const router = useRouter();
-  const log = useAuditLog(groupId, { limit: 5 });
+  const log = useAuditLog(groupId, { limit: 3 });
   const entries = log.data ?? [];
 
   return (
-    <View>
-      {log.loading && !log.data ? (
-        <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16, marginTop: 8 }, shadowToken.soft]}>
+      {log.loading && entries.length === 0 ? (
+        <ActivityIndicator color={semantic.brand} style={{ margin: 8 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No activity yet.</Text>
+        <Text variant="body" color="muted">No activity yet.</Text>
       ) : (
-        <>
-          {entries.map((e, i) => {
-            const d = describe(e);
-            const tone = ACTIVITY_TONE[d.toBad ? 'bad' : d.toGood ? 'good' : 'neutral'];
-            const Icon = d.toBad ? X : d.toGood ? Check : Clock3;
-            const who = e.actor?.full_name ? `${e.actor.full_name}${e.actor_role ? ` (${ROLE_LABEL[e.actor_role] ?? e.actor_role})` : ''}` : null;
-            return (
-              <Pressable
-                key={e.id}
-                onPress={() => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}
-              >
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={16} color={tone.fg} strokeWidth={2.4} />
-                </View>
-                <View style={{ flex: 1, gap: 1 }}>
-                  <Text variant="label" style={{ fontSize: 13 }}>{d.title}</Text>
-                  <Text variant="caption" color="secondary">{who ? `${who} · ` : ''}{shortDate(e.created_at)}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
-          <Pressable onPress={() => go('owner-activity')} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
-            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See all activity</Text>
-          </Pressable>
-        </>
+        <AuditTimeline
+          entries={entries}
+          onOpen={(e) => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
+        />
       )}
     </View>
   );
@@ -801,10 +721,10 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <CollectionBlock groupId={groupId} go={go} />
 
-      <ManageRow go={go} />
+      <ScrollTileRow actions={MANAGE_ACTIONS} go={go} />
 
-      <SectionHead title="Activity" />
-      <RecentActivity groupId={groupId} go={go} />
+      <SectionHead title="Recent activity" aside="See all" onAsidePress={() => go('owner-activity')} />
+      <RecentActivity groupId={groupId} />
     </>
   );
 }

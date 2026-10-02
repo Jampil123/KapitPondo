@@ -31,7 +31,8 @@ export type LedgerEntryType =
   | 'penalty'
   | 'fee'
   | 'adjustment'
-  | 'reversal';
+  | 'reversal'
+  | 'withdrawal';
 
 export interface LedgerEntry {
   id: string;
@@ -52,6 +53,8 @@ export interface LedgerEntry {
   reverses_entry_id?: string | null;
   /** The officer who posted this entry (always the approver — see the SQL RPCs). */
   poster: { full_name: string } | null;
+  /** The first sign-off: who confirmed the money arrived (or released the loan). Null for entries with a single sign-off. */
+  confirmer?: { id: string; full_name: string } | null;
   /** Who the entry actually belongs to (the contributor/borrower) — null for group-level entries (e.g. expenses). */
   membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
@@ -62,7 +65,7 @@ export interface ReversalRequest {
   id: string;
   group_id: string;
   entry_id: string;
-  entry?: LedgerEntry;
+  entry?: Omit<LedgerEntry, 'membership' | 'poster'> & { membership?: { member_id: string; members: { full_name: string } | null } | null };
   reason: string;
   status: ReversalRequestStatus;
   initiated_by: string;
@@ -72,11 +75,18 @@ export interface ReversalRequest {
   verify_notes: string | null;
   finalized_by: string | null;
   finalized_at: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  reject_reason?: string | null;
   reversal_entry_id: string | null;
+  initiator?: { full_name: string } | null;
+  verifier?: { full_name: string } | null;
+  rejecter?: { full_name: string } | null;
+  finalizer?: { full_name: string } | null;
 }
 
 /**
- * POST — initiate a reversal request (Treasurer or Owner). `reason` is
+ * POST — the Treasurer starts a reversal request. `reason` is
  * required. Does NOT post anything to the ledger yet — see verify/finalize
  * below. Throws ApiError 409 if the entry already has an active/completed
  * reversal request.
@@ -102,15 +112,15 @@ export function verifyReversal(groupId: string, requestId: string, notes?: strin
   );
 }
 
-/** POST — Auditor rejects a pending request (e.g. a discrepancy found). */
-export function rejectReversal(groupId: string, requestId: string, notes?: string) {
+/** POST — reject with a required reason: the Auditor while pending verification, the Organizer once verified. */
+export function rejectReversal(groupId: string, requestId: string, reason?: string) {
   return api.post<{ message: string; request: ReversalRequest }>(
     `/api/groups/${groupId}/reversal-requests/${requestId}/reject`,
-    { notes },
+    { reason },
   );
 }
 
-/** POST — Owner finalizes a verified request. This is the step that actually posts the reversing ledger entry. */
+/** POST — the Organizer approves a verified request. This is the step that posts the reversing entry and undoes the record behind it. */
 export function finalizeReversal(groupId: string, requestId: string) {
   return api.post<{ message: string; request: ReversalRequest; reversalEntry: LedgerEntry }>(
     `/api/groups/${groupId}/reversal-requests/${requestId}/finalize`,
@@ -142,6 +152,12 @@ export interface LedgerEntryDetail {
   source_id: string | null;
   record: FlaggedRecord | null;
   reversed_by: { id: string; entry_no: number; posted_at: string } | null;
+  /** Signed URL of the payment proof behind the entry, if any. */
+  proof_url: string | null;
+  /** The entry's latest reversal request, if any. */
+  reversal_request: ReversalRequest | null;
+  /** False for entries that can't be reversed (reversals, year-end shares, withdrawals, already reversed...). */
+  can_reverse: boolean;
   history: AuditLogEntry[];
 }
 

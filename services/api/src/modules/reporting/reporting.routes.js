@@ -49,17 +49,45 @@ router.get(
   }
 );
 
-// Member-safe, GROUP-WIDE ledger — every posting in the group, by name and
-// amount, deliberately NOT self-scoped (unlike /reports/ledger below). This
-// is a real transparency policy, not an oversight: any active member can see
-// every other member's individual contribution/loan amounts here. Proof
-// images aren't exposed by this (or any ledger route) — a ledger row only
-// carries source_type/source_id, and fetching the underlying proof still
-// goes through the normal per-record access rules.
+// Financial report for a period (from/to ISO timestamps, `to` exclusive) —
+// officers only, since it lists every member's position by name.
+router.get(
+  '/groups/:groupId/reports/financial',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const { from, to } = req.query;
+      if (!from || !to || isNaN(Date.parse(from)) || isNaN(Date.parse(to))) {
+        return res.status(400).json({ error: 'from and to are required ISO dates' });
+      }
+      res.json({ report: await service.financialReport(req.params.groupId, { from: new Date(from).toISOString(), to: new Date(to).toISOString() }) });
+    } catch (err) { next(err); }
+  }
+);
+
+// Group-wide totals — per entry type and per month, no per-entry rows and no
+// member names. What a member sees of the group ledger (UC-RP).
+router.get(
+  '/groups/:groupId/reports/fund-totals',
+  requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      res.json({ totals: await service.fundTotals(req.params.groupId) });
+    } catch (err) { next(err); }
+  }
+);
+
+// GROUP-WIDE ledger — every posting in the group, by name and amount. Officers
+// only: members get totals only (/reports/fund-totals above). Proof images
+// aren't exposed by this (or any ledger route) — a ledger row only carries
+// source_type/source_id, and fetching the underlying proof still goes through
+// the normal per-record access rules.
 router.get(
   '/groups/:groupId/reports/fund-ledger',
   requireAuth,
-  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
       const ledger = await service.groupLedger({

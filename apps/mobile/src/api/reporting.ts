@@ -75,12 +75,24 @@ export async function getFundSummary(groupId: string) {
   return res.summary;
 }
 
+export interface FundTotals {
+  postings: number;
+  /** Signed total per entry type: money in positive, money out negative. */
+  by_type: Partial<Record<LedgerEntryType, number>>;
+  /** Newest month first; month is "YYYY-MM" (Manila time). */
+  by_month: { month: string; money_in: number; money_out: number; postings: number }[];
+}
+
+/** GET — group-wide totals with no per-entry rows or names (any role) — the member's view of the group ledger. */
+export async function getFundTotals(groupId: string) {
+  const res = await api.get<{ totals: FundTotals }>(`/api/groups/${groupId}/reports/fund-totals`);
+  return res.totals;
+}
+
 /**
- * GET — member-safe, GROUP-WIDE ledger (any role) — every posting in the
- * group, not just the caller's own. Deliberately separate from getLedger()
- * below, which self-scopes to the caller for a member regardless of filters.
- * A real transparency policy: any active member sees every other member's
- * individual contribution/loan amounts through this endpoint.
+ * GET — GROUP-WIDE ledger (officers only) — every posting in the group, by
+ * name. Members get getFundTotals() instead. Deliberately separate from
+ * getLedger(), which self-scopes to the caller for a member.
  */
 export async function getFundLedger(groupId: string, filters: LedgerFilters = {}) {
   const res = await api.get<{ ledger: LedgerEntry[] }>(`/api/groups/${groupId}/reports/fund-ledger`, filters);

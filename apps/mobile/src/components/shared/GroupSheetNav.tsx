@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { View, Pressable, Modal } from 'react-native';
 import { router, usePathname, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircle, Home, Plus, User, Menu, X } from 'lucide-react-native';
+import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
+import { MessageCircle, Plus, User, Menu, X } from 'lucide-react-native';
 import { Text } from '../ui/Text';
-import { semantic } from '../../theme/colors';
+import { semantic, intent } from '../../theme/colors';
+import { useChatOverview } from '../../features/chat/chatOverview';
 import { activeGroupTab, type GroupTab } from './groupTabs';
 
 export type SheetItem = { label: string; icon: any; route: string; params?: Record<string, string> };
@@ -17,26 +19,55 @@ const NAV_SPARK = '#2FA8FF';
 // Same glow accent as the (auth)/landing.tsx welcome screen (its GLOW constant).
 const NAV_FAB = '#7FA6B8';
 
-function NavItem({ icon: Icon, onPress, active }: { icon: any; onPress: () => void; active?: boolean }) {
+const TABS: { key: Exclude<GroupTab, 'home'>; label: string; icon: any }[] = [
+  { key: 'messages', label: 'Chat', icon: MessageCircle },
+  { key: 'profile', label: 'Profile', icon: User },
+  { key: 'more', label: 'More', icon: Menu },
+];
+
+// The open tab stretches to show its label; the others shrink to just an icon.
+function NavItem({ icon: Icon, label, onPress, active, badge }: { icon: any; label: string; onPress: () => void; active: boolean; badge?: number }) {
   return (
-    <Pressable onPress={onPress} style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <View
+    <Animated.View layout={LinearTransition.duration(220)} style={{ flexGrow: active ? 2.2 : 1, flexBasis: 0 }}>
+      <Pressable
+        onPress={onPress}
+        disabled={active}
+        accessibilityRole="tab"
+        accessibilityState={{ selected: active, disabled: active }}
+        accessibilityLabel={badge ? `${label}, ${badge} unread` : label}
         style={{
-          width: 46, height: 46, borderRadius: 15, alignItems: 'center', justifyContent: 'center',
-          backgroundColor: active ? 'rgba(255,255,255,0.13)' : 'transparent',
+          height: 48, borderRadius: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
+          backgroundColor: active ? 'rgba(255,255,255,0.14)' : 'transparent',
         }}
       >
+        <View>
+          <Icon size={21} color={active ? NAV_ICON_ON : NAV_ICON} strokeWidth={1.85} />
+          {badge ? (
+            <View
+              style={{
+                position: 'absolute', top: -7, left: 12, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 4,
+                backgroundColor: intent.danger.base, borderWidth: 2, borderColor: NAV_BG, alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 9.5, lineHeight: 12, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{badge > 9 ? '9+' : badge}</Text>
+            </View>
+          ) : null}
+        </View>
+        {active ? (
+          <Animated.Text entering={FadeIn.duration(180)} numberOfLines={1} style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: NAV_ICON_ON }}>
+            {label}
+          </Animated.Text>
+        ) : null}
         {active ? (
           <View
             style={{
-              position: 'absolute', top: 6, width: 16, height: 2.5, borderRadius: 2, backgroundColor: NAV_SPARK,
+              position: 'absolute', top: 5, width: 16, height: 2.5, borderRadius: 2, backgroundColor: NAV_SPARK,
               shadowColor: NAV_SPARK, shadowOpacity: 0.9, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
             }}
           />
         ) : null}
-        <Icon size={22} color={active ? NAV_ICON_ON : NAV_ICON} strokeWidth={1.85} />
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -45,16 +76,14 @@ export function GroupSheetNav({ add }: { add: SheetConfig }) {
   const path = usePathname();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [sheetOpen, setSheetOpen] = useState(false);
+  const { unreadCount } = useChatOverview(groupId);
 
   const tab = activeGroupTab(path);
 
-  // Home pops back to the existing dashboard; other tabs replace each other so the stack never grows past Home + one tab.
+  // The nav only shows on the dashboard, so each tab opens as a page on top of it and Back returns here.
   function goTab(target: GroupTab) {
     if (target === tab) return;
-    if (target === 'home') return router.dismissTo({ pathname: '/(app)/[groupId]', params: { groupId } });
-    const href = { pathname: `/(app)/[groupId]/${target}` as any, params: { groupId } };
-    if (tab === 'home') router.push(href);
-    else router.replace(href);
+    router.push({ pathname: `/(app)/[groupId]/${target}` as any, params: { groupId } });
   }
 
   function handleItem(it: SheetItem) {
@@ -64,31 +93,31 @@ export function GroupSheetNav({ add }: { add: SheetConfig }) {
 
   return (
     <>
-      <View
-        style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          marginHorizontal: 16, marginTop: 8, marginBottom: Math.max(insets.bottom, 14),
-          height: 66, borderRadius: 26, paddingHorizontal: 8,
-          backgroundColor: NAV_BG,
-          shadowColor: '#12303C', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.34, shadowRadius: 22, elevation: 10,
-        }}
-      >
-        <NavItem icon={Home} active={tab === 'home'} onPress={() => goTab('home')} />
-        <NavItem icon={MessageCircle} active={tab === 'messages'} onPress={() => goTab('messages')} />
-        <View style={{ flex: 1, alignItems: 'center' }}>
-          <Pressable
-            onPress={() => setSheetOpen(true)}
-            style={{
-              width: 52, height: 52, borderRadius: 18, backgroundColor: NAV_FAB,
-              alignItems: 'center', justifyContent: 'center',
-              shadowColor: NAV_FAB, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.7, shadowRadius: 16, elevation: 8,
-            }}
-          >
-            <Plus size={26} color="#fff" strokeWidth={2.6} />
-          </Pressable>
+      <View pointerEvents="box-none" style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginHorizontal: 16, marginTop: 8, marginBottom: Math.max(insets.bottom, 14), backgroundColor: 'transparent' }}>
+        {/* Chat, Profile and More, grouped in one pill */}
+        <View
+          style={{
+            flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4,
+            height: 62, borderRadius: 26, paddingHorizontal: 7,
+            backgroundColor: NAV_BG,
+          }}
+        >
+          {TABS.map((t) => (
+            <NavItem key={t.key} icon={t.icon} label={t.label} active={tab === t.key} badge={t.key === 'messages' ? unreadCount : undefined} onPress={() => goTab(t.key)} />
+          ))}
         </View>
-        <NavItem icon={User} active={tab === 'profile'} onPress={() => goTab('profile')} />
-        <NavItem icon={Menu} active={tab === 'more'} onPress={() => goTab('more')} />
+
+        {/* Quick add, on its own to the right */}
+        <Pressable
+          onPress={() => setSheetOpen(true)}
+          accessibilityLabel={add.title}
+          style={{
+            width: 62, height: 62, borderRadius: 31, backgroundColor: NAV_FAB,
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Plus size={27} color="#fff" strokeWidth={2.6} />
+        </Pressable>
       </View>
 
       <Modal visible={sheetOpen} transparent animationType="slide" onRequestClose={() => setSheetOpen(false)}>

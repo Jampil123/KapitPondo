@@ -101,6 +101,9 @@ export default function Repay() {
     if (!activeLoan) return;
     const amt = toAmountString(amount);
     if (!amt || Number(amt) <= 0) return Alert.alert('Invalid amount', 'Enter a valid repayment amount.');
+    if (Number(amt) > outstanding + interestLeft + 0.005) {
+      return Alert.alert('Amount too high', `That's more than the ${formatPeso(outstanding + interestLeft)} left on this loan.`);
+    }
     if (!proofUri) return Alert.alert('Proof required', 'Attach a photo or screenshot of your payment before submitting.');
 
     if (groupId) {

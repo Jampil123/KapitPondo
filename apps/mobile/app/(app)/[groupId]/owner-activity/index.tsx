@@ -2,13 +2,12 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, X, Clock3, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
-import { semantic, intent } from '@/theme/colors';
+import { semantic, shadowToken } from '@/theme/colors';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
-import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
+import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import type { AuditLogEntry } from '@/api/auditLog';
 
 /** The Owner's view of the audit log: plain decisions, grouped by day — the Auditor keeps the detailed audit/log page. */
@@ -29,40 +28,10 @@ const FILTERS: { key: Filter; label: string }[] = [
   { key: 'settings', label: 'Settings' },
 ];
 
-const TONE = {
-  good: { bg: intent.success.soft, fg: intent.success.text, Icon: Check },
-  bad: { bg: intent.danger.soft, fg: intent.danger.text, Icon: X },
-  neutral: { bg: semantic.surfaceAlt, fg: semantic.brandDark, Icon: Clock3 },
-};
-
 function dayLabel(iso: string) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
 }
-function timeLabel(iso: string) {
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
-}
-
-function ActivityRow({ e, last, onPress }: { e: AuditLogEntry; last: boolean; onPress: () => void }) {
-  const d = describe(e);
-  const tone = TONE[d.toBad ? 'bad' : d.toGood ? 'good' : 'neutral'];
-  const who = e.actor?.full_name ? `${e.actor.full_name}${e.actor_role ? ` (${ROLE_LABEL[e.actor_role] ?? e.actor_role})` : ''}` : 'Someone';
-  return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center' }}>
-        <tone.Icon size={16} color={tone.fg} strokeWidth={2.4} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Text variant="label" style={{ fontSize: 13 }}>{d.title}</Text>
-        <Text variant="caption" color="secondary">{who} · {timeLabel(e.created_at)}</Text>
-        {d.reason ? <Text variant="caption" style={{ color: intent.danger.text, marginTop: 2 }} numberOfLines={1}>Reason: {d.reason}</Text> : null}
-      </View>
-      <ChevronRight size={16} color={semantic.textMuted} />
-    </Pressable>
-  );
-}
-
 export default function OwnerActivity() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
@@ -107,13 +76,12 @@ export default function OwnerActivity() {
           days.map((list) => (
             <View key={list[0].id}>
               <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{dayLabel(list[0].created_at)}</Text>
-              <View>
-                {list.map((e, i) => (
-                  <ActivityRow
-                    key={e.id} e={e} last={i === list.length - 1}
-                    onPress={() => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
-                  />
-                ))}
+              <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16 }, shadowToken.soft]}>
+                <AuditTimeline
+                  entries={list}
+                  showReason
+                  onOpen={(e) => router.push({ pathname: '/(app)/[groupId]/owner-activity/[id]' as any, params: { groupId, id: e.id, at: e.created_at } })}
+                />
               </View>
             </View>
           ))

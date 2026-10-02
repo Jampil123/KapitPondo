@@ -19,13 +19,21 @@ const GROUP_SCREEN: Record<string, string> = {
   'loan.to_review': 'signoffs',
   'loan.to_release': 'signoffs',
   'loan.release_to_verify': 'signoffs',
+  'withdrawal.to_release': 'signoffs',
+  'withdrawal.to_verify': 'signoffs',
   'loan.sent_back': 'loans/decisions',
+  'penalty.to_review': 'penalties',
+  'reversal.to_verify': 'signoffs',
+  'reversal.to_approve': 'signoffs',
+  'reversal.rejected': 'reports/group-ledger',
 
   // cash an officer recorded for the member
   'contribution.walk_in_recorded': 'recorded-for-me',
   'loan.walk_in_recorded': 'recorded-for-me',
 
   // the member's own money
+  'contribution.confirmed': 'contributions',
+  'contribution.verified': 'contributions',
   'contribution.rejected': 'contributions',
   'payment.reminder': 'contributions',
   'balance.nudge': 'contributions',
@@ -34,6 +42,7 @@ const GROUP_SCREEN: Record<string, string> = {
   'loan.approved': 'loans/my-loan',
   'loan.disbursed': 'loans/my-loan',
   'loan.rejected': 'loans/my-loan',
+  'loan.repayment_received': 'loans/repayments',
   'loan.repayment_confirmed': 'loans/repayments',
   'loan.repayment_rejected': 'loans/repayments',
   'ledger.reversed': 'reports/my-transactions',
@@ -44,6 +53,11 @@ const GROUP_SCREEN: Record<string, string> = {
   'gcash.approved': 'group/settings',
   'gcash.rejected': 'group/settings',
   'membership.role_changed': '',
+  'membership.suspended': '',
+  'membership.reactivated': '',
+  'withdrawal.started': '',
+  'withdrawal.cancelled': '',
+  'withdrawal.verified': 'reports',
   'direct_message': 'messages',
 
   // oversight

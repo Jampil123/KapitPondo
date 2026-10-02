@@ -68,11 +68,12 @@ router.put(
   }
 );
 
-// Preview a year-end distribution (owner or treasurer)
+// Step 1 of the year-end split: the Treasurer prepares the preview. The
+// Auditor verifies it and the Organizer finalizes, so no one does two steps.
 router.post(
   '/groups/:groupId/distributions/preview',
   requireAuth,
-  requireGroupRole(['owner', 'treasurer']),
+  requireGroupRole(['treasurer']),
   async (req, res, next) => {
     try {
       const { period } = req.body;

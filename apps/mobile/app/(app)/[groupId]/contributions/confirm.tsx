@@ -103,11 +103,12 @@ export default function ConfirmContributions() {
     }
     return counts;
   }, [rows]);
-  // To confirm: members' claims waiting for me to check the money arrived. My
-  // own and what I recorded never show here — someone else signs those off.
+  // To confirm: claims waiting for me to check the money arrived, including
+  // cash another officer recorded. My own and what I recorded never show
+  // here — someone else signs those off.
   // Awaiting: what's left the Treasurer's hands — confirmed and waiting for
   // the Auditor's verification (which posts it), or mine waiting on the Organizer.
-  const pendingRows = rows.filter((c) => c.status === 'submitted' && !c.is_walk_in && c.recorded_by !== member?.id && c.memberships?.member_id !== member?.id);
+  const pendingRows = rows.filter((c) => c.status === 'submitted' && c.recorded_by !== member?.id && c.memberships?.member_id !== member?.id);
   const awaitingRows = rows.filter((c) => c.status === 'confirmed' || (c.status === 'submitted' && (c.recorded_by === member?.id || c.memberships?.member_id === member?.id)));
   const returnedRows = rows.filter((c) => c.status === 'rejected' && c.recorded_by === member?.id);
 
@@ -429,6 +430,7 @@ export default function ConfirmContributions() {
         placeholder="What needs to be fixed? (visible to the member)"
         confirmLabel="Return"
         destructive
+        required
         onCancel={() => setReturnTarget(null)}
         onConfirm={onReturnConfirm}
       />

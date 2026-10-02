@@ -35,9 +35,10 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, role, status, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name, avatar_url))')
+    .select('id, role, status, status_reason, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name, avatar_url))')
     .eq('member_id', memberId)
-    .in('status', ['active', 'pending']);
+    // Suspended members keep view access to their group.
+    .in('status', ['active', 'pending', 'suspended']);
   if (error) throw error;
   return data;
 }
@@ -284,12 +285,15 @@ async function rejectMember(groupId, memberId, reason) {
   return data;
 }
 
-async function listGroupMembers(groupId) {
+// includeSuspended: the manage-members view, which needs suspended members to
+// reactivate or withdraw them. Everything else (collections, sign-offs) wants
+// active members only.
+async function listGroupMembers(groupId, { includeSuspended = false } = {}) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, member_id, role, status, heads, joined_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
+    .select('id, member_id, role, status, heads, joined_at, status_reason, status_changed_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
     .eq('group_id', groupId)
-    .eq('status', 'active')
+    .in('status', includeSuspended ? ['active', 'suspended'] : ['active'])
     .order('joined_at', { ascending: true, nullsFirst: true });
   if (error) throw error;
   return data;
@@ -405,14 +409,10 @@ async function nudgeMember(groupId, memberId) {
   });
 }
 
-async function removeMember(groupId, memberId) {
-  const { error } = await supabase
-    .from('memberships')
-    .update({ status: 'exited' })
-    .eq('group_id', groupId)
-    .eq('member_id', memberId)
-    .neq('role', 'owner');
-  if (error) throw error;
+// Removing someone outright would leave their contributions in the fund with
+// no settlement — Withdraw (startWithdrawal) is the way a member leaves.
+async function removeMember() {
+  throw Object.assign(new Error("Use Withdraw so the member's contributions are settled."), { status: 409 });
 }
 
 // Self-service: a member leaves their own group. Blocked while they have an
@@ -439,6 +439,12 @@ async function checkLeaveBlockers(membershipId) {
     .eq('status', 'pending');
   if (pErr) throw pErr;
   if (pendingPenalties?.length) reasons.push('You have an unresolved late-contribution penalty — settle it before leaving.');
+
+  // Leaving on your own would forfeit contributions still in the fund.
+  const { data: settlement, error: sErr } = await supabase.rpc('withdrawal_settlement', { p_membership_id: membershipId });
+  if (sErr) throw sErr;
+  const s = Array.isArray(settlement) ? settlement[0] : settlement;
+  if (Number(s?.capital) > 0) reasons.push('You still have contributions in the fund. Ask the Organizer to withdraw you so they are paid back.');
 
   return reasons;
 }
@@ -473,8 +479,128 @@ async function leaveGroup(groupId, memberId) {
   return data;
 }
 
+// =====================================================================
+// Suspend / reactivate / withdraw (UC-GM-04) — the rules live in the SQL
+// functions (migration 0060); these call them and turn their exceptions
+// into 409s with the function's own message.
+// =====================================================================
+
+async function rpc409(fn, args) {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) {
+    if (error.code === 'P0001') throw Object.assign(new Error(error.message), { status: 409 });
+    throw error;
+  }
+  return data;
+}
+
+async function membershipInGroup(groupId, membershipId) {
+  const { data, error } = await supabase
+    .from('memberships')
+    .select('id, group_id, member_id, role, status, heads, status_reason, status_changed_at, members!memberships_member_id_fkey(full_name, avatar_url)')
+    .eq('id', membershipId).maybeSingle();
+  if (error) throw error;
+  if (!data || data.group_id !== groupId) throw Object.assign(new Error('Member not found in this group'), { status: 404 });
+  return data;
+}
+
+// What the manage-member page shows: the member, what a withdrawal would pay
+// now (and what stops it), and their latest withdrawal, if any.
+async function memberStanding(groupId, membershipId) {
+  const membership = await membershipInGroup(groupId, membershipId);
+  const settlement = await rpc409('withdrawal_settlement', { p_membership_id: membershipId });
+  const { data: withdrawal, error } = await supabase
+    .from('withdrawals')
+    .select('*, initiator:members!initiated_by(full_name), releaser:members!released_by(full_name), verifier:members!verified_by(full_name)')
+    .eq('membership_id', membershipId)
+    .neq('status', 'cancelled')
+    .order('created_at', { ascending: false })
+    .limit(1).maybeSingle();
+  if (error) throw error;
+  return { membership, settlement: Array.isArray(settlement) ? settlement[0] : settlement, withdrawal };
+}
+
+async function suspendMember(groupId, membershipId, actorId, reason) {
+  const m = await membershipInGroup(groupId, membershipId);
+  const data = await rpc409('suspend_membership', { p_membership_id: membershipId, p_actor_id: actorId, p_reason: reason });
+  await notify({
+    memberId: m.member_id, groupId, type: 'membership.suspended', title: 'Your membership is suspended',
+    message: `You can still view your records, but can't contribute or borrow for now. Reason: ${reason}`,
+  });
+  return data;
+}
+
+async function reactivateMember(groupId, membershipId, actorId) {
+  const m = await membershipInGroup(groupId, membershipId);
+  const data = await rpc409('reactivate_membership', { p_membership_id: membershipId, p_actor_id: actorId });
+  await notify({
+    memberId: m.member_id, groupId, type: 'membership.reactivated', title: 'Your membership is active again',
+    message: 'You can contribute and borrow again.',
+  });
+  return data;
+}
+
+async function startWithdrawal(groupId, membershipId, actorId, note) {
+  const m = await membershipInGroup(groupId, membershipId);
+  const w = await rpc409('start_withdrawal', { p_membership_id: membershipId, p_actor_id: actorId, p_note: note ?? null });
+  await notify({
+    memberId: m.member_id, groupId, type: 'withdrawal.started', title: 'Your withdrawal has started',
+    message: `The Treasurer will pay out ₱${Number(w.payout).toLocaleString('en-PH', { minimumFractionDigits: 2 })}, then the Auditor verifies it.`,
+  });
+  return w;
+}
+
+async function getWithdrawal(groupId, withdrawalId) {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('*, membership:memberships!membership_id(member_id, members!memberships_member_id_fkey(full_name, avatar_url))')
+    .eq('id', withdrawalId).maybeSingle();
+  if (error) throw error;
+  if (!data || data.group_id !== groupId) throw Object.assign(new Error('Withdrawal not found'), { status: 404 });
+  return data;
+}
+
+async function releaseWithdrawal(groupId, withdrawalId, actorId) {
+  await getWithdrawal(groupId, withdrawalId);
+  return rpc409('release_withdrawal', { p_withdrawal_id: withdrawalId, p_actor_id: actorId });
+}
+
+async function verifyWithdrawal(groupId, withdrawalId, actorId) {
+  const w = await getWithdrawal(groupId, withdrawalId);
+  const data = await rpc409('verify_withdrawal', { p_withdrawal_id: withdrawalId, p_actor_id: actorId });
+  await notify({
+    memberId: w.membership.member_id, groupId, type: 'withdrawal.verified', title: 'Your withdrawal is complete',
+    message: `Your settlement of ₱${Number(w.payout).toLocaleString('en-PH', { minimumFractionDigits: 2 })} was verified and posted.`,
+  });
+  return data;
+}
+
+async function cancelWithdrawal(groupId, withdrawalId, actorId, reason) {
+  const w = await getWithdrawal(groupId, withdrawalId);
+  const data = await rpc409('cancel_withdrawal', { p_withdrawal_id: withdrawalId, p_actor_id: actorId, p_reason: reason });
+  await notify({
+    memberId: w.membership.member_id, groupId, type: 'withdrawal.cancelled', title: 'Your withdrawal was cancelled',
+    message: reason,
+  });
+  return data;
+}
+
+// Open withdrawals — the Treasurer's and Auditor's sign-off queue.
+async function listWithdrawals(groupId) {
+  const { data, error } = await supabase
+    .from('withdrawals')
+    .select('*, membership:memberships!membership_id(member_id, members!memberships_member_id_fkey(full_name, avatar_url))')
+    .eq('group_id', groupId)
+    .in('status', ['pending_release', 'released'])
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
   createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember,
   listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, removeMember, leaveGroup, nudgeMember,
+  memberStanding, suspendMember, reactivateMember, startWithdrawal, releaseWithdrawal, verifyWithdrawal,
+  cancelWithdrawal, listWithdrawals,
   submitGcashProposal, cancelGcashProposal, approveGcashProposal, rejectGcashProposal, listGcashHistory,
 };

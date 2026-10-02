@@ -16,23 +16,15 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { usePresentMembers } from '@/context/PresenceContext';
 import { can } from '@/constants/roles';
 import { useQuery } from '@/hooks/useApi';
-import { listOfficers, listMemberDirectory } from '@/api/groups';
+import { listMemberDirectory } from '@/api/groups';
 import { uploadChatImage } from '@/lib/upload';
 import { useMessages, useSendMessage } from '@/features/chat/chat.hooks';
+import { useMarkChatSeen, useRoomReaders, seenBy, seenByLabel } from '@/features/chat/chatSeen';
+import { SeenReceipt } from '@/components/chat/SeenReceipt';
 import type { ChatChannel } from '@/api/messages';
 
 const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
 const STICKERS = ['👍', '😊', '🎉', '🙏', '❤️', '😂', '✅', '💰'];
-
-/** "Ana, Jay, Marites +13 more" — a name list that degrades gracefully once
- *  a group has more members than fit in an AppBar subtitle line. */
-function nameList(names: (string | null)[], max = 3): string {
-  const clean = names.map((n) => n ?? 'Unnamed');
-  if (clean.length === 0) return '';
-  const shown = clean.slice(0, max).join(', ');
-  const rest = clean.length - max;
-  return rest > 0 ? `${shown} +${rest} more` : shown;
-}
 
 /** "Ana is active now" / "5 active now" / "No one else is active right now" —
  *  driven by real Supabase Realtime presence (PresenceContext), not a guess. */
@@ -49,7 +41,6 @@ export default function Chat() {
   const [draft, setDraft] = useState('');
   const [showStickers, setShowStickers] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const officers = useQuery(() => listOfficers(groupId!), [groupId]);
   const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
   const present = usePresentMembers();
 
@@ -64,6 +55,13 @@ export default function Chat() {
 
   const { messages, loading, loadingMore, loadMore } = useMessages(groupId, channel);
   const { send, sending } = useSendMessage(groupId, channel);
+  useMarkChatSeen(groupId, allowed ? channel : undefined, messages[0]?.id);
+  const readers = useRoomReaders(groupId, channel, !!role && allowed);
+  const newest = messages[0];
+  const newestSeenBy = newest ? seenBy(readers.data ?? [], newest, member?.id) : [];
+  const receipt = newest
+    ? (seenByLabel(newestSeenBy) ?? (newest.sender_id === member?.id ? 'Sent' : null))
+    : null;
 
   if (!role || !allowed) return null; // brief flash before the redirect above fires
 
@@ -104,9 +102,7 @@ export default function Chat() {
 
   const title = channel === 'officers' ? 'Officers room' : (group?.name ?? 'Group chat');
   const othersPresent = present.filter((p) => p.member_id !== member?.id);
-  const subtitle = channel === 'officers'
-    ? (officers.data ? `${nameList(officers.data.officers.map((o) => o.full_name))} · private` : undefined)
-    : activeNowLabel(othersPresent);
+  const subtitle = channel === 'officers' ? undefined : activeNowLabel(othersPresent);
 
   return (
     // KeyboardAvoidingView wraps everything (including the AppBar) so its
@@ -143,6 +139,10 @@ export default function Chat() {
                 renderItem={({ item }) => (
                   <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />
                 )}
+                // Inverted list: the header renders below the newest message.
+                ListHeaderComponent={receipt && newest ? (
+                  <SeenReceipt label={receipt} seen={newestSeenBy.length > 0} alignRight={newest.sender_id === member?.id} />
+                ) : null}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 ListFooterComponent={loadingMore ? <LoadingState fullscreen={false} /> : null}

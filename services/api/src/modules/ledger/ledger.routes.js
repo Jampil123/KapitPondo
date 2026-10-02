@@ -25,12 +25,12 @@ router.get(
   }
 );
 
-// Initiate a reversal request (Treasurer or Owner). Requires a reason. Does
-// NOT touch the ledger yet — see /verify and /finalize below (TC-021).
+// Step 1 (UC-LG-01): the Treasurer starts a reversal, with a reason. Does NOT
+// touch the ledger yet — see /verify and /finalize below.
 router.post(
   '/groups/:groupId/ledger/:entryId/reverse',
   requireAuth,
-  requireGroupRole(['treasurer', 'owner']),
+  requireGroupRole(['treasurer']),
   async (req, res, next) => {
     try {
       const { reason } = req.body;
@@ -105,42 +105,58 @@ router.post(
   }
 );
 
-// Auditor rejects a reversal request (discrepancy found, etc.)
+// Reject a reversal, with a reason — the Auditor while it's pending
+// verification (step 2), or the Organizer once verified (step 3). Nothing is
+// posted either way; the Treasurer is told why.
 router.post(
   '/groups/:groupId/reversal-requests/:id/reject',
   requireAuth,
   requireGroupRole(['auditor', 'treasurer', 'owner']),
   async (req, res, next) => {
     try {
-      const blocked = await service.reversalReviewBlock({
-        requestId: req.params.id, groupId: req.params.groupId,
-        memberId: req.member.id, membershipId: req.membership.id, role: req.membership.role,
-      });
-      if (blocked) return res.status(403).json({ error: blocked });
-      const request = await service.rejectReversal({
-        requestId: req.params.id,
-        verifiedBy: req.member.id,
-        notes: req.body?.notes,
-      });
-      if (!request) return res.status(409).json({ error: 'Request is not pending verification' });
+      const reason = (req.body?.reason ?? req.body?.notes ?? '').trim();
+      if (!reason) return res.status(400).json({ error: 'reason is required to reject a reversal' });
+      const current = await service.getReversalRequest(req.params.id);
+      if (current.group_id !== req.params.groupId) return res.status(400).json({ error: 'Reversal request does not belong to this group' });
+
+      let fromStatus;
+      if (current.status === 'verified') {
+        if (req.membership.role !== 'owner') return res.status(403).json({ error: 'Only the Organizer can reject a verified reversal' });
+        if ([current.initiated_by, current.verified_by].includes(req.member.id)) {
+          return res.status(403).json({ error: 'The person who started or verified a reversal cannot also decide it' });
+        }
+        fromStatus = 'verified';
+      } else {
+        const blocked = await service.reversalReviewBlock({
+          requestId: req.params.id, groupId: req.params.groupId,
+          memberId: req.member.id, membershipId: req.membership.id, role: req.membership.role,
+        });
+        if (blocked) return res.status(403).json({ error: blocked });
+        fromStatus = 'pending_verification';
+      }
+
+      const request = await service.rejectReversal({ requestId: req.params.id, rejectedBy: req.member.id, reason, fromStatus });
+      if (!request) return res.status(409).json({ error: 'This reversal is no longer waiting for a decision' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'rejected', entityType: 'reversal_request', entityId: req.params.id,
-        before: { status: 'pending_verification' }, after: { status: 'rejected', notes: req.body?.notes ?? null },
+        before: { status: fromStatus }, after: { status: 'rejected', reason },
       });
-      res.json({ message: 'Reversal request rejected', request });
+      res.json({ message: 'Reversal rejected — the entry stands', request });
     } catch (err) { next(err); }
   }
 );
 
-// Owner finalizes a verified reversal — this is the only step that actually
-// posts the reversing ledger entry.
+// Step 3 (UC-LG-03): the Organizer approves a verified reversal — the only
+// step that posts the reversing entry (approve_reversal, migration 0063).
 router.post(
   '/groups/:groupId/reversal-requests/:id/finalize',
   requireAuth,
   requireGroupRole(['owner']),
   async (req, res, next) => {
     try {
+      const current = await service.getReversalRequest(req.params.id);
+      if (current.group_id !== req.params.groupId) return res.status(400).json({ error: 'Reversal request does not belong to this group' });
       const { request, reversalEntry } = await service.finalizeReversal({
         requestId: req.params.id,
         finalizedBy: req.member.id,

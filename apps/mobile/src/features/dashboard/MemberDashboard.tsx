@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import Svg, { Circle } from 'react-native-svg';
 import {
   ArrowUpCircle, Coins, Users, BarChart3, ArrowRight,
-  ArrowUpRight, ArrowDownRight, CheckCircle2, Clock3, AlertTriangle, HelpCircle,
+  CheckCircle2, Clock3, AlertTriangle, HelpCircle,
   Wallet, Layers,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -21,6 +21,8 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 import { cyclePeriods, buildTimeline } from '@/features/contributions/periods';
 import { usePenaltyDue } from '@/features/contributions/penalty';
 import type { Contribution } from '@/api/contributions';
+import { LedgerTimeline } from '@/features/activity/LedgerTimeline';
+import { signoffLine } from '@/features/activity/entryCopy';
 
 
 function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: string; onAsidePress?: () => void }) {
@@ -404,49 +406,22 @@ const ACTIONS: { label: string; icon: any; route: string }[] = [
   { label: 'Contributions', icon: ArrowUpCircle, route: 'contributions' },
   { label: 'Loans', icon: Coins, route: 'loans' },
   { label: 'Group & Officers', icon: Users, route: 'group' },
-  { label: 'Reports', icon: BarChart3, route: 'reports' },
+  { label: 'My Ledger', icon: BarChart3, route: 'reports' },
 ];
 
-function RecentActivity({ groupId, onSeeAll, onOpen }: { groupId: string; onSeeAll: () => void; onOpen: (entryId: string) => void }) {
+function RecentActivity({ groupId, onOpen }: { groupId: string; onOpen: (entryId: string) => void }) {
   const { membership } = useActiveGroup();
-  const ledger = useLedger(groupId, { limit: 5, membership_id: membership?.id });
+  const ledger = useLedger(groupId, { limit: 3, membership_id: membership?.id });
   const entries = ledger.data ?? [];
 
   return (
-    <View>
-      {ledger.loading ? (
-        <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16, marginTop: 8 }, shadowToken.soft]}>
+      {ledger.loading && entries.length === 0 ? (
+        <ActivityIndicator color={semantic.brand} style={{ margin: 8 }} />
       ) : entries.length === 0 ? (
-        <Text variant="body" color="muted" style={{ paddingVertical: 8, paddingHorizontal: 2 }}>No recent activity yet.</Text>
+        <Text variant="body" color="muted">No recent activity yet.</Text>
       ) : (
-        <>
-          {entries.map((e, i) => {
-            const credit = e.direction === 'credit';
-            const Icon = credit ? ArrowDownRight : ArrowUpRight;
-            return (
-              <Pressable key={e.id} onPress={() => onOpen(e.id)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < entries.length - 1 ? 1 : 0, borderColor: semantic.border }}>
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
-                </View>
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text variant="label" style={{ fontSize: 12.5 }} numberOfLines={1}>{e.description ?? e.entry_type.replace(/_/g, ' ')}</Text>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text variant="caption" color="secondary">{shortDate(e.posted_at)}</Text>
-                    <View style={{ backgroundColor: intent.success.soft, paddingHorizontal: 7, paddingVertical: 1.5, borderRadius: 20 }}>
-                      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>Posted</Text>
-                    </View>
-                  </View>
-                </View>
-                <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 14, color: credit ? intent.success.text : semantic.textPrimary }}>
-                  {credit ? '+' : '-'}{formatPeso(e.amount)}
-                </Text>
-              </Pressable>
-            );
-          })}
-          <Pressable onPress={onSeeAll} style={{ paddingVertical: 12, alignItems: 'center', borderTopWidth: 1, borderColor: semantic.border }}>
-            <Text variant="caption" style={{ color: semantic.brandDark, fontWeight: '700' }}>See all activity</Text>
-          </Pressable>
-        </>
+        <LedgerTimeline entries={entries} subtitle={signoffLine} onOpen={(e) => onOpen(e.id)} />
       )}
     </View>
   );
@@ -469,14 +444,29 @@ export function MemberHero({ groupId }: { groupId: string }) {
 
 export function MemberDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
+  const { membership } = useActiveGroup();
   const go = (route: string) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
+  const withdrawing = membership?.status === 'suspended' && membership.status_reason === 'Withdrawal in progress';
 
   return (
     <>
+      {membership?.status === 'suspended' ? (
+        <View style={{ flexDirection: 'row', gap: 10, backgroundColor: intent.warning.soft, borderRadius: 16, padding: 14, marginTop: 14 }}>
+          <AlertTriangle size={16} color={intent.warning.text} style={{ marginTop: 1 }} />
+          <View style={{ flex: 1 }}>
+            <Text variant="label" style={{ fontSize: 13, color: intent.warning.text }}>{withdrawing ? 'You are withdrawing' : 'Your membership is suspended'}</Text>
+            <Text variant="caption" style={{ color: intent.warning.text, marginTop: 2, lineHeight: 16 }}>
+              {withdrawing
+                ? 'Your settlement is being paid out. You can view your records until it is complete.'
+                : `You can view your records, but can't contribute or borrow for now.${membership.status_reason ? ` Reason: ${membership.status_reason}` : ''}`}
+            </Text>
+          </View>
+        </View>
+      ) : null}
       {/* <SectionHead title="Group fund" /> */}
       <FundComposition groupId={groupId} />
 
-      <SectionHead title="Shortcuts" aside="See more" onAsidePress={() => go('more')} />
+      <SectionHead title="Shortcuts" aside="See more" onAsidePress={() => go('shortcuts')} />
       <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {ACTIONS.map((a) => (
           <Pressable
@@ -490,10 +480,9 @@ export function MemberDashboard({ groupId }: { groupId: string }) {
         ))}
       </View>
 
-      <SectionHead title="My activity"/>
+      <SectionHead title="My activity" aside="See all" onAsidePress={() => go('activity')} />
       <RecentActivity
         groupId={groupId}
-        onSeeAll={() => go('activity')}
         onOpen={(entryId) => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId } })}
       />
     </>

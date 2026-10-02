@@ -4,7 +4,8 @@
  * drawer showing the submitted ID (via signed URL) with approve / reject.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Mail, Eye, Check, X, ShieldCheck, Users } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Search, Mail, Eye, Check, X, ShieldCheck, Users, Ban, RotateCcw, LayoutGrid, List } from 'lucide-react';
 import type { AccountStatus } from '@kapitpondo/shared';
 import { AccountBadge } from '../../components/StatusBadge';
 import { api } from '../../lib/api';
@@ -44,6 +45,25 @@ const TABS: { key: AccountStatus; label: string }[] = [
   { key: 'rejected', label: 'Rejected' },
 ];
 
+// Statuses that carry a reason for the member.
+const HAS_REASON: AccountStatus[] = ['resubmission_required', 'rejected'];
+
+// The two kinds of suspension this platform has. Platform suspension is the
+// System Administrator's (migration 0057); group suspension belongs to the
+// fund group's officers and is shown here read-only.
+const SUSPENSION_TABS = [
+  { key: 'suspended', label: 'Platform suspended' },
+  { key: 'group_suspended', label: 'Suspended in a group' },
+] as const;
+type SuspensionTab = (typeof SUSPENSION_TABS)[number]['key'];
+
+function SuspendedBadge({ label }: { label: string }) {
+  return <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold bg-danger-bg text-danger">{label}</span>;
+}
+
+const TH = 'px-5 py-3 font-medium whitespace-nowrap';
+const TD = 'px-5 py-3.5 whitespace-nowrap';
+
 function initials(n?: string) { return (n ?? '?').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'; }
 function kv(label: string, value?: string) {
   return (
@@ -56,6 +76,13 @@ function kv(label: string, value?: string) {
 
 type View = 'verification' | 'suspended' | 'all';
 
+// Tiles vs table — a per-admin preference, remembered in this browser.
+type Layout = 'tiles' | 'table';
+const LAYOUT_KEY = 'kp-admin-users-layout';
+function readLayout(): Layout {
+  try { return localStorage.getItem(LAYOUT_KEY) === 'table' ? 'table' : 'tiles'; } catch { return 'tiles'; }
+}
+
 export function VerificationsPage() {
   // ?view=all deep-links straight to All Users (e.g. the Dashboard's Total Users card).
   const [searchParams] = useSearchParams();
@@ -67,6 +94,11 @@ export function VerificationsPage() {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [layout, setLayoutState] = useState<Layout>(readLayout);
+  function setLayout(l: Layout) {
+    setLayoutState(l);
+    try { localStorage.setItem(LAYOUT_KEY, l); } catch { /* storage blocked — still switches for this visit */ }
+  }
 
   async function load() {
     setLoading(true);
@@ -155,9 +187,19 @@ export function VerificationsPage() {
             ))}
           </div>
         ) : <div />}
-        <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3.5 py-2.5 w-72">
-          <Search size={17} className="text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search applicants…" className="flex-1 bg-transparent text-sm text-ink outline-none" />
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3.5 py-2.5 w-72">
+            <Search size={17} className="text-muted" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search applicants…" className="flex-1 bg-transparent text-sm text-ink outline-none" />
+          </div>
+          <div className="inline-flex items-center gap-1 bg-surface-alt rounded-xl p-1">
+            {([['tiles', LayoutGrid, 'Tiles'], ['table', List, 'Table']] as const).map(([key, Icon, label]) => (
+              <button key={key} onClick={() => setLayout(key)} title={label} aria-label={`${label} view`} aria-pressed={layout === key}
+                className={`p-2 rounded-lg transition-colors ${layout === key ? 'bg-surface text-ink shadow-sm' : 'text-muted'}`}>
+                <Icon size={17} />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -172,6 +214,55 @@ export function VerificationsPage() {
               : view === 'suspended' ? (suspensionTab === 'suspended' ? 'No suspended accounts.' : 'Nobody is suspended in a fund group.')
               : `No ${tab} accounts.`}
           </div>
+        </div>
+      ) : layout === 'table' ? (
+        <div className="rounded-2xl bg-surface border border-line overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-xs text-muted">
+                <th className={TH}>Name</th>
+                <th className={TH}>Status</th>
+                <th className={TH}>Phone</th>
+                <th className={TH}>ID type</th>
+                <th className={TH}>Location</th>
+                <th className={TH}>Registered</th>
+                <th className={TH} />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u) => (
+                <tr key={u.id} onClick={() => setOpenId(u.id)} className="border-b border-line last:border-0 cursor-pointer hover:bg-surface-alt">
+                  <td className={TD}>
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 shrink-0 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-xs font-semibold">{initials(u.full_name)}</div>
+                      <div className="min-w-0">
+                        <div className="font-semibold text-ink truncate">{u.full_name ?? 'Applicant'}</div>
+                        <div className="text-xs text-muted truncate">{u.email ?? '—'}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className={TD}>
+                    <div className="flex items-center gap-1.5">
+                      <AccountBadge status={u.verification_status} />
+                      {u.suspended_at ? <SuspendedBadge label="Suspended" /> : null}
+                      {u.suspended_groups?.length ? <SuspendedBadge label="In group" /> : null}
+                    </div>
+                  </td>
+                  <td className={`${TD} text-ink`}>{u.phone || '—'}</td>
+                  <td className={`${TD} text-ink`}>{u.id_type || '—'}</td>
+                  <td className={`${TD} text-ink`}>{[u.city, u.province].filter(Boolean).join(', ') || '—'}</td>
+                  <td className={`${TD} text-secondary`}>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH') : '—'}</td>
+                  <td className={`${TD} text-right`}>
+                    {u.verification_status === 'pending' ? (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-success-bg text-success text-xs font-semibold px-3 py-1.5"><Check size={14} /> Review</span>
+                    ) : (
+                      <Eye size={17} className="inline text-muted" />
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -196,7 +287,19 @@ export function VerificationsPage() {
                   {kv('Registered', u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH') : undefined)}
                   {kv('ID type', u.id_type)}
                   {kv('Location', [u.city, u.province].filter(Boolean).join(', ') || undefined)}
-                  {u.verification_status === 'rejected' && <div className="col-span-2">{kv('Reason', u.verification_rejection_reason)}</div>}
+                  {HAS_REASON.includes(u.verification_status) && <div className="col-span-2">{kv('Reason', u.verification_rejection_reason)}</div>}
+                  {u.suspended_at && (
+                    <>
+                      {kv('Suspended on', new Date(u.suspended_at).toLocaleDateString('en-PH'))}
+                      <div className="col-span-2">{kv('Suspension reason', u.suspension_reason ?? undefined)}</div>
+                    </>
+                  )}
+                  {u.suspended_groups?.length ? (
+                    <>
+                      <div className="col-span-2">{kv('Suspended in', u.suspended_groups.join(', '))}</div>
+                      {kv('Since', u.group_suspended_since ? new Date(u.group_suspended_since).toLocaleDateString('en-PH') : undefined)}
+                    </>
+                  ) : null}
                 </div>
               </button>
               {u.verification_status === 'pending' && (
@@ -218,7 +321,9 @@ export function VerificationsPage() {
 
 function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () => void; onDone: () => void }) {
   const [detail, setDetail] = useState<Detail | null>(null);
-  const [rejecting, setRejecting] = useState(false);
+  // Which "not verified" outcome the admin is writing a reason for.
+  const [decision, setDecision] = useState<'resubmit' | 'reject' | null>(null);
+  const [suspending, setSuspending] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -290,7 +395,13 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                 {kv('Sex', a?.sex ? a.sex.charAt(0).toUpperCase() + a.sex.slice(1) : undefined)}
                 {kv('ID number', a?.id_number)}
                 <div className="col-span-2">{kv('Location', [a?.city, a?.province].filter(Boolean).join(', ') || undefined)}</div>
-                {mode === 'rejected' && <div className="col-span-3">{kv('Reason', a?.verification_rejection_reason)}</div>}
+                {HAS_REASON.includes(mode) && <div className="col-span-3">{kv('Reason', a?.verification_rejection_reason)}</div>}
+                {a?.suspended_at && (
+                  <>
+                    {kv('Suspended on', new Date(a.suspended_at).toLocaleDateString('en-PH'))}
+                    <div className="col-span-2">{kv('Suspension reason', a.suspension_reason ?? undefined)}</div>
+                  </>
+                )}
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted photos</div>
@@ -375,8 +486,42 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
               {err && <div className="mt-4 rounded-lg bg-danger-bg text-danger text-sm px-3 py-2">{err}</div>}
             </div>
 
-            {mode === 'pending' && (
-              rejecting ? (
+            {/* Suspension is independent of the verification queue, so it sits
+                in its own footer available on any account. */}
+            {a?.suspended_at ? (
+              <div className="flex items-center gap-3 p-6 border-t border-line">
+                <div className="flex-1 text-[12.5px] text-muted">
+                  This account cannot sign in while suspended.
+                </div>
+                <button onClick={reinstate} disabled={busy}
+                        className="flex items-center gap-2 rounded-xl bg-success px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                  <RotateCcw size={16} /> Reinstate account
+                </button>
+              </div>
+            ) : suspending ? (
+              <div className="p-6 border-t border-line space-y-3">
+                <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} placeholder="Reason for suspension…"
+                          className="w-full rounded-xl bg-surface-alt p-3 text-sm text-ink outline-none focus:ring-2 focus:ring-brand" />
+                <div className="text-[12px] text-muted">
+                  Suspension withdraws platform access. It does not change this account's verification, and it does not
+                  alter any fund group's financial records — those stay with the group's officers.
+                </div>
+                <div className="flex gap-3">
+                  <button onClick={() => { setSuspending(false); setReason(''); }} className="flex-1 rounded-lg border border-line py-2.5 text-sm font-semibold text-secondary">Cancel</button>
+                  <button onClick={suspend} disabled={busy} className="flex-1 rounded-lg bg-danger py-2.5 text-sm font-semibold text-white disabled:opacity-60">Confirm suspend</button>
+                </div>
+              </div>
+            ) : !decision && (
+              <div className="flex justify-end px-6 py-3 border-t border-line">
+                <button onClick={() => { setSuspending(true); setErr(null); }}
+                        className="flex items-center gap-1.5 text-[13px] font-semibold text-danger">
+                  <Ban size={15} /> Suspend account
+                </button>
+              </div>
+            )}
+
+            {mode === 'pending' && !a?.suspended_at && !suspending && (
+              decision ? (
                 <div className="p-6 border-t border-line space-y-3">
                   <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
                             placeholder={decision === 'resubmit' ? 'What should the member fix? (e.g. photo is blurry)' : 'Reason for rejection…'}

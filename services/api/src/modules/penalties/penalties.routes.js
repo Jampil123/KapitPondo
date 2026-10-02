@@ -48,17 +48,18 @@ router.get('/groups/:groupId/penalties',
   }
 );
 
-// Waive a pending penalty, with a reason (owner only) — TC-017
+// Waive a pending penalty, with a reason — TC-017 / UC-CT-05. The Organizer
+// waives members' penalties; the Auditor waives the Organizer's (see waiveRole).
 router.post('/groups/:groupId/penalties/:id/waive',
   requireAuth,
-  requireGroupRole(['owner']),
+  requireGroupRole(['owner', 'auditor']),
   async (req, res, next) => {
     try {
       const { reason } = req.body;
       if (!reason || !reason.trim()) {
         return res.status(400).json({ error: 'reason is required to waive a penalty' });
       }
-      const penalty = await service.waivePenalty({ penaltyId: req.params.id, waivedBy: req.member.id, reason: reason.trim() });
+      const penalty = await service.waivePenalty({ groupId: req.params.groupId, penaltyId: req.params.id, waivedBy: req.member.id, waiverRole: req.membership.role, reason: reason.trim() });
       if (!penalty) return res.status(409).json({ error: 'Penalty is not pending' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,

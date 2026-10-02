@@ -13,7 +13,9 @@ import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
-import type { Penalty } from '@/api/penalties';
+import { useAuth } from '@/context/AuthContext';
+import { useActiveGroup } from '@/context/GroupContext';
+import { waiveRole, type Penalty } from '@/api/penalties';
 
 type Tab = 'active' | 'waived';
 
@@ -28,6 +30,8 @@ function shortDate(iso: string | null): string {
 
 export default function Penalties() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { member } = useAuth();
+  const { role } = useActiveGroup();
   const [tab, setTab] = useState<Tab>('active');
 
   const pending = usePenalties(groupId!, 'pending');
@@ -92,7 +96,15 @@ export default function Penalties() {
                     <Text variant="caption" color="secondary">{shortDate(p.created_at)}</Text>
                   </View>
                 </View>
-                {tab === 'active' ? (
+                {tab === 'active' && p.membership?.member_id === member?.id ? (
+                  <Text variant="caption" color="muted" style={{ marginTop: 10 }}>
+                    Your own penalty. {waiveRole(p) === 'auditor' ? 'The Auditor waives it.' : "You can't waive it."}
+                  </Text>
+                ) : tab === 'active' && role !== waiveRole(p) ? (
+                  <Text variant="caption" color="muted" style={{ marginTop: 10 }}>
+                    {waiveRole(p) === 'auditor' ? 'The Auditor waives this one.' : 'The Organizer waives this one.'}
+                  </Text>
+                ) : tab === 'active' ? (
                   <Button
                     label="Waive"
                     variant="ghost"
@@ -115,6 +127,7 @@ export default function Penalties() {
         title={waiveTarget ? `Waive ${memberName(waiveTarget)}'s penalty?` : 'Waive penalty'}
         placeholder="Reason for waiving this penalty (required)"
         confirmLabel="Waive"
+        required
         onCancel={() => setWaiveTarget(null)}
         onConfirm={onWaiveConfirm}
       />

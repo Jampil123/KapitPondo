@@ -1,7 +1,8 @@
 // services/api/src/modules/auditlog/auditlog.routes.js
-// KapitPondo — Audit log read side. Auditor + Owner only: this is oversight
-// data (who approved/rejected/changed what), not something every member or
-// even every officer needs to browse.
+// KapitPondo — Audit log read side. Officers only: this is oversight data (who
+// approved/rejected/changed what), not something every member needs to
+// browse. Officers can read the trail; flagging and the exported audit report
+// are the Auditor's.
 // Mount in app.js:  app.use('/api', require('./modules/auditlog/auditlog.routes'));
 
 const express = require('express');
@@ -14,7 +15,7 @@ const flags = require('../flags/flags.service');
 router.get(
   '/groups/:groupId/audit-log',
   requireAuth,
-  requireGroupRole(['auditor', 'owner']),
+  requireGroupRole(['auditor', 'owner', 'treasurer']),
   async (req, res, next) => {
     try {
       const entries = await service.listAuditLog({
@@ -31,11 +32,11 @@ router.get(
 );
 
 // Full audit trail for a date range (ISO from/to, both optional), for the
-// exported audit report — Auditor + Owner, same audience as the list above.
+// exported audit report — the Auditor's report.
 router.get(
   '/groups/:groupId/audit-log/export',
   requireAuth,
-  requireGroupRole(['auditor', 'owner']),
+  requireGroupRole(['auditor']),
   async (req, res, next) => {
     try {
       const entries = await service.listAuditLogForExport({

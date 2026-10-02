@@ -8,7 +8,7 @@ export const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Au
 
 const CHART_H = 96;
 
-/** Running-total line chart, one point per month (My reports, Member balances). */
+/** Running-total line chart, one point per month (My Ledger, Member balances). */
 export function GrowthChart({ points }: { points: { label: string; value: number }[] }) {
   const [w, setW] = useState(0);
   const max = Math.max(...points.map((p) => p.value), 1);

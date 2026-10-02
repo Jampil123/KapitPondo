@@ -18,6 +18,7 @@ import { buildTimeline } from '@/features/contributions/periods';
 import { useMyBalance, useFundSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useLoans } from '@/features/lending/lending.hooks';
 import { useMyPenalties } from '@/features/penalties/penalties.hooks';
+import { signoffLine, signoffs } from '@/features/activity/entryCopy';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
 
@@ -63,6 +64,7 @@ const ACTION_COPY: Partial<Record<LedgerEntryType, string>> = {
   penalty: 'Late penalty',
   distribution: 'Year-end share',
   expense: 'Group expense',
+  withdrawal: 'Withdrawal payout',
 };
 
 function StatementRow({ e }: { e: LedgerEntry }) {
@@ -76,9 +78,8 @@ function StatementRow({ e }: { e: LedgerEntry }) {
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{copy}</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-          {shortDate(e.posted_at)}{e.poster?.full_name ? ` · verified by ${e.poster.full_name}` : ''}
-        </Text>
+        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{shortDate(e.posted_at)}</Text>
+        {signoffLine(e) ? <Text variant="caption" color="muted" style={{ marginTop: 1 }} numberOfLines={2}>{signoffLine(e)}</Text> : null}
       </View>
       <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
         {credit ? '+' : '−'}{formatPeso(e.amount)}
@@ -87,7 +88,7 @@ function StatementRow({ e }: { e: LedgerEntry }) {
   );
 }
 
-export default function Reports() {
+export default function MyLedger() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
   const { group, membership } = useActiveGroup();
@@ -167,12 +168,13 @@ export default function Reports() {
   async function onExport() {
     setExporting(true);
     try {
-      const rows: (string | number)[][] = [['Date', 'Entry', 'Direction', 'Amount', 'Verified by']];
+      const rows: (string | number)[][] = [['Date', 'Entry', 'Direction', 'Amount', 'Confirmed by', 'Verified by']];
       for (const e of entries) {
-        rows.push([shortDate(e.posted_at), ACTION_COPY[e.entry_type] ?? e.entry_type, e.direction, e.amount, e.poster?.full_name ?? '']);
+        const s = signoffs(e);
+        rows.push([shortDate(e.posted_at), ACTION_COPY[e.entry_type] ?? e.entry_type, e.direction, e.amount, s.confirmedBy ?? '', s.verifiedBy ?? '']);
       }
       const label = period === 'cycle' ? (cycle?.name ?? 'this-cycle') : 'all-time';
-      await shareCsv(`${(group?.name ?? 'kapitpondo').replace(/\s+/g, '-')}-statement-${label}.csv`, rows);
+      await shareCsv(`${(group?.name ?? 'kapitpondo').replace(/\s+/g, '-')}-ledger-${label}.csv`, rows);
     } catch (e) {
       Alert.alert('Could not export', (e as Error).message);
     } finally {
@@ -184,7 +186,7 @@ export default function Reports() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
-      <BandHeader title="My reports" />
+      <BandHeader title="My Ledger" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Period toggle ---------------- */}
@@ -246,8 +248,8 @@ export default function Reports() {
           />
         </View>
 
-        {/* ---------------- My statement ---------------- */}
-        <GroupLabel title="My statement" aside={entries.length ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : undefined} />
+        {/* ---------------- Entries ---------------- */}
+        <GroupLabel title="Entries" aside={entries.length ? `${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}` : undefined} />
         {ledger.loading ? (
           <ActivityIndicator color={semantic.brand} style={{ marginTop: 10 }} />
         ) : entries.length === 0 ? (
@@ -270,7 +272,7 @@ export default function Reports() {
           style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: semantic.border, opacity: exporting || entries.length === 0 ? 0.5 : 1 }}
         >
           {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={17} color={semantic.brandDark} />}
-          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Download statement (CSV)</Text>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Download ledger (CSV)</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

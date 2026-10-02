@@ -34,6 +34,7 @@ export const ENTRY_TYPE_LABEL: Partial<Record<LedgerEntryType, string>> = {
   fee: 'Fee',
   adjustment: 'Adjustment',
   reversal: 'Reversing entry',
+  withdrawal: 'Withdrawal payout',
 };
 
 function matches(f: Filter, e: LedgerEntry) {

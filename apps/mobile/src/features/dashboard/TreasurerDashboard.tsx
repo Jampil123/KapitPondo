@@ -4,14 +4,15 @@ import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { useRouter } from 'expo-router';
 import {
-  ArrowUpRight, BarChart3, ArrowDownRight, CheckCircle2, ScrollText,
+  BarChart3, CheckCircle2, ScrollText,
   ArrowUpCircle,
-  PiggyBank, HandCoins, Receipt, X, Check } from 'lucide-react-native';
+  PiggyBank, HandCoins, Receipt, X, Check, CalendarClock, Clock, Download } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
+import { ScrollTileRow, type TileAction } from '@/components/shared/ScrollTileRow';
 import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
-import { ENTRY_LABEL } from '@/features/activity/entryCopy';
+import { LedgerTimeline } from '@/features/activity/LedgerTimeline';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { parseApiDate } from '@/lib/cycle';
@@ -38,12 +39,13 @@ function dayOnly(iso: string) {
   return `${d}${suffix}`;
 }
 
-function SectionHead({ title, aside, tone }: { title: string; aside?: string; tone?: 'hot' | 'calm' }) {
-  const color = tone === 'hot' ? intent.danger.text : tone === 'calm' ? intent.success.text : semantic.textSecondary;
+function SectionHead({ title, aside, tone, onAsidePress }: { title: string; aside?: string; tone?: 'hot' | 'calm'; onAsidePress?: () => void }) {
+  const color = onAsidePress ? semantic.brandDark : tone === 'hot' ? intent.danger.text : tone === 'calm' ? intent.success.text : semantic.textSecondary;
+  const label = aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color }}>{aside}</Text> : null;
   return (
     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14 }}>
       <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
-      {aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color }}>{aside}</Text> : null}
+      {label && onAsidePress ? <Pressable onPress={onAsidePress} hitSlop={8}>{label}</Pressable> : label}
     </View>
   );
 }
@@ -202,6 +204,7 @@ function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: P
         title={`Return ${row.name}'s ${what}?`}
         confirmLabel="Return"
         destructive
+        required={row.kind === 'contribution'}
         onCancel={() => setReturning(false)}
         onConfirm={onReturn}
       />
@@ -512,67 +515,35 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
 }
 
 /* ---------------- Record grid ---------------- */
-const ACTIONS: { label: string; icon: any; route: string; params?: Record<string, string> }[] = [
+const ACTIONS: TileAction[] = [
   { label: 'Contribution', icon: ArrowUpCircle, route: 'contributions/confirm', params: { tab: 'record' } },
   { label: 'Repayment', icon: HandCoins, route: 'loans/record-repayment' },
   { label: 'Transactions', icon: ScrollText, route: 'reports/my-transactions' },
   { label: 'Group Ledger', icon: PiggyBank, route: 'reports/group-ledger' },
+  { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },
+  { label: 'Audit Trail', icon: Clock, route: 'audit/log' },
+  { label: 'Reports & Export', icon: Download, route: 'reports/export' },
 ];
 
-/* ---------------- Recent transactions ---------------- */
-function contributorName(e: { membership: { members: { full_name: string } | null } | null }) {
-  return e.membership?.members?.full_name ?? null;
-}
-
-const RECENT_TRANSACTIONS_LIMIT = 5;
+/* ---------------- Recent transactions (timeline) ---------------- */
+const RECENT_TRANSACTIONS_LIMIT = 3;
 
 function RecentTransactions({ groupId, go }: { groupId: string; go: (route: string, extraParams?: Record<string, string>) => void }) {
   const ledger = useLedger(groupId, { limit: RECENT_TRANSACTIONS_LIMIT });
   const txns = ledger.data ?? [];
 
   return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: txns.length ? 6 : 20, overflow: 'hidden' }, shadowToken.soft]}>
-      {ledger.loading ? (
-        <ActivityIndicator color={semantic.brand} style={{ margin: 14 }} />
+    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16, marginTop: 8 }, shadowToken.soft]}>
+      {ledger.loading && txns.length === 0 ? (
+        <ActivityIndicator color={semantic.brand} style={{ margin: 8 }} />
       ) : txns.length === 0 ? (
-        <Text variant="body" color="muted" style={{ textAlign: 'center' }}>No transactions yet.</Text>
+        <Text variant="body" color="muted">No transactions yet.</Text>
       ) : (
-        <>
-          {txns.map((e, i) => {
-            const credit = e.direction === 'credit';
-            const Icon = credit ? ArrowDownRight : ArrowUpRight;
-            const name = contributorName(e);
-            const detail = ENTRY_LABEL[e.entry_type] ?? e.description ?? e.entry_type.replace(/_/g, ' ');
-            return (
-              <Pressable
-                key={e.id}
-                onPress={() => go('activity/[entryId]', { entryId: e.id, scope: 'group' })}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 12, borderBottomWidth: i < txns.length - 1 ? 1 : 0, borderColor: semantic.border }}
-              >
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
-                </View>
-                {/* flex + minWidth:0 lets the text actually shrink/ellipsize
-                    instead of pushing into (and overlapping) the amount on
-                    the right — the "Posted" tag that used to crowd this row
-                    is dropped since every ledger entry here is, by
-                    definition, already posted; it never conveyed anything. */}
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={{ fontSize: 13, lineHeight: 18, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{name ?? detail}</Text>
-                  <Text variant="caption" color="secondary" numberOfLines={1}>
-                    {name ? `${detail} · ` : ''}{shortDate(e.posted_at)}
-                  </Text>
-                </View>
-                <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 13, color: credit ? intent.success.text : semantic.textPrimary }}>
-                  {credit ? '+' : '-'}{formatPeso(e.amount)}
-                </Text>
-              </Pressable>
-            );
-          })}
-          <Pressable onPress={() => go('reports/my-transactions')} style={{ paddingVertical: 12, alignItems: 'center' }}>
-            <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>See all transactions</Text>
-          </Pressable>
-        </>
+        <LedgerTimeline
+          entries={txns}
+          subtitle={(e) => e.membership?.members?.full_name ?? 'Group'}
+          onOpen={(e) => go('activity/[entryId]', { entryId: e.id, scope: 'group' })}
+        />
       )}
     </View>
   );
@@ -606,20 +577,9 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
       <CollectionBlock groupId={groupId} go={go} />
 
       <SectionHead title="Records" />
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        {ACTIONS.map((a) => (
-          <Pressable
-            key={a.label}
-            onPress={() => go(a.route, a.params)}
-            style={[{ width: '23%', borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
-          >
-            <a.icon size={26} color={NAV_BG} strokeWidth={1.8} />
-            <Text variant="caption" style={{ textAlign: 'center', fontSize: 11.5, lineHeight: 14 }} numberOfLines={2}>{a.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <ScrollTileRow actions={ACTIONS} go={go} />
 
-      <SectionHead title="Recent transactions" aside="Posted" />
+      <SectionHead title="Recent transactions" aside="See all" onAsidePress={() => go('reports/my-transactions')} />
       <RecentTransactions groupId={groupId} go={go} />
     </>
   );

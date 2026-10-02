@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const healthRoute = require('./routes/health');
 const meRoute = require('./routes/me');
+const adminRouter = require('./routes/admin');
 const groupsRoutes = require('./modules/groups/groups.routes');
 const membershipsRoutes = require('./modules/membership/memberships.routes');
 const cyclesRoutes = require('./modules/cycles/cycles.routes');
@@ -23,6 +24,7 @@ const penaltiesRoutes = require('./modules/penalties/penalties.routes');
 const chatRoutes = require('./modules/chat/chat.routes');
 const announcementsRoutes = require('./modules/announcements/announcements.routes');
 const directMessagesRoutes = require('./modules/directMessages/directMessages.routes');
+const chatReadsRoutes = require('./modules/chatReads/chatReads.routes');
 const aiRoutes = require('./modules/ai/ai.routes'); // Gemini: proof-photo field extraction
 const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: plain OCR text extraction
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
@@ -61,6 +63,7 @@ app.use('/api', penaltiesRoutes);
 app.use('/api', chatRoutes);
 app.use('/api', announcementsRoutes);
 app.use('/api', directMessagesRoutes);
+app.use('/api', chatReadsRoutes);
 app.use('/api', aiRoutes);
 app.use('/api', ocrRoutes);
 app.use('/api', adminSecurityRoutes);

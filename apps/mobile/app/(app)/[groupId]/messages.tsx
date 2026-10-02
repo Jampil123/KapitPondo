@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, TextInput, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Megaphone, MessageCircle, Users, Plus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -11,12 +11,15 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { usePresentMembers } from '@/context/PresenceContext';
-import { can, type GroupRole } from '@/constants/roles';
+import type { GroupRole } from '@/constants/roles';
 import { useQuery } from '@/hooks/useApi';
 import { listMemberDirectory } from '@/api/groups';
-import { listMessages } from '@/api/messages';
-import { listDirectMessages } from '@/api/directMessages';
-import { useAnnouncements } from '@/features/announcements/announcements.hooks';
+import type { ChatMessage } from '@/api/messages';
+import type { RoomReader } from '@/api/chatReads';
+import type { DirectMessage } from '@/api/directMessages';
+import { useRoomReaders, hasSeen, seenBy } from '@/features/chat/chatSeen';
+import { useChatOverview } from '@/features/chat/chatOverview';
+import { PillFilters } from '@/components/shared/PillFilters';
 
 const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
@@ -35,11 +38,26 @@ function timeAgo(iso: string): string {
 
 function SectionHead({ title, aside }: { title: string; aside?: string }) {
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
-      {aside ? <Text variant="caption" color="muted" style={{ fontFamily: 'Poppins_600SemiBold' }}>{aside}</Text> : null}
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 16, marginBottom: 2, paddingHorizontal: 2 }}>
+      <Text variant="overline" color="muted" style={{ letterSpacing: 0.8 }}>{title}</Text>
+      {aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color: semantic.brand }}>{aside}</Text> : null}
     </View>
   );
+}
+
+type Section = 'groups' | 'officers' | 'members';
+type Filter = 'all' | 'unread' | Section;
+
+const SECTION_TITLE: Record<Section, string> = { groups: 'Group chats', officers: 'Officers', members: 'Members' };
+
+interface ChatItem {
+  key: string;
+  section: Section;
+  at: string | undefined;
+  unread: boolean;
+  /** Name/title and latest message, for search. */
+  text: string;
+  node: ReactNode;
 }
 
 function IconTile({ icon: Icon, bg, color }: { icon: any; bg: string; color: string }) {
@@ -97,30 +115,38 @@ function previewLine(body: string, imageUrl: string | null): string {
   return body || (imageUrl ? '📷 Photo' : '');
 }
 
-function ContactRow({ groupId, myMemberId, memberId, name, avatarUrl, roleLabel, onPress }: {
-  groupId: string | undefined; myMemberId: string | undefined; memberId: string; name: string | null; avatarUrl?: string | null;
-  roleLabel?: string; onPress: () => void;
+function ContactRow({ latest, myMemberId, name, avatarUrl, roleLabel, online, unread, theirReadAt, onPress }: {
+  latest: DirectMessage | undefined; myMemberId: string | undefined; name: string | null; avatarUrl?: string | null;
+  roleLabel?: string; online: boolean; unread: boolean; theirReadAt: string | undefined; onPress: () => void;
 }) {
-  const dm = useQuery(() => listDirectMessages(groupId!, memberId, { limit: 1 }), [groupId, memberId]);
-  const latest = dm.data?.[0];
-  const preview = latest
-    ? (latest.sender_id === myMemberId ? `You: ${previewLine(latest.body, latest.image_url)}` : previewLine(latest.body, latest.image_url))
-    : undefined;
-
+  const fromMe = latest?.sender_id === myMemberId;
+  const status = fromMe && latest ? (hasSeen(theirReadAt, latest.created_at) ? ' · Seen' : ' · Sent') : '';
+  const preview = latest ? `${fromMe ? 'You: ' : ''}${previewLine(latest.body, latest.image_url)}${status}` : undefined;
   return (
     <Row
-      left={<Avatar name={name} uri={avatarUrl} size={44} />}
+      left={
+        <View>
+          <Avatar name={name} uri={avatarUrl} size={44} />
+          {online ? (
+            <View style={{
+              position: 'absolute', bottom: -1, right: -1, width: 13, height: 13, borderRadius: 7,
+              backgroundColor: intent.success.base, borderWidth: 2, borderColor: semantic.background,
+            }} />
+          ) : null}
+        </View>
+      }
       title={name ?? roleLabel ?? 'Unnamed'}
       time={latest ? timeAgo(latest.created_at) : undefined}
       subtitle={roleLabel}
       preview={preview}
+      unread={unread}
       onPress={onPress}
     />
   );
 }
 
-function Row({ left, title, time, subtitle, preview, onPress }: {
-  left: ReactNode; title: string; time?: string; subtitle?: string; preview?: string;
+function Row({ left, title, time, subtitle, preview, unread, onPress }: {
+  left: ReactNode; title: string; time?: string; subtitle?: string; preview?: string; unread?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -131,14 +157,38 @@ function Row({ left, title, time, subtitle, preview, onPress }: {
       {left}
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <Text style={{ flex: 1, fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }} numberOfLines={1}>{title}</Text>
-          {time ? <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{time}</Text> : null}
+          <Text style={{ flex: 1, fontSize: 13.5, fontFamily: unread ? 'Poppins_700Bold' : 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{title}</Text>
+          {time ? (
+            <Text style={{ fontSize: 10.5, fontFamily: unread ? 'Poppins_700Bold' : 'Poppins_500Medium', color: unread ? semantic.brand : semantic.textMuted }}>{time}</Text>
+          ) : null}
         </View>
-        {subtitle ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>{subtitle}</Text> : null}
-        {preview ? <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={1}>{preview}</Text> : null}
+        {subtitle ? <Text variant="caption" color="muted" style={{ marginTop: 2 }} numberOfLines={1}>{subtitle}</Text> : null}
+        {preview ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+            <Text
+              variant="caption"
+              style={{ flex: 1, fontFamily: unread ? 'Poppins_600SemiBold' : 'Poppins_400Regular', color: unread ? semantic.textPrimary : semantic.textSecondary }}
+              numberOfLines={1}
+            >
+              {preview}
+            </Text>
+            {unread ? <View style={{ width: 9, height: 9, borderRadius: 5, backgroundColor: semantic.brand }} /> : null}
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
+}
+
+/** Newest conversation first; ones with no messages keep their order at the bottom. */
+function byRecent<T>(items: T[], at: (t: T) => string | undefined) {
+  return items
+    .map((t, i) => {
+      const iso = at(t);
+      return { t, i, ts: iso ? Date.parse(iso) : -Infinity };
+    })
+    .sort((x, y) => (y.ts - x.ts) || (x.i - y.i))
+    .map((x) => x.t);
 }
 
 const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
@@ -146,38 +196,43 @@ const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
 export default function Messages() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
-  const { role, group } = useActiveGroup();
+  const { role } = useActiveGroup();
   const { member } = useAuth();
   const [query, setQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
 
-  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
-  const canOfficersRoom = can(role, 'viewOfficersChat');
-
-  const lastGeneral = useQuery(() => listMessages(groupId!, 'general', { limit: 1 }), [groupId]);
-  const lastOfficers = useQuery(
-    () => (canOfficersRoom ? listMessages(groupId!, 'officers', { limit: 1 }) : Promise.resolve([])),
-    [groupId, canOfficersRoom],
+  const {
+    directory, others, canOfficersRoom, reads,
+    latestAnnouncement, latestGeneral, latestOfficers, latestDm,
+    unread: unreadOf, refetch: refetchChats,
+  } = useChatOverview(groupId);
+  const [filter, setFilter] = useState<Filter>('all');
+  const present = usePresentMembers();
+  const onlineIds = new Set(present.map((p) => p.member_id));
+  const generalReaders = useRoomReaders(groupId, 'general');
+  const officersReaders = useRoomReaders(groupId, 'officers', canOfficersRoom);
+  // Coming back from a chat (or any other screen) picks up the latest messages,
+  // so the order and unread state are current.
+  const [focusedOnce, setFocusedOnce] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusedOnce) { setFocusedOnce(true); return; }
+      refetchChats();
+      generalReaders.refetch();
+      officersReaders.refetch();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusedOnce]),
   );
-  const announcements = useAnnouncements(groupId);
 
   const q = query.trim().toLowerCase();
-  const matches = (s: string) => !q || s.toLowerCase().includes(q);
 
-  const contactableOfficers = (directory.data ?? [])
-    .filter((m) => m.member_id !== member?.id && m.role !== 'member')
-    .filter((m) => matches(m.full_name ?? ROLE_LABEL[m.role]));
-  const contactableMembers = (directory.data ?? [])
-    .filter((m) => m.member_id !== member?.id && m.role === 'member')
-    .filter((m) => matches(m.full_name ?? 'Member'));
-
-  const showAnnouncements = matches('announcements');
-  const showGroupChat = matches('group chat');
-  const showOfficersRoom = canOfficersRoom && matches('officers room');
-
-  const nothingFound = !!q && !showAnnouncements && !showGroupChat && !showOfficersRoom
-    && contactableOfficers.length === 0 && contactableMembers.length === 0
-    && !directory.loading;
+  // "You: hi · Seen by 3" when the newest message is the viewer's; otherwise "Ana: hi".
+  function roomPreview(m: ChatMessage, readers: RoomReader[]) {
+    const text = previewLine(m.body, m.image_url);
+    if (m.sender_id !== member?.id) return `${m.sender_name}: ${text}`;
+    const n = seenBy(readers, m, member?.id).length;
+    return `You: ${text} · ${n ? `Seen by ${n}` : 'Sent'}`;
+  }
 
   function go(route: string) {
     router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId } });
@@ -185,25 +240,115 @@ export default function Messages() {
 
   async function onRefresh() {
     setRefreshing(true);
-    await Promise.all([
-      directory.refetch(),
-      lastGeneral.refetch(),
-      lastOfficers.refetch(),
-      announcements.refetch(),
-    ]);
+    await Promise.all([refetchChats(), generalReaders.refetch(), officersReaders.refetch()]);
     setRefreshing(false);
   }
 
   const composeRoute = role === 'owner' ? 'announcements/compose' : role === 'treasurer' ? 'reminders/compose' : null;
-  const latestAnnouncement = announcements.data?.[0];
-  const latestGeneral = lastGeneral.data?.[0];
-  const latestOfficers = lastOfficers.data?.[0];
+
+  const items: ChatItem[] = [];
+  {
+    const unread = unreadOf.announcements;
+    items.push({
+      key: 'announcements', section: 'groups', at: latestAnnouncement?.created_at, unread,
+      text: `announcements ${latestAnnouncement?.body ?? ''}`,
+      node: (
+        <Row
+          key="announcements"
+          left={<IconTile icon={Megaphone} bg={intent.warning.soft} color={intent.warning.text} />}
+          title="Announcements"
+          time={latestAnnouncement ? timeAgo(latestAnnouncement.created_at) : undefined}
+          subtitle="From the Organizer · you can't reply"
+          preview={latestAnnouncement?.body}
+          unread={unread}
+          onPress={() => go('announcements')}
+        />
+      ),
+    });
+  }
+  {
+    const unread = unreadOf.general;
+    const preview = latestGeneral ? roomPreview(latestGeneral, generalReaders.data ?? []) : undefined;
+    items.push({
+      key: 'general', section: 'groups', at: latestGeneral?.created_at, unread,
+      text: `group chat ${preview ?? ''}`,
+      node: (
+        <Row
+          key="general"
+          left={<IconTile icon={MessageCircle} bg={semantic.dashCard} color="#fff" />}
+          title="Group chat"
+          time={latestGeneral ? timeAgo(latestGeneral.created_at) : undefined}
+          subtitle="Everyone in the group"
+          preview={preview}
+          unread={unread}
+          onPress={() => go('chat/general')}
+        />
+      ),
+    });
+  }
+  if (canOfficersRoom) {
+    const unread = unreadOf.officers;
+    const preview = latestOfficers ? roomPreview(latestOfficers, officersReaders.data ?? []) : undefined;
+    items.push({
+      key: 'officers', section: 'groups', at: latestOfficers?.created_at, unread,
+      text: `officers room ${preview ?? ''}`,
+      node: (
+        <Row
+          key="officers"
+          left={<IconTile icon={Users} bg={semantic.surfaceAlt} color={semantic.brandDark} />}
+          title="Officers room"
+          time={latestOfficers ? timeAgo(latestOfficers.created_at) : undefined}
+          subtitle="Organizer, Treasurer & Auditor"
+          preview={preview}
+          unread={unread}
+          onPress={() => go('chat/officers')}
+        />
+      ),
+    });
+  }
+  for (const m of others) {
+    const latest = latestDm(m.member_id);
+    const unread = unreadOf.dm(m.member_id);
+    const isOfficer = m.role !== 'member';
+    items.push({
+      key: `dm:${m.member_id}`, section: isOfficer ? 'officers' : 'members', at: latest?.created_at, unread,
+      text: `${m.full_name ?? ROLE_LABEL[m.role]} ${latest?.body ?? ''}`,
+      node: (
+        <ContactRow
+          key={m.member_id}
+          latest={latest}
+          myMemberId={member?.id}
+          name={m.full_name}
+          avatarUrl={m.avatar_url}
+          roleLabel={isOfficer ? ROLE_LABEL[m.role] : undefined}
+          online={onlineIds.has(m.member_id)}
+          unread={unread}
+          theirReadAt={reads.data?.theirs[m.member_id]}
+          onPress={() => go(`dm/${m.member_id}`)}
+        />
+      ),
+    });
+  }
+
+  const searched = items.filter((i) => !q || i.text.toLowerCase().includes(q));
+  const unreadCount = searched.filter((i) => i.unread).length;
+  const countIn = (sec: Section) => searched.filter((i) => i.section === sec).length;
+  const FILTERS: { key: Filter; label: string; count?: number; hot?: boolean }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'unread', label: 'Unread', count: unreadCount, hot: true },
+    { key: 'groups', label: 'Groups' },
+    ...(countIn('officers') ? [{ key: 'officers' as const, label: 'Officers' }] : []),
+    ...(countIn('members') ? [{ key: 'members' as const, label: 'Members' }] : []),
+  ];
+  const shown = searched.filter((i) => filter === 'all' || (filter === 'unread' ? i.unread : i.section === filter));
+  const sections = (['groups', 'officers', 'members'] as Section[])
+    .map((sec) => ({ sec, list: byRecent(shown.filter((i) => i.section === sec), (i) => i.at) }))
+    .filter((g) => g.list.length > 0);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar
         title="Messages"
-        subtitle={role ? (role === 'member' ? group?.name ?? undefined : `${ROLE_LABEL[role]} · ${group?.name ?? ''}`) : undefined}
         right={composeRoute ? (
           <Pressable onPress={() => go(composeRoute)} hitSlop={8}>
             <LinearGradient
@@ -243,94 +388,27 @@ export default function Messages() {
           <AvatarStrip groupId={groupId} />
         </View>
 
-        {showAnnouncements || showGroupChat ? (
-          <>
-            <SectionHead title="Pinned" />
-            <View>
-              {showAnnouncements ? (
-                <Row
-                  left={<IconTile icon={Megaphone} bg={intent.warning.soft} color={intent.warning.text} />}
-                  title="Announcements"
-                  time={latestAnnouncement ? timeAgo(latestAnnouncement.created_at) : undefined}
-                  subtitle="From the Organizer · you can't reply"
-                  preview={latestAnnouncement ? latestAnnouncement.body : undefined}
-                  onPress={() => go('announcements')}
-                />
-              ) : null}
-              {showGroupChat ? (
-                <Row
-                  left={<IconTile icon={MessageCircle} bg={semantic.dashCard} color="#fff" />}
-                  title="Group chat"
-                  time={latestGeneral ? timeAgo(latestGeneral.created_at) : undefined}
-                  subtitle="Everyone in the group"
-                  preview={latestGeneral ? `${latestGeneral.sender_name}: ${previewLine(latestGeneral.body, latestGeneral.image_url)}` : undefined}
-                  onPress={() => go('chat/general')}
-                />
-              ) : null}
-            </View>
-          </>
-        ) : null}
+        <View style={{ marginTop: 12 }}>
+          <PillFilters<Filter> options={FILTERS} value={filter} onChange={setFilter} />
+        </View>
 
-        {showOfficersRoom ? (
-          <>
-            <SectionHead title="Officers" />
-            <View>
-              <Row
-                left={<IconTile icon={Users} bg={semantic.surfaceAlt} color={semantic.brandDark} />}
-                title="Officers room"
-                time={latestOfficers ? timeAgo(latestOfficers.created_at) : undefined}
-                subtitle="Organizer, Treasurer & Auditor"
-                preview={latestOfficers ? `${latestOfficers.sender_name}: ${previewLine(latestOfficers.body, latestOfficers.image_url)}` : undefined}
-                onPress={() => go('chat/officers')}
-              />
-            </View>
-          </>
-        ) : null}
-
-        {directory.loading ? (
-          <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} />
-        ) : contactableOfficers.length ? (
-          <>
-            <SectionHead title="Contact an officer" />
-            <View>
-              {contactableOfficers.map((o) => (
-                <ContactRow
-                  key={o.member_id}
-                  groupId={groupId}
-                  myMemberId={member?.id}
-                  memberId={o.member_id}
-                  name={o.full_name}
-                  avatarUrl={o.avatar_url}
-                  roleLabel={ROLE_LABEL[o.role]}
-                  onPress={() => go(`dm/${o.member_id}`)}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        {directory.loading ? null : contactableMembers.length ? (
-          <>
-            <SectionHead title="Members" />
-            <View>
-              {contactableMembers.map((m) => (
-                <ContactRow
-                  key={m.member_id}
-                  groupId={groupId}
-                  myMemberId={member?.id}
-                  memberId={m.member_id}
-                  name={m.full_name}
-                  avatarUrl={m.avatar_url}
-                  onPress={() => go(`dm/${m.member_id}`)}
-                />
-              ))}
-            </View>
-          </>
-        ) : null}
-
-        {nothingFound ? (
-          <Text variant="body" color="muted" style={{ textAlign: 'center', marginTop: 40 }}>No matches for "{query}".</Text>
-        ) : null}
+        {directory.loading && !directory.data ? (
+          <ActivityIndicator color={semantic.brand} style={{ marginTop: 24 }} />
+        ) : sections.length === 0 ? (
+          <Text variant="body" color="muted" style={{ textAlign: 'center', marginTop: 40 }}>
+            {q ? `No matches for \u201c${query.trim()}\u201d.` : filter === 'unread' ? "You're all caught up." : 'No chats here yet.'}
+          </Text>
+        ) : (
+          sections.map(({ sec, list }) => {
+            const unreadHere = list.filter((i) => i.unread).length;
+            return (
+              <View key={sec}>
+                <SectionHead title={SECTION_TITLE[sec]} aside={unreadHere ? `${unreadHere} unread` : undefined} />
+                {list.map((i) => i.node)}
+              </View>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );

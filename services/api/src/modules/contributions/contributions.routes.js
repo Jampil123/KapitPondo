@@ -28,6 +28,15 @@ router.post('/groups/:groupId/contributions',
       if (!cycle_id || amount == null) {
         return res.status(400).json({ error: 'cycle_id and amount are required' });
       }
+      // Both are needed: the Treasurer confirms receipt, the Auditor verifies and posts.
+      const [treasurers, auditors] = await Promise.all([
+        officers.holdersOf(req.params.groupId, 'treasurer'),
+        officers.holdersOf(req.params.groupId, 'auditor'),
+      ]);
+      const missing = [!treasurers.length && 'Treasurer', !auditors.length && 'Auditor'].filter(Boolean);
+      if (missing.length) {
+        return res.status(409).json({ error: `This group has no ${missing.join(' or ')} yet. Contributions open once the Organizer appoints one.` });
+      }
 
       let targetMembershipId = req.membership.id;
       const isOfficer = ['treasurer', 'auditor', 'owner'].includes(req.membership.role);
@@ -189,7 +198,15 @@ async function nudgeNextStep({ groupId, contribution }) {
   }
 }
 
-const STEP_ERRORS = ['must be confirmed by', 'must be verified by', 'cannot confirm', 'cannot verify', 'cannot also verify', 'You cannot'];
+// The payer hears about each step on their own money.
+async function notifyPayer({ groupId, contribution, type, title, message }) {
+  const payer = await service.getActiveMembership(contribution.membership_id);
+  if (payer) await notify({ memberId: payer.member_id, groupId, type, title, message });
+}
+
+const peso = (n) => `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+
+const STEP_ERRORS =['must be confirmed by', 'must be verified by', 'cannot confirm', 'cannot verify', 'cannot also verify', 'You cannot'];
 
 async function confirmStep(req, res, contribution) {
   const saved = await service.confirmContribution({ contributionId: contribution.id, confirmerId: req.member.id });
@@ -199,6 +216,11 @@ async function confirmStep(req, res, contribution) {
     before: { status: contribution.status }, after: { status: 'confirmed', amount: contribution.amount, recorded_by: contribution.recorded_by },
   });
   await nudgeNextStep({ groupId: req.params.groupId, contribution: saved });
+  await notifyPayer({
+    groupId: req.params.groupId, contribution: saved, type: 'contribution.confirmed',
+    title: 'Payment received',
+    message: `Your ${peso(saved.amount)} contribution was received and is waiting for verification.`,
+  });
   res.json({ message: 'Contribution confirmed — waiting for verification', contribution: saved });
 }
 
@@ -219,6 +241,11 @@ async function verifyStep(req, res, contribution) {
       });
     }
   }
+  await notifyPayer({
+    groupId: req.params.groupId, contribution, type: 'contribution.verified',
+    title: 'Contribution verified',
+    message: `Your ${peso(contribution.amount)} contribution was verified and added to your balance.`,
+  });
   res.json({ message: 'Contribution verified and posted', ledgerEntry });
 }
 
@@ -288,22 +315,39 @@ router.post('/groups/:groupId/contributions/:id/dispute',
   }
 );
 
-// Reject a contribution, with a reason the member can see (TC-025)
+// Reject a contribution, with a reason the member can see (TC-025). Only
+// whoever's step it is may send it back — the confirmer while 'submitted',
+// the verifier once 'confirmed' — under the same bars as taking the step.
 router.post('/groups/:groupId/contributions/:id/reject',
   requireAuth,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) return res.status(400).json({ error: 'Give a reason so the member knows what to fix' });
       const contribution = await service.getContribution(req.params.id);
       if (contribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Contribution does not belong to this group' });
       }
-      const updated = await service.rejectContribution({ contributionId: req.params.id, reason: req.body?.reason });
+      if (contribution.status !== 'submitted' && contribution.status !== 'confirmed') {
+        return res.status(409).json({ error: 'Contribution is not waiting for confirmation or verification' });
+      }
+      const payer = await service.getActiveMembership(contribution.membership_id);
+      const payerRole = payer ? await officers.roleOf(req.params.groupId, payer.member_id) : null;
+      const confirming = contribution.status === 'submitted';
+      const neededRole = confirming
+        ? officers.confirmRole(payerRole)
+        : await officers.verifyRole(req.params.groupId, payerRole, contribution.recorded_by ? await officers.roleOf(req.params.groupId, contribution.recorded_by) : null);
+      const barred = [payer?.member_id, contribution.recorded_by, confirming ? null : contribution.confirmed_by];
+      if (req.membership.role !== neededRole || barred.includes(req.member.id)) {
+        return res.status(403).json({ error: `Only the ${officers.ROLE_LABEL[neededRole]} handling this step can return it` });
+      }
+      const updated = await service.rejectContribution({ contributionId: req.params.id, reason });
       if (!updated) return res.status(409).json({ error: 'Contribution is not waiting for confirmation or verification' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'rejected', entityType: 'contribution', entityId: req.params.id,
-        before: { status: contribution.status }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+        before: { status: contribution.status }, after: { status: 'rejected', reason },
       });
       res.json({ message: 'Contribution rejected', contribution: updated });
     } catch (err) { next(err); }

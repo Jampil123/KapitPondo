@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { PillFilters } from '@/components/shared/PillFilters';
@@ -11,19 +10,8 @@ import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLedger } from '@/features/reporting/reporting.hooks';
-import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
-
-const TYPE_LABEL: Partial<Record<LedgerEntryType, string>> = {
-  contribution: 'Contribution',
-  loan_disbursement: 'Loan released',
-  loan_repayment: 'Loan repayment',
-  distribution: 'Year-end share',
-  expense: 'Expense',
-  penalty: 'Late penalty',
-  fee: 'Fee',
-  adjustment: 'Adjustment',
-  reversal: 'Reversal',
-};
+import { LedgerTimeline } from '@/features/activity/LedgerTimeline';
+import type { LedgerEntry } from '@/api/ledger';
 
 type Category = 'all' | 'contribution' | 'loan_repayment' | 'loan_disbursement' | 'distribution';
 
@@ -41,10 +29,6 @@ const OWNER_CATEGORIES: { key: Category; label: string }[] = [
   { key: 'distribution', label: 'Year-end shares' },
 ];
 
-function shortDate(iso: string) {
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 function monthKey(iso: string) {
   const d = new Date(iso);
   return `${d.getFullYear()}-${String(d.getMonth()).padStart(2, '0')}`;
@@ -53,38 +37,7 @@ function monthLabel(iso: string) {
   return new Date(iso).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
 }
 
-function Row({ e, onPress }: { e: LedgerEntry; onPress: () => void }) {
-  const credit = e.direction === 'credit';
-  const Icon = credit ? ArrowDownRight : ArrowUpRight;
-  const who = e.membership?.members?.full_name ?? 'Group';
-  return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border }}>
-      <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: credit ? intent.success.soft : semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon size={16} color={credit ? intent.success.text : semantic.brandDark} />
-      </View>
-      {/* Type and name each get their own line — joined on one truncated line
-          ("Contribution · Some Very Long Name") cut the name off behind an
-          ellipsis; splitting them keeps both fully readable. */}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>
-          {TYPE_LABEL[e.entry_type] ?? e.entry_type}
-        </Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }} numberOfLines={2}>
-          {who}
-        </Text>
-        <Text variant="caption" color="muted" style={{ marginTop: 2 }} numberOfLines={1}>
-          {shortDate(e.posted_at)}{e.description ? ` · ${e.description}` : ''}
-        </Text>
-      </View>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
-        {credit ? '+' : '−'}{formatPeso(e.amount)}
-      </Text>
-      <ChevronRight size={16} color={semantic.textMuted} />
-    </Pressable>
-  );
-}
-
-/** Every ledger entry the Treasurer themselves confirmed/posted — not the
+/** Every ledger entry the officer themselves confirmed or posted — not the
  * full group ledger (see reports/group-ledger.tsx for that), and not "my
  * own contributions" (that's ledger_entries.membership_id, a different
  * field) — this is specifically their own officer activity: what THEY
@@ -102,8 +55,10 @@ export default function MyTransactions() {
   const ledger = useLedger(groupId!, { limit: 500 });
   const [category, setCategory] = useState<Category>('all');
 
+  // posted_by is the final approver (Auditor/Organizer); a Treasurer's own
+  // sign-off is the confirmer on the source record, so match either.
   const mine = useMemo(
-    () => (ledger.data ?? []).filter((e) => e.posted_by === member?.id),
+    () => (member ? (ledger.data ?? []).filter((e) => e.posted_by === member.id || e.confirmer?.id === member.id) : []),
     [ledger.data, member?.id],
   );
 
@@ -171,8 +126,12 @@ export default function MyTransactions() {
           grouped.map((g) => (
             <View key={g.label}>
               <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{g.label}</Text>
-              <View>
-                {g.list.map((e) => <Row key={e.id} e={e} onPress={() => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id, scope: 'group' } })} />)}
+              <View style={[{ backgroundColor: semantic.card, borderRadius: 20, paddingVertical: 16, paddingHorizontal: 16 }, shadowToken.soft]}>
+                <LedgerTimeline
+                  entries={g.list}
+                  subtitle={(e) => e.membership?.members?.full_name ?? 'Group'}
+                  onOpen={(e) => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id, scope: 'group' } })}
+                />
               </View>
             </View>
           ))

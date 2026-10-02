@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ArrowUpDown, FileDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -20,7 +20,7 @@ import { useQuery, useAction } from '@/hooks/useApi';
 import { listMembers, nudgeMember, type GroupMember } from '@/api/groups';
 import { buildTimeline, type PeriodKind } from '@/features/contributions/periods';
 
-type Filter = 'all' | 'arrears' | 'loans' | 'clear';
+type Filter = 'all' | 'arrears' | 'loans' | 'clear' | 'suspended';
 type Sort = 'owed' | 'name';
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor' };
@@ -44,10 +44,12 @@ function name(m: GroupMember) { return m.members?.full_name ?? 'Unnamed'; }
 
 export default function MemberBalances() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const router = useRouter();
   const { member } = useAuth();
   const { cycle } = useActiveCycle(groupId!);
 
-  const roster = useQuery(() => listMembers(groupId!), [groupId]);
+  const roster = useQuery(() => listMembers(groupId!, { includeSuspended: true }), [groupId], { table: 'memberships', filter: `group_id=eq.${groupId}` });
+  const openMember = (m: GroupMember) => router.push({ pathname: '/(app)/[groupId]/members/manage/[membershipId]' as any, params: { groupId, membershipId: m.id } });
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const loans = useLoans(groupId!, { status: 'active' });
   const penalties = usePenalties(groupId!, 'pending');
@@ -90,6 +92,7 @@ export default function MemberBalances() {
 
   const filtered = useMemo(() => {
     const list = rows.filter((r) => {
+      if (filter === 'suspended') return r.m.status === 'suspended';
       if (filter === 'arrears') return r.behindCount > 0;
       if (filter === 'loans') return r.loanBalance > 0;
       if (filter === 'clear') return r.behindCount === 0;
@@ -98,7 +101,9 @@ export default function MemberBalances() {
     return [...list].sort((a, b) => sort === 'owed' ? b.owed - a.owed : name(a.m).localeCompare(name(b.m)));
   }, [rows, filter, sort]);
 
-  const behindRows = rows.filter((r) => r.behindCount > 0);
+  // Suspended members can't pay right now, so they aren't nudged.
+  const behindRows = rows.filter((r) => r.behindCount > 0 && r.m.status === 'active');
+  const suspendedCount = rows.filter((r) => r.m.status === 'suspended').length;
 
   const arrearsTotal = rows.reduce((s, r) => s + r.owed, 0);
   const onLoanTotal = rows.reduce((s, r) => s + r.loanBalance, 0);
@@ -142,6 +147,7 @@ export default function MemberBalances() {
     { key: 'arrears', label: 'Behind', count: behindRows.length || undefined },
     { key: 'loans', label: 'Loans' },
     { key: 'clear', label: 'Up to date' },
+    ...(suspendedCount > 0 ? [{ key: 'suspended' as const, label: 'Suspended', count: suspendedCount }] : []),
   ];
 
   return (
@@ -194,10 +200,11 @@ export default function MemberBalances() {
         ) : (
           <View style={{ marginTop: 8 }}>
             {filtered.map((r, i) => {
-              const behind = r.behindCount > 0;
+              const suspended = r.m.status === 'suspended';
+              const behind = r.behindCount > 0 && !suspended;
               const unverified = r.m.members?.verification_status !== 'verified';
               return (
-                <View key={r.m.id} style={{ flexDirection: 'row', gap: 12, paddingVertical: 14, paddingHorizontal: 2, borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                <Pressable key={r.m.id} onPress={() => openMember(r.m)} style={{ flexDirection: 'row', gap: 12, paddingVertical: 14, paddingHorizontal: 2, borderBottomWidth: i < filtered.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                   <View style={{ marginTop: 2 }}>
                     <Avatar name={name(r.m)} uri={r.m.members?.avatar_url} size={44} />
                   </View>
@@ -215,8 +222,13 @@ export default function MemberBalances() {
                       </View>
                     ) : null}
 
-                    {r.m.role !== 'member' || r.loanBalance > 0 || r.penaltyTotal > 0 || unverified ? (
+                    {suspended || r.m.role !== 'member' || r.loanBalance > 0 || r.penaltyTotal > 0 || unverified ? (
                       <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
+                        {suspended ? (
+                          <View style={{ backgroundColor: intent.danger.base, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
+                            <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{r.m.status_reason === 'Withdrawal in progress' ? 'Withdrawing' : 'Suspended'}</Text>
+                          </View>
+                        ) : null}
                         {r.m.role !== 'member' ? (
                           <View style={{ backgroundColor: semantic.dashCard, paddingHorizontal: 8, paddingVertical: 1.5, borderRadius: 20 }}>
                             <Text style={{ fontSize: 9, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{ROLE_LABEL[r.m.role]}</Text>
@@ -260,7 +272,7 @@ export default function MemberBalances() {
                       )}
                     </View>
                   </View>
-                </View>
+                </Pressable>
               );
             })}
           </View>

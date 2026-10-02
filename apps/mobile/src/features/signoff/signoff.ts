@@ -14,7 +14,7 @@ import { useCallback, useMemo } from 'react';
 import { useQuery } from '../../hooks/useApi';
 import { useActiveGroup } from '../../context/GroupContext';
 import { useAuth } from '../../context/AuthContext';
-import { listMembers } from '../../api/groups';
+import { listMembers, listWithdrawals } from '../../api/groups';
 import { useContributions } from '../contributions/contributions.hooks';
 import { useLoans, useRepayments } from '../lending/lending.hooks';
 import { useReversalRequests } from '../ledger/ledger.hooks';
@@ -22,8 +22,8 @@ import type { Money } from '../../lib/money';
 import type { ProofReading } from '../../api/contributions';
 
 export type Role = 'owner' | 'treasurer' | 'auditor' | 'member';
-export type SignoffAction = 'confirm' | 'verify' | 'review' | 'release' | 'verify_release';
-export type SignoffKind = 'contribution' | 'repayment' | 'reversal' | 'loan';
+export type SignoffAction = 'confirm' | 'verify' | 'review' | 'release' | 'verify_release' | 'approve';
+export type SignoffKind = 'contribution' | 'repayment' | 'reversal' | 'loan' | 'withdrawal';
 
 export const ROLE_NAME: Record<Role, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
@@ -33,6 +33,7 @@ export const ACTION_LABEL: Record<SignoffAction, string> = {
   review: 'Review',
   release: 'Release',
   verify_release: 'Verify release',
+  approve: 'Approve',
 };
 
 // Same rules as 0075's SQL helpers.
@@ -79,6 +80,8 @@ export interface SignoffItem {
   membershipId?: string | null;
   /** Contributions: which cycle it's for. */
   cycleId?: string | null;
+  /** Reversals: the ledger entry being reversed. */
+  entryId?: string;
 }
 
 /** Everything waiting on a sign-off in the group, each marked with whose step it is. */
@@ -91,6 +94,8 @@ export function useSignoffQueue(groupId: string) {
   const loans = useLoans(groupId);
   const membersFn = useCallback(() => listMembers(groupId), [groupId]);
   const members = useQuery(membersFn, [groupId], { table: 'memberships', filter: `group_id=eq.${groupId}` });
+  const withdrawalsFn = useCallback(() => (membership?.role && membership.role !== 'member' ? listWithdrawals(groupId) : Promise.resolve([])), [groupId, membership?.role]);
+  const withdrawals = useQuery(withdrawalsFn, [groupId, membership?.role], { table: 'withdrawals', filter: `group_id=eq.${groupId}` });
 
   const items = useMemo((): SignoffItem[] => {
     const me = member?.id ?? null;
@@ -144,15 +149,22 @@ export function useSignoffQueue(groupId: string) {
       });
     });
 
-    // Reversals: Treasurer starts, Auditor verifies, Organizer finalizes — only the verify step is queued here.
+    // Reversals: Treasurer starts, Auditor verifies, Organizer approves (UC-LG-01..03).
     (reversals.data ?? []).forEach((r) => {
-      if (r.status !== 'pending_verification') return;
+      if (r.status !== 'pending_verification' && r.status !== 'verified') return;
       const owner = r.entry?.membership_id ? (members.data ?? []).find((m) => m.id === r.entry!.membership_id)?.member_id ?? null : null;
-      const who = decide('auditor', [owner], 'This entry is yours');
+      const verifying = r.status === 'pending_verification';
+      const who = verifying
+        ? decide('auditor', [owner], 'This entry is yours')
+        : decide('owner', [r.initiated_by, r.verified_by], 'You started or verified it');
+      const entryName = r.entry?.membership?.members?.full_name;
+      const type = r.entry?.entry_type.replace(/_/g, ' ') ?? 'ledger entry';
       out.push({
-        key: `r-${r.id}`, kind: 'reversal', id: r.id, action: 'verify', ...withHolder(who), own: owner === me,
-        name: r.entry?.description ?? r.entry?.entry_type.replace(/_/g, ' ') ?? 'Ledger entry', label: 'Reversal',
-        amount: r.entry ? r.entry.amount : null, since: r.initiated_at, note: r.reason,
+        key: `r-${r.id}`, kind: 'reversal', id: r.id, action: verifying ? 'verify' : 'approve', ...withHolder(who), own: owner === me,
+        name: entryName ? `${entryName} · ${type}` : r.entry?.description ?? type, label: 'Reversal',
+        amount: r.entry ? r.entry.amount : null, since: (verifying ? r.initiated_at : r.verified_at) ?? r.initiated_at,
+        note: `${r.reason}${r.initiator?.full_name ? ` (${r.initiator.full_name})` : ''}${!verifying && r.verifier?.full_name ? `\nVerified by ${r.verifier.full_name}${r.verify_notes ? `: ${r.verify_notes}` : ''}` : ''}`,
+        entryId: r.entry_id,
       });
     });
 
@@ -170,14 +182,30 @@ export function useSignoffQueue(groupId: string) {
       }
     });
 
+    // Withdrawals: the Organizer starts it, the Treasurer releases the payout, the Auditor verifies and posts.
+    (withdrawals.data ?? []).forEach((w) => {
+      const leaver = w.membership?.member_id ?? null;
+      const releasing = w.status === 'pending_release';
+      const who = releasing
+        ? decide('treasurer', [leaver, w.initiated_by], 'You started this withdrawal')
+        : decide('auditor', [leaver, w.initiated_by, w.released_by], 'You started or released it');
+      const deductions = Number(w.loan_owed) + Number(w.penalties);
+      out.push({
+        key: `w-${w.id}`, kind: 'withdrawal', id: w.id, action: releasing ? 'release' : 'verify_release', ...withHolder(who), own: leaver === me,
+        name: w.membership?.members?.full_name ?? 'Member', label: 'Withdrawal payout', amount: w.payout,
+        since: (releasing ? w.initiated_at : w.released_at) ?? w.initiated_at,
+        note: `Contributions ₱${Number(w.capital).toFixed(2)}${deductions > 0 ? ` − loan and penalties ₱${deductions.toFixed(2)}` : ''} = payout ₱${Number(w.payout).toFixed(2)}`,
+      });
+    });
+
     return out.sort((a, b) => (a.since < b.since ? -1 : 1));
-  }, [contribs.data, repayments.data, reversals.data, loans.data, members.data, member?.id, membership?.role]);
+  }, [contribs.data, repayments.data, reversals.data, loans.data, withdrawals.data, members.data, member?.id, membership?.role]);
 
   const refetch = useCallback(() => {
-    contribs.refetch(); repayments.refetch(); reversals.refetch(); loans.refetch();
-  }, [contribs, repayments, reversals, loans]);
+    contribs.refetch(); repayments.refetch(); reversals.refetch(); loans.refetch(); withdrawals.refetch();
+  }, [contribs, repayments, reversals, loans, withdrawals]);
 
-  const loading = contribs.loading || repayments.loading || reversals.loading || loans.loading || members.loading;
+  const loading = contribs.loading || repayments.loading || reversals.loading || loans.loading || members.loading || withdrawals.loading;
   const members_ = members.data ?? [];
   return { items, mine: items.filter((i) => i.mine), own: items.filter((i) => i.own), members: members_, loading, refetch };
 }

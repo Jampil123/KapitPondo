@@ -4,7 +4,8 @@
  * Audit entries on a vertical rail: ring marker coloured by who acted
  * (Treasurer orange, Auditor teal, Organizer purple), time, what happened,
  * who, and a from > to chip.
- * Used by the Auditor dashboard's Recent activity and a flag's Entry history.
+ * Used by the Auditor and Organizer dashboards' Recent activity, the Organizer's
+ * Activity page and a flag's Entry history.
  */
 import { View, Pressable } from 'react-native';
 import { ChevronRight } from 'lucide-react-native';
@@ -29,7 +30,7 @@ export function whenLabel(iso: string) {
 const ORGANIZER = '#7C5CD6';
 const ROLE_DOT: Record<string, string> = { treasurer: '#D9772B', auditor: intent.success.base, owner: ORGANIZER };
 
-export function AuditTimeline({ entries, onOpen }: { entries: AuditLogEntry[]; onOpen?: (e: AuditLogEntry) => void }) {
+export function AuditTimeline({ entries, onOpen, showReason }: { entries: AuditLogEntry[]; onOpen?: (e: AuditLogEntry) => void; showReason?: boolean }) {
   return (
     <>
       {entries.map((e, i) => {
@@ -49,6 +50,9 @@ export function AuditTimeline({ entries, onOpen }: { entries: AuditLogEntry[]; o
               <Text style={{ fontSize: 11.5, color: semantic.textSecondary, marginTop: 1 }} numberOfLines={1}>
                 {e.actor?.full_name ?? 'Someone'}{e.actor_role ? `, ${ROLE_LABEL[e.actor_role] ?? e.actor_role}` : ''}
               </Text>
+              {showReason && d.reason ? (
+                <Text style={{ fontSize: 11.5, color: intent.danger.text, marginTop: 2 }} numberOfLines={2}>Reason: {d.reason}</Text>
+              ) : null}
               {d.to ? (
                 <View style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: semantic.surfaceAlt, borderRadius: 8, paddingVertical: 4, paddingHorizontal: 9, marginTop: 7 }}>
                   <Text style={{ fontSize: 11, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{d.from ?? '—'}</Text>

@@ -172,17 +172,69 @@ function isMissingSuspensionColumn(error) {
 //   'group_suspended' — members a group's officers suspended inside a group
 //   anything else     — that verification_status
 async function listForReview(status = 'pending') {
-  let q = supabase
-    .from('members')
-    .select('id, full_name, email, phone, id_document_url, verification_status, created_at, id_type, city, province')
-    .order('created_at', { ascending: true });
-  if (status !== 'all') q = q.eq('verification_status', status);
-  const { data, error } = await q;
-  if (error) {
-    if (isMissingSuspensionColumn(error)) { suspensionAvailable = false; return listForReview(status); }
-    throw error;
+  // ID fields (id_type, reason, …) live on identity_submissions, not members;
+  // they're embedded here and flattened by withSubmission(). The suspension
+  // columns only exist once migration 0057 is applied; until then this falls
+  // back to the base columns so the queue keeps working.
+  const BASE = `id, full_name, email, phone, verification_status, created_at, city, province, ${SUBMISSION_EMBED}(*)`;
+  const columns = suspensionAvailable === false ? BASE : `${BASE}, suspended_at, suspended_by, suspension_reason`;
+
+  if (status === 'suspended' && suspensionAvailable === false) return [];
+
+  // Retry without the suspension columns at most once — anything else (or a
+  // second failure) is a real error, never a retry loop.
+  async function run(query) {
+    const { data, error } = await query;
+    if (error) {
+      if (suspensionAvailable !== false && isMissingSuspensionColumn(error)) {
+        suspensionAvailable = false;
+        return { retry: true };
+      }
+      throw error;
+    }
+    suspensionAvailable = columns !== BASE;
+    return { data: data.map(flattenLatestSubmission) };
   }
-  return data;
+
+  if (status === 'group_suspended') {
+    // Suspension lives on the membership, so start from those rows.
+    const { data: suspended, error: mErr } = await supabase
+      .from('memberships')
+      .select('member_id, updated_at, groups:group_id(name)')
+      .eq('status', 'suspended');
+    if (mErr) throw mErr;
+    if (!suspended.length) return [];
+
+    const res = await run(supabase.from('members').select(columns)
+      .in('id', [...new Set(suspended.map((m) => m.member_id))]));
+    if (res.retry) return listForReview(status);
+
+    // Attach which group(s) each member is suspended in, for the admin table.
+    return res.data.map((m) => {
+      const rows = suspended.filter((s) => s.member_id === m.id);
+      return {
+        ...m,
+        suspended_groups: rows.map((s) => s.groups?.name).filter(Boolean),
+        group_suspended_since: rows.map((s) => s.updated_at).sort().pop() ?? null,
+      };
+    });
+  }
+
+  let q = supabase.from('members').select(columns).order('created_at', { ascending: true });
+  if (status === 'suspended') q = q.not('suspended_at', 'is', null);
+  else if (status !== 'all') q = q.eq('verification_status', status);
+
+  const res = await run(q);
+  if (res.retry) return listForReview(status);
+  return res.data;
+}
+
+// A member row with its embedded identity_submissions → the flat shape the
+// admin console reads (latest submission's id_type, reason, …).
+function flattenLatestSubmission(member) {
+  const subs = member.identity_submissions ?? [];
+  const latest = subs.reduce((a, b) => (!a || b.submitted_at > a.submitted_at ? b : a), null);
+  return withSubmission(member, latest);
 }
 
 // Sysadmin suspends an account: platform access is withdrawn until reinstated

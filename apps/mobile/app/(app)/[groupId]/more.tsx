@@ -5,7 +5,7 @@ import {
   ArrowUpCircle, Coins, Image as ImageIcon, Layers, BarChart3, Users, PiggyBank, Repeat, LifeBuoy,
   UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ClipboardCheck,
   ChevronRight, Banknote, Flag, Clock, Download, ScrollText, FileText, Stamp, HandCoins, Wallet, Inbox,
-  ShieldQuestion, UserCog, LogOut,
+  ShieldQuestion, UserCog, LogOut, LayoutGrid,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -25,6 +25,7 @@ const SIGNOFFS: Item = { icon: Stamp, label: 'Needs your sign-off', to: 'signoff
 const YEAR_END: Item = { icon: CalendarClock, label: 'Year-end', to: 'distribution/year-end' };
 const LOAN_DECISIONS: Item = { icon: Coins, label: 'Loan decisions', to: 'loans/decisions' };
 const PAYMENT_CHANNEL: Item = { icon: Smartphone, label: 'Payment channel', to: 'group/settings' };
+const REPORTS: Item = { icon: Download, label: 'Reports & Export', to: 'reports/export' };
 
 // The role's own tools — what this officer comes to the app to do.
 const ROLE_TOOLS: Record<GroupRole, Section | null> = {
@@ -40,6 +41,7 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
       { icon: ClipboardCheck, label: 'Audit findings', to: 'audit/findings' },
       PAYMENT_CHANNEL,
       YEAR_END,
+      REPORTS,
     ],
   },
   treasurer: {
@@ -52,6 +54,7 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
       LOAN_DECISIONS,
       PAYMENT_CHANNEL,
       YEAR_END,
+      REPORTS,
     ],
   },
   auditor: {
@@ -62,15 +65,34 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
       { icon: Flag, label: 'Flags and findings', to: 'audit/flags' },
       { icon: Clock, label: 'Audit trail', to: 'audit/log' },
       { icon: FileText, label: 'Proof review', to: 'audit/proofs' },
-      { icon: Download, label: 'Export audit report', to: 'audit/export' },
+      REPORTS,
       { icon: Wallet, label: 'Member balances', to: 'reports/member-balances' },
+      { icon: AlertTriangle, label: 'Penalties', to: 'penalties' },
       YEAR_END,
     ],
   },
   member: null,
 };
 
+const SWITCH_GROUP: Item = { icon: Repeat, label: 'Switch group', to: '/(app)/groups', replace: true };
+
 function sectionsFor(role: GroupRole): Section[] {
+  const account: Section = {
+    title: 'About your role',
+    items: [
+      { icon: ShieldQuestion, label: role === 'member' ? 'What members can do' : `What ${ROLE_NAME[role].toLowerCase()}s can't do`, to: 'role-guide' },
+      { icon: UserCog, label: 'Profile and security', to: 'profile' },
+      { icon: LifeBuoy, label: 'Help center', to: '/(app)/help-center' },
+      { icon: LogOut, label: 'Log out', to: '#logout', danger: true },
+    ],
+  };
+  // A member's records and group pages live on the Shortcuts page (the dashboard's "See more").
+  if (role === 'member') {
+    return [
+      { title: 'Navigate', items: [{ icon: LayoutGrid, label: 'Shortcuts', to: 'shortcuts' }, SWITCH_GROUP] },
+      account,
+    ];
+  }
   const tools = ROLE_TOOLS[role];
   return [
     ...(tools ? [tools] : []),
@@ -82,7 +104,7 @@ function sectionsFor(role: GroupRole): Section[] {
         { icon: ImageIcon, label: 'Proofs', to: 'proofs' },
         { icon: HandCoins, label: 'Recorded for you', to: 'recorded-for-me' },
         { icon: Layers, label: 'Heads', to: 'heads' },
-        { icon: BarChart3, label: 'Reports', to: 'reports' },
+        { icon: BarChart3, label: 'My Ledger', to: 'reports' },
       ],
     },
     {
@@ -90,18 +112,10 @@ function sectionsFor(role: GroupRole): Section[] {
       items: [
         { icon: Users, label: 'Group and officers', to: 'group' },
         { icon: PiggyBank, label: 'Group ledger', to: 'reports/group-ledger' },
-        { icon: Repeat, label: 'Switch group', to: '/(app)/groups', replace: true },
+        SWITCH_GROUP,
       ],
     },
-    {
-      title: 'About your role',
-      items: [
-        { icon: ShieldQuestion, label: role === 'member' ? 'What members can do' : `What ${ROLE_NAME[role].toLowerCase()}s can't do`, to: 'role-guide' },
-        { icon: UserCog, label: 'Profile and security', to: 'profile' },
-        { icon: LifeBuoy, label: 'Help center', to: '/(app)/help-center' },
-        { icon: LogOut, label: 'Log out', to: '#logout', danger: true },
-      ],
-    },
+    account,
   ];
 }
 

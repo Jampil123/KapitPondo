@@ -24,6 +24,7 @@ const VERB: Record<SignoffItem['action'], string> = {
   review: 'approved',
   release: 'approved',
   verify_release: 'recorded',
+  approve: 'verified',
 };
 
 // Non-money steps get a plain pill instead of a proof match.

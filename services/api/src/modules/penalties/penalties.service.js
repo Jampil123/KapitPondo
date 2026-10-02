@@ -25,6 +25,7 @@
  */
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
+const officers = require('../../lib/officers');
 
 // A cycle's penalty is either a fixed peso amount or a percent of the
 // contribution that was due (cycles.penalty_type).
@@ -99,7 +100,7 @@ async function checkLatePenalties(groupId) {
 
     const { data: memberships, error: mErr } = await supabase
       .from('memberships')
-      .select('id, heads')
+      .select('id, heads, role')
       .eq('group_id', groupId)
       .eq('status', 'active');
     if (mErr) throw mErr;
@@ -175,6 +176,14 @@ async function checkLatePenalties(groupId) {
         title: 'Late penalty applied',
         message: `Your contribution is overdue — a ${peso(penaltyAmount)} late penalty was added. Pay it together with the contribution.`,
       });
+      // The Organizer can't waive their own penalty, so the Auditor — who can — hears about it.
+      if (waiveRole(membership.role) === 'auditor') {
+        await officers.notifyRole({
+          groupId, role: 'auditor', skip: [memberRow.member_id],
+          type: 'penalty.to_review', title: "Organizer's penalty to review",
+          message: `The Organizer was charged a ${peso(penaltyAmount)} late penalty. Only you can waive it.`,
+        });
+      }
 
       created.push(penalty);
     }
@@ -205,7 +214,7 @@ async function checkLatePenaltiesIfDue(groupId) {
 async function listPenalties({ groupId, status, membershipId }) {
   let q = supabase
     .from('penalties')
-    .select('*, membership:memberships!membership_id(member_id, members!member_id(full_name, avatar_url))')
+    .select('*, membership:memberships!membership_id(member_id, role, members!member_id(full_name, avatar_url))')
     .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
   if (membershipId) q = q.eq('membership_id', membershipId);
@@ -272,7 +281,26 @@ async function settlePenaltiesFor({ contributionId, approverId }) {
   return data ?? [];
 }
 
-async function waivePenalty({ penaltyId, waivedBy, reason }) {
+// Who may waive a penalty (UC-CT-05): the Organizer, except on their own —
+// waiving a charge on yourself is deciding in your own favour — which the
+// Auditor waives instead.
+const waiveRole = (payerRole) => (payerRole === 'owner' ? 'auditor' : 'owner');
+
+async function waivePenalty({ groupId, penaltyId, waivedBy, waiverRole, reason }) {
+  const { data: penalty, error: pErr } = await supabase
+    .from('penalties')
+    .select('group_id, membership:memberships!membership_id(member_id, role)')
+    .eq('id', penaltyId).maybeSingle();
+  if (pErr) throw pErr;
+  if (!penalty || penalty.group_id !== groupId) throw Object.assign(new Error('Penalty not found in this group'), { status: 404 });
+  if (penalty.membership?.member_id === waivedBy) {
+    throw Object.assign(new Error("You can't waive your own penalty."), { status: 403 });
+  }
+  const needed = waiveRole(penalty.membership?.role);
+  if (waiverRole !== needed) {
+    throw Object.assign(new Error(needed === 'auditor' ? "The Organizer's penalty is waived by the Auditor." : 'Only the Organizer can waive this penalty.'), { status: 403 });
+  }
+
   const { data, error } = await supabase
     .from('penalties')
     .update({
@@ -285,7 +313,7 @@ async function waivePenalty({ penaltyId, waivedBy, reason }) {
     .eq('id', penaltyId)
     .eq('status', 'pending')
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
 
   if (data) {
@@ -307,5 +335,5 @@ async function waivePenalty({ penaltyId, waivedBy, reason }) {
 
 module.exports = {
   penaltyFor, splitPenaltyShare, coverPenalties, settlePenaltiesFor,
-  checkLatePenalties, checkLatePenaltiesIfDue, listPenalties, waivePenalty,
+  checkLatePenalties, checkLatePenaltiesIfDue, listPenalties, waivePenalty, waiveRole,
 };

@@ -57,7 +57,7 @@ export const CAPABILITY_ROLES: Record<Capability, GroupRole[]> = {
   reverseLedger: ['owner'],
   postAdjustment: ['owner', 'treasurer'],
 
-  previewDistribution: ['owner', 'treasurer'],
+  previewDistribution: ['treasurer'],
   finalizeDistribution: ['owner'],
   cancelDistribution: ['owner', 'treasurer'],
 

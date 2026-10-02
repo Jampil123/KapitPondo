@@ -10,7 +10,8 @@ import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { useConfirmContribution, useVerifyContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
 import { useConfirmRepaymentReceipt, useVerifyRepayment, useRejectRepayment, useReviewLoan, useDisburseLoan, useVerifyLoanRelease } from '@/features/lending/lending.hooks';
-import { useVerifyReversal, useRejectReversal } from '@/features/ledger/ledger.hooks';
+import { verifyReversal, rejectReversal, finalizeReversal } from '@/api/ledger';
+import { releaseWithdrawal, verifyWithdrawal } from '@/api/groups';
 import type { SignoffItem } from './signoff';
 
 /** Button label for the step, as the detail page shows it. */
@@ -20,6 +21,7 @@ export const PRIMARY_LABEL: Record<SignoffItem['action'], string> = {
   review: 'Clear for release',
   release: 'Release funds',
   verify_release: 'Verify and post',
+  approve: 'Approve reversal',
 };
 
 // Money already out can't be sent back — it's flagged instead.
@@ -33,8 +35,6 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
   const confirmRepayment = useConfirmRepaymentReceipt(groupId);
   const verifyRepayment = useVerifyRepayment(groupId);
   const rejectRepayment = useRejectRepayment(groupId);
-  const verifyReversal = useVerifyReversal(groupId);
-  const rejectReversal = useRejectReversal(groupId);
   const reviewLoan = useReviewLoan(groupId);
   const releaseLoan = useDisburseLoan(groupId);
   const verifyRelease = useVerifyLoanRelease(groupId);
@@ -47,6 +47,22 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
     if (ok === undefined) {
       Alert.alert(failTitle, err()?.message ?? 'Try again.');
       return false;
+    }
+    toast(done);
+    onDone();
+    return true;
+  }
+
+  // Plain API call: the error comes straight from the throw, not from hook state.
+  async function runDirect(action: () => Promise<unknown>, failTitle: string, done: string) {
+    setBusy(true);
+    try {
+      await action();
+    } catch (e) {
+      Alert.alert(failTitle, (e as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
     }
     toast(done);
     onDone();
@@ -66,7 +82,16 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
         ? run(() => confirmRepayment.run(i.id), fail, () => confirmRepayment.error, 'Confirmed — waiting for verification')
         : run(() => verifyRepayment.run(i.id), fail, () => verifyRepayment.error, 'Verified and posted to the ledger');
     }
-    if (i.kind === 'reversal') return run(() => verifyReversal.run(i.id), fail, () => verifyReversal.error, 'Reversal verified — the Organizer finalizes it');
+    if (i.kind === 'reversal') {
+      return i.action === 'approve'
+        ? runDirect(() => finalizeReversal(groupId, i.id), fail, 'Reversal approved — the correcting entry is posted')
+        : runDirect(() => verifyReversal(groupId, i.id), fail, 'Reversal verified — the Organizer approves it next');
+    }
+    if (i.kind === 'withdrawal') {
+      return i.action === 'release'
+        ? runDirect(() => releaseWithdrawal(groupId, i.id), fail, 'Payout released — waiting for the Auditor’s verification')
+        : runDirect(() => verifyWithdrawal(groupId, i.id), fail, 'Withdrawal verified and posted');
+    }
     if (i.action === 'review') return run(() => reviewLoan.run(i.id, true), fail, () => reviewLoan.error, 'Cleared for release');
     if (i.action === 'release') return run(() => releaseLoan.run(i.id), fail, () => releaseLoan.error, 'Loan released — waiting for verification');
     return run(() => verifyRelease.run(i.id), fail, () => verifyRelease.error, 'Release verified and posted to the ledger');
@@ -77,7 +102,7 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
     const r = reason || undefined;
     if (i.kind === 'contribution') return run(() => rejectContrib.run(i.id, r), 'Could not reject', () => rejectContrib.error, 'Rejected — the member has been told why');
     if (i.kind === 'repayment') return run(() => rejectRepayment.run(i.id, r), 'Could not reject', () => rejectRepayment.error, 'Rejected — the borrower has been told why');
-    if (i.kind === 'reversal') return run(() => rejectReversal.run(i.id, r), 'Could not reject', () => rejectReversal.error, 'Reversal rejected — the entry stands');
+    if (i.kind === 'reversal') return runDirect(() => rejectReversal(groupId, i.id, reason), 'Could not reject', 'Reversal rejected — the entry stands');
     if (!reason) {
       Alert.alert('Add a reason', 'Say why the loan is going back to the approver.');
       return Promise.resolve(false);

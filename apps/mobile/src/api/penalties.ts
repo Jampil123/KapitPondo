@@ -30,8 +30,11 @@ export interface Penalty {
   paid_with_contribution_id: string | null;
   created_at: string;
   /** Who the penalty belongs to. */
-  membership: { member_id: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
+  membership: { member_id: string; role?: string; members: { full_name: string; avatar_url?: string | null } | null } | null;
 }
+
+/** Who may waive a penalty: the Organizer, except their own, which the Auditor waives. Mirrors the API's waiveRole. */
+export const waiveRole = (p: Penalty): 'owner' | 'auditor' => (p.membership?.role === 'owner' ? 'auditor' : 'owner');
 
 /** GET — list penalties for a group (officers). Optional status filter. */
 export async function listPenalties(groupId: string, status?: PenaltyStatus) {
@@ -45,7 +48,7 @@ export async function listMyPenalties(groupId: string, status?: PenaltyStatus) {
   return res.penalties;
 }
 
-/** POST — waive a pending penalty, with a required reason (Owner only) — TC-017. */
+/** POST — waive a pending penalty, with a required reason (see waiveRole) — TC-017. */
 export function waivePenalty(groupId: string, penaltyId: string, reason: string) {
   return api.post<{ message: string; penalty: Penalty }>(
     `/api/groups/${groupId}/penalties/${penaltyId}/waive`,

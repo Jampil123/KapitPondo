@@ -5,23 +5,16 @@ import { ArrowDownRight, ArrowUpRight, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { parseApiDate } from '@/lib/cycle';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLedger } from '@/features/reporting/reporting.hooks';
-import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
 import { useSignedProofUrl } from '@/hooks/useSignedProofUrl';
-import { ENTRY_LABEL, PAYMENT_METHOD_LABEL } from '@/features/activity/entryCopy';
+import { ENTRY_LABEL, PAYMENT_METHOD_LABEL, signoffs } from '@/features/activity/entryCopy';
 import { DetailSection, DetailTitle, StatusPill } from '@/features/activity/DetailCard';
+import { ContributionDetail } from '@/features/activity/ContributionDetail';
 import { BlockedState, CloseHeader, formatDateTime } from '@/features/payments/PaymentPage';
 import type { LedgerEntry } from '@/api/ledger';
-
-function shortDate(iso: string | null | undefined) {
-  if (!iso) return '';
-  const d = parseApiDate(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 function ProofPreview({ path }: { path: string | null | undefined }) {
   const url = useSignedProofUrl(path);
@@ -36,25 +29,6 @@ function ProofPreview({ path }: { path: string | null | undefined }) {
           <ActivityIndicator color={semantic.brand} />
         </View>
       )}
-    </>
-  );
-}
-
-function ContributionExtras({ entry }: { entry: LedgerEntry }) {
-  const contributions = useContributions(entry.group_id, {});
-  const c = contributions.data?.find((x) => x.id === entry.source_id);
-  if (!c) return null;
-  return (
-    <>
-      <DetailSection
-        title="Payment details"
-        rows={[
-          ['For period', c.due_date ? `Due ${shortDate(c.due_date)}` : null],
-          ['Paid via', c.payment_method ? PAYMENT_METHOD_LABEL[c.payment_method] : null],
-          ['Reference', c.external_reference],
-        ]}
-      />
-      <ProofPreview path={c.proof_url} />
     </>
   );
 }
@@ -98,7 +72,6 @@ function LoanExtras({ entry }: { entry: LedgerEntry }) {
 
 /** Extras come from the record the entry was posted for, so they only mount (and fetch) for the entry types that have one. */
 function EntryExtras({ entry }: { entry: LedgerEntry }) {
-  if (entry.entry_type === 'contribution') return <ContributionExtras entry={entry} />;
   if (entry.entry_type === 'loan_repayment') return <RepaymentExtras entry={entry} />;
   if (entry.entry_type === 'loan_disbursement') return <LoanExtras entry={entry} />;
   return null;
@@ -135,6 +108,8 @@ export default function ActivityDetail() {
     );
   }
 
+  if (entry.entry_type === 'contribution') return <ContributionDetail entry={entry} onBack={close} />;
+
   const credit = entry.direction === 'credit';
   const Icon = credit ? ArrowDownRight : ArrowUpRight;
   return (
@@ -157,7 +132,8 @@ export default function ActivityDetail() {
           rows={[
             ['Member', scope === 'group' ? entry.membership?.members?.full_name ?? 'Group' : null],
             ['Posted', formatDateTime(new Date(entry.posted_at))],
-            ['Confirmed by', entry.poster?.full_name],
+            [signoffs(entry).confirmLabel, signoffs(entry).confirmedBy],
+            ['Verified by', signoffs(entry).verifiedBy],
             ['Cycle', cycle && entry.cycle_id === cycle.id ? cycle.name : null],
             ['Note', entry.description],
             ['Ledger entry', `#${entry.id.slice(0, 8).toUpperCase()}`],

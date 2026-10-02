@@ -24,6 +24,7 @@ export function ReasonPrompt({
   placeholder = 'Reason for the requester (optional)',
   confirmLabel = 'Confirm',
   destructive = false,
+  required = false,
   onConfirm,
   onCancel,
 }: {
@@ -32,6 +33,8 @@ export function ReasonPrompt({
   placeholder?: string;
   confirmLabel?: string;
   destructive?: boolean;
+  /** Confirm stays disabled until a reason is typed. */
+  required?: boolean;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
 }) {
@@ -77,6 +80,7 @@ export function ReasonPrompt({
                 <Button
                   label={confirmLabel}
                   onPress={handleConfirm}
+                  disabled={required && !reason.trim()}
                   style={destructive ? { backgroundColor: intent.danger.base } : undefined}
                 />
               </View>

@@ -14,6 +14,7 @@ import {
   getSummary,
   getFundSummary,
   getFundLedger,
+  getFundTotals,
   getMemberBalances,
   getLedger,
   getMyBalance,
@@ -43,7 +44,13 @@ export function useFundSummary(groupId: string) {
   return useQuery(fn, [groupId], fundWatch(groupId));
 }
 
-/** Member-safe, GROUP-WIDE ledger (any role) — every posting in the group, not just the caller's own. */
+/** Group-wide totals, no per-entry rows or names (any role) — the member's group ledger. */
+export function useFundTotals(groupId: string) {
+  const fn = useCallback(() => getFundTotals(groupId), [groupId]);
+  return useQuery(fn, [groupId], { table: 'ledger_entries', filter: `group_id=eq.${groupId}` });
+}
+
+/** GROUP-WIDE ledger (officers only) — every posting in the group, by name. */
 export function useFundLedger(groupId: string, filters: LedgerFilters = {}) {
   const fn = useCallback(() => getFundLedger(groupId, filters), [groupId, filters.entry_type, filters.limit]);
   return useQuery(fn, [groupId, filters.entry_type, filters.limit], { table: 'ledger_entries', filter: `group_id=eq.${groupId}` });

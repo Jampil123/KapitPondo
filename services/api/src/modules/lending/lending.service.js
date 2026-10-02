@@ -281,7 +281,45 @@ async function disburseLoan({ loanId, disburserId }) {
 // submit_loan_repayment()). Confirmed later by a DIFFERENT officer via
 // confirmRepayment(), same "claim now, post on confirm" shape as a
 // member's own contribution submission.
+const peso = (n) => `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+// What the borrower still owes: principal left plus the flat-rate interest
+// not yet posted — the same split verify_repayment() applies (0063).
+function amountOwed(loan, payments) {
+  const loanAmount = Number(loan.approved_principal ?? loan.principal ?? 0);
+  const totalInterest = Number(loan.interest_rate) > 0 && loan.term_months > 0
+    ? Math.round(loanAmount * Number(loan.interest_rate) * loan.term_months * 100) / 100
+    : 0;
+  const interestPaid = payments
+    .filter((p) => p.status === 'paid' || p.status === 'approved')
+    .reduce((s, p) => s + Number(p.interest_portion || 0), 0);
+  return Number(loan.outstanding_balance ?? 0) + Math.max(0, totalInterest - interestPaid);
+}
+
 async function submitRepayment(input) {
+  const { data: loan, error: lErr } = await supabase
+    .from('loans')
+    .select('status, outstanding_balance, principal, approved_principal, interest_rate, term_months')
+    .eq('id', input.loanId).single();
+  if (lErr) throw lErr;
+  if (loan.status !== 'active') {
+    throw Object.assign(new Error(loan.status === 'approved' ? "This loan hasn't been released yet" : 'This loan is not active'), { status: 409 });
+  }
+  const { data: payments, error: pErr } = await supabase
+    .from('loan_payments').select('status, amount, interest_portion').eq('loan_id', input.loanId);
+  if (pErr) throw pErr;
+  // Claims still under review count against the balance too, so two claims can't add up past it.
+  const inFlight = payments
+    .filter((p) => p.status === 'submitted' || p.status === 'confirmed')
+    .reduce((s, p) => s + Number(p.amount), 0);
+  const left = Math.round((amountOwed(loan, payments) - inFlight) * 100) / 100;
+  if (Number(input.amount) > left + 0.005) {
+    const message = inFlight > 0
+      ? `Only ${peso(Math.max(left, 0))} is left to repay after the ${peso(inFlight)} still under review.`
+      : `That's more than the ${peso(left)} left on this loan.`;
+    throw Object.assign(new Error(message), { status: 409 });
+  }
+
   const { data, error } = await supabase.rpc('submit_loan_repayment', {
     p_loan_id: input.loanId,
     p_amount: input.amount,
@@ -349,6 +387,11 @@ async function notifyRepaymentOutcome(loanId, { type, title, message }) {
 async function confirmRepayment({ paymentId, confirmerId }) {
   const { data, error } = await supabase.rpc('confirm_repayment', { p_payment_id: paymentId, p_confirmer_id: confirmerId });
   if (error) throw error;
+  await notifyRepaymentOutcome(data.loan_id, {
+    type: 'loan.repayment_received',
+    title: 'Payment received',
+    message: `Your ${peso(data.amount)} repayment was received and is waiting for verification.`,
+  });
   return data;
 }
 
@@ -360,7 +403,7 @@ async function verifyRepayment({ paymentId, verifierId }) {
   await notifyRepaymentOutcome(before.loan_id, {
     type: 'loan.repayment_confirmed',
     title: 'Repayment posted',
-    message: `Your repayment of ${before.amount} was verified and posted.`,
+    message: `Your ${peso(before.amount)} repayment was verified and posted.`,
   });
   return data;
 }
@@ -388,7 +431,7 @@ async function rejectRepayment({ paymentId, reason }) {
     await notifyRepaymentOutcome(data.loan_id, {
       type: 'loan.repayment_rejected',
       title: 'Repayment rejected',
-      message: reason ? `Your repayment claim was rejected: ${reason}` : 'Your repayment claim was rejected.',
+      message: `Your repayment claim was rejected: ${reason}`,
     });
   }
 

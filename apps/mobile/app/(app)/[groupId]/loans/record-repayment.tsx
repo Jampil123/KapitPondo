@@ -390,6 +390,7 @@ export default function RecordRepayment() {
         placeholder="What needs to be fixed? (visible to the member)"
         confirmLabel="Return"
         destructive
+        required
         onCancel={() => setRejectTarget(null)}
         onConfirm={onRejectConfirm}
       />

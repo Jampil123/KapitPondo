@@ -8,6 +8,7 @@ import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useAnnouncements } from '@/features/announcements/announcements.hooks';
+import { useMarkChatSeen } from '@/features/chat/chatSeen';
 import type { Announcement, AnnouncementType } from '@/api/announcements';
 
 const TYPE_LABEL: Record<AnnouncementType, string> = {
@@ -41,6 +42,7 @@ function AnnouncementCard({ a }: { a: Announcement }) {
 
 export default function Announcements() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  useMarkChatSeen(groupId, 'announcements');
   const router = useRouter();
   const { role } = useActiveGroup();
   const announcements = useAnnouncements(groupId);

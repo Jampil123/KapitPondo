@@ -84,7 +84,8 @@ export function DashboardShell({
       style={{ flex: 1 }}
       onScroll={folds ? scroll.onScroll : undefined}
       scrollEventThrottle={16}
-      contentContainerStyle={{ padding: 20, paddingTop: 4 + (folds ? bandHeight : 0), gap: 6 }}
+      // Room at the bottom for the floating nav, so the last card can scroll clear of it.
+      contentContainerStyle={{ padding: 20, paddingTop: 4 + (folds ? bandHeight : 0), paddingBottom: 110, gap: 6 }}
       refreshControl={refreshControl}
     >
       {children}

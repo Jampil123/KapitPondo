@@ -5,6 +5,7 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./groups.service');
 const { logAudit } = require('../../lib/auditLog');
 const { notify } = require('../../lib/notifications');
+const officers = require('../../lib/officers');
 
 // Create a group — the calling member becomes its owner
 router.post('/groups', requireAuth, async (req, res, next) => {
@@ -267,7 +268,7 @@ router.get('/groups/:groupId/members', requireAuth,
   requireGroupRole(['owner', 'treasurer', 'auditor']),
   async (req, res, next) => {
     try {
-      const members = await service.listGroupMembers(req.params.groupId);
+      const members = await service.listGroupMembers(req.params.groupId, { includeSuspended: req.query.include === 'suspended' });
       res.json({ members });
     } catch (err) { next(err); }
   }
@@ -312,6 +313,135 @@ router.delete('/groups/:groupId/members/:memberId', requireAuth,
     try {
       await service.removeMember(req.params.groupId, req.params.memberId);
       res.json({ ok: true });
+    } catch (err) { next(err); }
+  }
+);
+
+// ── Suspend / reactivate / withdraw (UC-GM-04) ────────────────────────────
+// Organizer starts each; a withdrawal's payout is released by the Treasurer
+// and verified by the Auditor (migration 0060 enforces who may do what).
+
+// The member, their settlement if they withdrew now, and any withdrawal.
+router.get('/groups/:groupId/memberships/:membershipId/standing', requireAuth,
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
+  async (req, res, next) => {
+    try {
+      res.json(await service.memberStanding(req.params.groupId, req.params.membershipId));
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/memberships/:membershipId/suspend', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const reason = req.body?.reason?.trim();
+      if (!reason) return res.status(400).json({ error: 'Give a reason for the suspension' });
+      const membership = await service.suspendMember(req.params.groupId, req.params.membershipId, req.member.id, reason);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'suspended', entityType: 'membership_status', entityId: req.params.membershipId,
+        before: { status: 'active' }, after: { status: 'suspended', reason },
+      });
+      res.json({ membership });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/memberships/:membershipId/reactivate', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const membership = await service.reactivateMember(req.params.groupId, req.params.membershipId, req.member.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'reactivated', entityType: 'membership_status', entityId: req.params.membershipId,
+        before: { status: 'suspended' }, after: { status: 'active' },
+      });
+      res.json({ membership });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/memberships/:membershipId/withdraw', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const withdrawal = await service.startWithdrawal(req.params.groupId, req.params.membershipId, req.member.id, req.body?.note);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'started', entityType: 'withdrawal', entityId: withdrawal.id,
+        before: null,
+        after: { status: 'pending_release', capital: withdrawal.capital, loan_owed: withdrawal.loan_owed, penalties: withdrawal.penalties, payout: withdrawal.payout },
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'treasurer', skip: [req.member.id],
+        type: 'withdrawal.to_release', title: 'Withdrawal to pay out',
+        message: 'A member is withdrawing. Pay out their settlement, then mark it released.',
+      });
+      res.status(201).json({ withdrawal });
+    } catch (err) { next(err); }
+  }
+);
+
+// Open withdrawals (waiting for release or verification).
+router.get('/groups/:groupId/withdrawals', requireAuth,
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
+  async (req, res, next) => {
+    try {
+      res.json({ withdrawals: await service.listWithdrawals(req.params.groupId) });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/withdrawals/:id/release', requireAuth,
+  requireGroupRole(['treasurer']),
+  async (req, res, next) => {
+    try {
+      const withdrawal = await service.releaseWithdrawal(req.params.groupId, req.params.id, req.member.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'released', entityType: 'withdrawal', entityId: req.params.id,
+        before: { status: 'pending_release' }, after: { status: 'released', payout: withdrawal.payout },
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'auditor', skip: [req.member.id],
+        type: 'withdrawal.to_verify', title: 'Withdrawal to verify',
+        message: 'A withdrawal payout was released and is waiting for your verification.',
+      });
+      res.json({ withdrawal });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/withdrawals/:id/verify', requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const withdrawal = await service.verifyWithdrawal(req.params.groupId, req.params.id, req.member.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'verified', entityType: 'withdrawal', entityId: req.params.id,
+        before: { status: 'released' }, after: { status: 'verified', payout: withdrawal.payout },
+      });
+      res.json({ withdrawal });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/groups/:groupId/withdrawals/:id/cancel', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const reason = req.body?.reason?.trim();
+      if (!reason) return res.status(400).json({ error: 'Give a reason for cancelling' });
+      const withdrawal = await service.cancelWithdrawal(req.params.groupId, req.params.id, req.member.id, reason);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'cancelled', entityType: 'withdrawal', entityId: req.params.id,
+        before: { status: 'pending_release' }, after: { status: 'cancelled', reason },
+      });
+      res.json({ withdrawal });
     } catch (err) { next(err); }
   }
 );

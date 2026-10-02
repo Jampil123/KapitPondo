@@ -413,6 +413,15 @@ router.post(
       if (!isOwnLoan && !isOfficer) {
         return res.status(403).json({ error: 'You can only submit a repayment for your own loan' });
       }
+      // Both are needed: the Treasurer confirms receipt, the Auditor verifies and posts.
+      const [treasurers, auditors] = await Promise.all([
+        officers.holdersOf(req.params.groupId, 'treasurer'),
+        officers.holdersOf(req.params.groupId, 'auditor'),
+      ]);
+      const missing = [!treasurers.length && 'Treasurer', !auditors.length && 'Auditor'].filter(Boolean);
+      if (missing.length) {
+        return res.status(409).json({ error: `This group has no ${missing.join(' or ')} yet. Repayments open once the Organizer appoints one.` });
+      }
       const payment = await service.submitRepayment({
         loanId: req.params.id,
         amount,
@@ -606,23 +615,39 @@ router.post(
   }
 );
 
-// Reject a submitted repayment claim, with a reason (officers)
+// Reject a repayment claim, with a reason the borrower can see. Only whoever's
+// step it is may send it back — the confirmer while 'submitted', the verifier
+// once 'confirmed' — under the same bars as taking the step.
 router.post(
   '/groups/:groupId/repayments/:paymentId/reject',
   requireAuth,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) return res.status(400).json({ error: 'Give a reason so the borrower knows what to fix' });
       const payment = await service.getRepayment(req.params.paymentId);
       if (payment.loans.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Repayment does not belong to this group' });
       }
-      const updated = await service.rejectRepayment({ paymentId: req.params.paymentId, reason: req.body?.reason });
+      if (payment.status !== 'submitted' && payment.status !== 'confirmed') {
+        return res.status(409).json({ error: 'Repayment is not waiting for confirmation or verification' });
+      }
+      const borrower = await borrowerOf(payment.loans.membership_id);
+      const confirming = payment.status === 'submitted';
+      const neededRole = confirming
+        ? officers.confirmRole(borrower.role)
+        : await officers.verifyRole(req.params.groupId, borrower.role, payment.recorded_by ? await officers.roleOf(req.params.groupId, payment.recorded_by) : null);
+      const barred = [borrower.member_id, payment.recorded_by, confirming ? null : payment.confirmed_by];
+      if (req.membership.role !== neededRole || barred.includes(req.member.id)) {
+        return res.status(403).json({ error: `Only the ${officers.ROLE_LABEL[neededRole]} handling this step can return it` });
+      }
+      const updated = await service.rejectRepayment({ paymentId: req.params.paymentId, reason });
       if (!updated) return res.status(409).json({ error: 'Repayment is not waiting for confirmation or verification' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'rejected', entityType: 'loan_payment', entityId: req.params.paymentId,
-        before: { status: payment.status }, after: { status: 'rejected', reason: req.body?.reason ?? null },
+        before: { status: payment.status }, after: { status: 'rejected', reason },
       });
       res.json({ message: 'Repayment rejected', payment: updated });
     } catch (err) { next(err); }

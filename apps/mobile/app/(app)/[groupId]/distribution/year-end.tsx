@@ -191,17 +191,21 @@ export default function YearEnd() {
           )}
           <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18 }}>
             {current
-              ? `${allocations.length} member${allocations.length === 1 ? '' : 's'} · ${totalHeads} head${totalHeads === 1 ? '' : 's'} · ${finalized ? `paid ${shortDate(current.finalized_at)}` : 'nothing is paid until you finalize'}`
-              : `${formatPeso(cashNow)} available cash · build a preview to split it by heads`}
+              ? `${allocations.length} member${allocations.length === 1 ? '' : 's'} · ${totalHeads} head${totalHeads === 1 ? '' : 's'} · ${finalized ? `paid ${shortDate(current.finalized_at)}` : 'nothing is paid until the Organizer finalizes'}`
+              : `${formatPeso(cashNow)} available cash, split by heads once the Treasurer builds a preview`}
           </Text>
         </View>
 
-        {/* ---------------- Build / rebuild preview ---------------- */}
-        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 14, gap: 10, marginTop: 18 }, shadowToken.soft]}>
-          <Text variant="overline" color="secondary">Period</Text>
-          <TextInput value={period} onChangeText={setPeriod} placeholder="2026" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, fontFamily: 'Poppins_500Medium', fontSize: 15, color: semantic.textPrimary }} />
-          <Button label={current && !finalized ? 'Rebuild preview' : 'Build preview'} variant="ghost" onPress={onPreview} loading={preview.loading} />
-        </View>
+        {/* ---------------- Build / rebuild preview (Treasurer) ---------------- */}
+        {can(role, 'previewDistribution') && !verified ? (
+          <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 14, gap: 10, marginTop: 18 }, shadowToken.soft]}>
+            <Text variant="overline" color="secondary">Period</Text>
+            <TextInput value={period} onChangeText={setPeriod} placeholder="2026" placeholderTextColor={semantic.textMuted} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, fontFamily: 'Poppins_500Medium', fontSize: 15, color: semantic.textPrimary }} />
+            <Button label={current && !finalized ? 'Rebuild preview' : 'Build preview'} variant="ghost" onPress={onPreview} loading={preview.loading} />
+          </View>
+        ) : !current || finalized ? (
+          <Text variant="caption" color="secondary" style={{ marginTop: 14, paddingHorizontal: 2 }}>The Treasurer builds the preview. The Auditor verifies it, then the Organizer finalizes.</Text>
+        ) : null}
 
         {current ? (
           <>
@@ -212,7 +216,7 @@ export default function YearEnd() {
               </Text>
             </View>
             <Gates steps={[
-              { state: 'done', label: 'Preview prepared', sub: `Built ${shortDate(current.created_at)}` },
+              { state: 'done', label: 'Treasurer prepares preview', sub: `Built ${shortDate(current.created_at)}` },
               { state: verified || finalized ? 'done' : 'now', label: 'Auditor verifies', sub: verified || finalized ? `Verified ${shortDate(current.verified_at)}` : undefined },
               { state: finalized ? 'done' : verified ? 'now' : 'wait', label: 'Organizer finalizes', sub: finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined },
             ]} />

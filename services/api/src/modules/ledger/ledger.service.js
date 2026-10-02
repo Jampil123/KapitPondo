@@ -1,14 +1,39 @@
 // services/api/src/modules/ledger/ledger.service.js
 // KapitPondo — Ledger corrections service (M7, FINAL)
 //
-// Reversal workflow (TC-021, TC-026): Treasurer/Owner initiates a request
-// (no ledger entry posted yet) -> Auditor verifies or rejects it -> Owner
-// finalizes a verified request, which is the only point the actual
-// reversing entry gets posted via the existing reverse_ledger_entry RPC.
-// The append-only ledger is untouched until finalization.
+// Reversal workflow (UC-LG-01..03): the Treasurer starts a request (nothing
+// posted yet) -> the Auditor verifies or rejects it -> the Organizer approves
+// or rejects it. Approving (approve_reversal, migration 0063) is the only
+// point the reversing entry is posted, and it undoes the record behind it.
+// The append-only ledger is untouched until then.
 
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
+const officers = require('../../lib/officers');
+const { signProofUrl } = require('../../lib/proofUrl');
+
+const conflict = (message) => Object.assign(new Error(message), { status: 409 });
+
+async function rpc409(fn, args) {
+  const { data, error } = await supabase.rpc(fn, args);
+  if (error) {
+    if (error.code === 'P0001') throw conflict(error.message);
+    throw error;
+  }
+  return data;
+}
+
+// "LE-1043 · Contribution, Maria Santos · ₱10,000.00" — for notifications.
+async function entryLabel(entry) {
+  let who = null;
+  if (entry.membership_id) {
+    const { data } = await supabase.from('memberships').select('members!member_id(full_name)').eq('id', entry.membership_id).maybeSingle();
+    who = data?.members?.full_name ?? null;
+  }
+  const type = entry.entry_type.replace(/_/g, ' ');
+  const amount = `₱${Number(entry.amount).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `LE-${1000 + (entry.entry_no ?? 0)} · ${type}${who ? `, ${who}` : ''} · ${amount}`;
+}
 
 async function getEntry(id) {
   const { data, error } = await supabase
@@ -19,19 +44,17 @@ async function getEntry(id) {
 
 async function initiateReversal({ entryId, groupId, reason, initiatedBy }) {
   const entry = await getEntry(entryId);
-  if (entry.entry_type === 'reversal') {
-    throw Object.assign(new Error('Cannot reverse a reversal entry'), { status: 409 });
-  }
+  const block = await rpc409('reversal_block', { p_entry_id: entryId });
+  if (block) throw conflict(block);
 
-  const { data: existing } = await supabase
+  const { data: existing, error: eErr } = await supabase
     .from('ledger_reversal_requests')
     .select('id')
     .eq('entry_id', entryId)
     .in('status', ['pending_verification', 'verified', 'finalized'])
-    .maybeSingle();
-  if (existing) {
-    throw Object.assign(new Error('This entry already has an active or completed reversal request'), { status: 409 });
-  }
+    .limit(1);
+  if (eErr) throw eErr;
+  if (existing.length) throw conflict('This entry already has a reversal in progress');
 
   const { data, error } = await supabase
     .from('ledger_reversal_requests')
@@ -39,13 +62,21 @@ async function initiateReversal({ entryId, groupId, reason, initiatedBy }) {
     .select()
     .single();
   if (error) throw error;
+
+  await officers.notifyRole({
+    groupId, role: 'auditor', skip: [initiatedBy],
+    type: 'reversal.to_verify', title: 'Reversal to verify',
+    message: `${await entryLabel(entry)}. Reason: ${reason}`,
+  });
   return data;
 }
+
+const REQUEST_NAMES = 'initiator:members!initiated_by(full_name), verifier:members!verified_by(full_name), rejecter:members!rejected_by(full_name), finalizer:members!finalized_by(full_name)';
 
 async function listReversalRequests({ groupId, status }) {
   let q = supabase
     .from('ledger_reversal_requests')
-    .select('*, entry:ledger_entries!entry_id(*)')
+    .select(`*, entry:ledger_entries!entry_id(*, membership:memberships!membership_id(member_id, members!member_id(full_name))), ${REQUEST_NAMES}`)
     .eq('group_id', groupId);
   if (status) q = q.eq('status', status);
   const { data, error } = await q.order('created_at', { ascending: false });
@@ -96,57 +127,50 @@ async function verifyReversal({ requestId, verifiedBy, notes }) {
     .eq('id', requestId)
     .eq('status', 'pending_verification')
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (data) {
+    await officers.notifyRole({
+      groupId: data.group_id, role: 'owner', skip: [verifiedBy, data.initiated_by],
+      type: 'reversal.to_approve', title: 'Reversal to approve',
+      message: `${await entryLabel(await getEntry(data.entry_id))}. Verified by the Auditor.`,
+    });
+  }
   return data;
 }
 
-async function rejectReversal({ requestId, verifiedBy, notes }) {
+// Rejected by the Auditor (while pending verification) or the Organizer (once
+// verified) — nothing is posted, and the Treasurer who started it hears why.
+async function rejectReversal({ requestId, rejectedBy, reason, fromStatus }) {
   const { data, error } = await supabase
     .from('ledger_reversal_requests')
     .update({
       status: 'rejected',
-      verified_by: verifiedBy,
-      verified_at: new Date().toISOString(),
-      verify_notes: notes ?? null,
+      rejected_by: rejectedBy,
+      rejected_at: new Date().toISOString(),
+      reject_reason: reason,
       updated_at: new Date().toISOString(),
     })
     .eq('id', requestId)
-    .eq('status', 'pending_verification')
+    .eq('status', fromStatus)
     .select()
-    .single();
+    .maybeSingle();
   if (error) throw error;
+  if (data) {
+    await notify({
+      memberId: data.initiated_by, groupId: data.group_id,
+      type: 'reversal.rejected', title: 'Reversal rejected',
+      message: `${await entryLabel(await getEntry(data.entry_id))}. The entry stands. Reason: ${reason}`,
+    });
+  }
   return data;
 }
 
 async function finalizeReversal({ requestId, finalizedBy }) {
-  const request = await getReversalRequest(requestId);
-  if (request.status !== 'verified') {
-    throw Object.assign(new Error('Reversal request is not verified'), { status: 409 });
-  }
+  const request = await rpc409('approve_reversal', { p_request_id: requestId, p_actor_id: finalizedBy });
+  const [originalEntry, reversalEntry] = await Promise.all([getEntry(request.entry_id), getEntry(request.reversal_entry_id)]);
+  const label = await entryLabel(originalEntry);
 
-  const { data: reversalEntry, error } = await supabase.rpc('reverse_ledger_entry', {
-    p_entry_id: request.entry_id,
-    p_reason: request.reason,
-    p_posted_by: finalizedBy,
-  });
-  if (error) throw error;
-
-  const { data: updated, error: uErr } = await supabase
-    .from('ledger_reversal_requests')
-    .update({
-      status: 'finalized',
-      finalized_by: finalizedBy,
-      finalized_at: new Date().toISOString(),
-      reversal_entry_id: reversalEntry.id,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', requestId)
-    .select()
-    .single();
-  if (uErr) throw uErr;
-
-  const originalEntry = await getEntry(request.entry_id);
   if (originalEntry.membership_id) {
     const { data: membership } = await supabase
       .from('memberships').select('member_id').eq('id', originalEntry.membership_id).maybeSingle();
@@ -156,12 +180,17 @@ async function finalizeReversal({ requestId, finalizedBy }) {
         groupId: request.group_id,
         type: 'ledger.reversed',
         title: 'A ledger entry was corrected',
-        message: `A ${originalEntry.entry_type} entry on your account was reversed: ${request.reason}`,
+        message: `${label} was reversed: ${request.reason}`,
       });
     }
   }
+  await notify({
+    memberId: request.initiated_by, groupId: request.group_id,
+    type: 'ledger.reversed', title: 'Reversal approved',
+    message: `${label} was reversed. Record the correct amount through the normal flow if needed.`,
+  });
 
-  return { request: updated, reversalEntry };
+  return { request, reversalEntry };
 }
 
 async function postAdjustment({ groupId, membershipId, direction, amount, reason, postedBy }) {
@@ -207,9 +236,19 @@ async function entryDetail({ groupId, entryId }) {
   }
   const records = entityType && sourceId ? await recordSummaries([{ entity_type: entityType, entity_id: sourceId }]) : new Map();
 
+  // The proof behind a payment, so a reversal can be checked against it.
+  let proofUrl = null;
+  const proofTable = { contribution: 'contributions', loan_payment: 'loan_payments' }[entityType];
+  if (proofTable && sourceId) {
+    const { data: src } = await supabase.from(proofTable).select('proof_url').eq('id', sourceId).maybeSingle();
+    proofUrl = await signProofUrl(src?.proof_url ?? null);
+  }
+
   const [{ data: reversedBy, error: rErr }, { data: requests, error: qErr }] = await Promise.all([
     supabase.from('ledger_entries').select('id, entry_no, posted_at').eq('reverses_entry_id', entryId).maybeSingle(),
-    supabase.from('ledger_reversal_requests').select('id').eq('entry_id', entryId),
+    supabase.from('ledger_reversal_requests')
+      .select(`*, ${REQUEST_NAMES}`)
+      .eq('entry_id', entryId).order('created_at', { ascending: false }),
   ]);
   if (rErr) throw rErr;
   if (qErr) throw qErr;
@@ -230,6 +269,9 @@ async function entryDetail({ groupId, entryId }) {
     source_id: sourceId,
     record: sourceId ? records.get(sourceId) ?? null : null,
     reversed_by: reversedBy ?? null,
+    reversal_request: requests?.[0] ?? null,
+    proof_url: proofUrl,
+    can_reverse: !(await rpc409('reversal_block', { p_entry_id: entryId }).catch(() => 'unavailable')),
     history: await withSubjects(history),
   };
 }

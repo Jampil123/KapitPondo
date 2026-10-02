@@ -17,6 +17,8 @@ import { useQuery } from '@/hooks/useApi';
 import { listMemberDirectory } from '@/api/groups';
 import { uploadChatImage } from '@/lib/upload';
 import { useDirectMessages, useSendDirectMessage } from '@/features/chat/directMessages.hooks';
+import { useMarkChatSeen, useChatReads, hasSeen } from '@/features/chat/chatSeen';
+import { SeenReceipt } from '@/components/chat/SeenReceipt';
 
 const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
 const STICKERS = ['👍', '😊', '🎉', '🙏', '❤️', '😂', '✅', '💰'];
@@ -37,6 +39,11 @@ export default function DirectMessage() {
 
   const { messages, loading, loadingMore, loadMore } = useDirectMessages(groupId, memberId, member?.id);
   const { send, sending } = useSendDirectMessage(groupId!, memberId!);
+  useMarkChatSeen(groupId, memberId ? `dm:${memberId}` : undefined, messages[0]?.id);
+  const reads = useChatReads(groupId);
+  const newest = messages[0];
+  const newestMine = !!newest && newest.sender_id === member?.id;
+  const newestSeen = newestMine && hasSeen(reads.data?.theirs[memberId!], newest.created_at);
 
   async function onSend() {
     const body = draft.trim();
@@ -95,6 +102,8 @@ export default function DirectMessage() {
                 inverted
                 keyExtractor={(m) => m.id}
                 renderItem={({ item }) => <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />}
+                // Inverted list: the header renders below the newest message.
+                ListHeaderComponent={newestMine ? <SeenReceipt label={newestSeen ? 'Seen' : 'Sent'} seen={newestSeen} alignRight /> : null}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 ListFooterComponent={loadingMore ? <LoadingState fullscreen={false} /> : null}

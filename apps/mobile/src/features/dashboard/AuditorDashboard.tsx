@@ -309,7 +309,7 @@ function AuditTools({ groupId, overview, go }: { groupId: string; overview: Retu
         <ToolTile Icon={Banknote} label="Loan audits" badge={loanFails} onPress={() => go('audit/loans')} />
         <ToolTile Icon={Flag} label="Flags & findings" badge={openItems} onPress={() => go('audit/flags')} />
         <ToolTile Icon={Clock} label="Audit trail" onPress={() => go('audit/log')} />
-        <ToolTile Icon={Download} label="Export report" onPress={() => go('audit/export')} />
+        <ToolTile Icon={Download} label="Reports & Export" onPress={() => go('reports/export')} />
       </View>
     </>
   );

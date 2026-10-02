@@ -95,7 +95,7 @@ export default function Heads() {
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
               <Lock size={15} color={intent.warning.text} style={{ marginTop: 1 }} />
               <Text variant="caption" style={{ flex: 1, color: intent.warning.text, lineHeight: 16 }}>
-                Heads can only be changed in the week before a due date. Check back closer to your next one.
+                Heads are locked after the cycle's first due date. You can change them again next cycle.
               </Text>
             </View>
           ) : null}

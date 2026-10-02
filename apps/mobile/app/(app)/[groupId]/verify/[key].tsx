@@ -185,8 +185,16 @@ export default function VerifyRecord() {
         ) : (
           i.note ? (
             <Card style={{ marginTop: 14 }}>
-              <Text variant="caption" color="secondary" style={{ marginBottom: 4 }}>{i.kind === 'reversal' ? 'Reason for the reversal' : 'Purpose'}</Text>
+              <Text variant="caption" color="secondary" style={{ marginBottom: 4 }}>{i.kind === 'reversal' ? 'Reason for the reversal' : i.kind === 'withdrawal' ? 'Settlement' : 'Purpose'}</Text>
               <Text style={{ fontSize: 13.5, lineHeight: 19, color: semantic.textPrimary }}>{i.note}</Text>
+              {i.kind === 'reversal' && i.entryId ? (
+                <Pressable
+                  onPress={() => router.push({ pathname: '/(app)/[groupId]/ledger/[entryId]' as any, params: { groupId, entryId: i.entryId! } })}
+                  style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.surfaceAlt }}
+                >
+                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>View the original entry and proof</Text>
+                </Pressable>
+              ) : null}
             </Card>
           ) : null
         )}
@@ -214,9 +222,10 @@ export default function VerifyRecord() {
       <ReasonPrompt
         visible={rejecting}
         title={i.action === 'review' ? `Send ${i.name}'s loan back?` : `Reject ${i.name}'s ${i.label.toLowerCase()}?`}
-        placeholder={i.action === 'review' ? 'Why it needs another look (required)' : 'Reason (shown to them)'}
+        placeholder={i.action === 'review' ? 'Why it needs another look (required)' : i.kind === 'contribution' || i.kind === 'repayment' ? 'What needs to be fixed? (shown to them)' : 'Reason (shown to them)'}
         confirmLabel={sendBackLabel(i)}
         destructive
+        required={i.kind === 'contribution' || i.kind === 'repayment' || i.kind === 'reversal'}
         onCancel={() => setRejecting(false)}
         onConfirm={(reason) => { setRejecting(false); actions.sendBack(i, reason); }}
       />
