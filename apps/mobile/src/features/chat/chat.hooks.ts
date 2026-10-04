@@ -13,33 +13,46 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAction } from '../../hooks/useApi';
 import { listMessages, sendMessage, type ChatChannel, type ChatMessage } from '../../api/messages';
+import { readCache, writeCache, loadPersisted, roomCacheKey, mergeFreshPage } from './chatCache';
 
 const PAGE_SIZE = 30;
 
-export function useMessages(groupId: string | undefined, channel: ChatChannel) {
-  // Newest-first internally (matches API order + inverted FlatList's natural order).
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+export function useMessages(groupId: string | undefined, channel: ChatChannel, myMemberId: string | undefined) {
+  const cacheKey = groupId && myMemberId ? roomCacheKey(myMemberId, groupId, channel) : undefined;
+  // Newest-first (matches API order + inverted FlatList). Seeded from the cache so a reopened conversation is on screen in the first frame.
+  const [messages, setMessages] = useState<ChatMessage[]>(() => (cacheKey && readCache<ChatMessage[]>(cacheKey)) || []);
+  const [loading, setLoading] = useState(() => !(cacheKey && readCache(cacheKey)));
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
 
-  // Initial fetch + resubscribe whenever groupId/channel changes.
+  // Initial fetch + resubscribe whenever groupId/channel changes. Cached messages show first; the fetch then refreshes them.
   useEffect(() => {
-    if (!groupId) return;
+    if (!groupId || !cacheKey) return;
     let cancelled = false;
-    setLoading(true);
+    let fetched = false;
+    const cached = readCache<ChatMessage[]>(cacheKey);
+    setLoading(!cached);
     setError(null);
-    setMessages([]);
-    seenIds.current = new Set();
+    setMessages(cached ?? []);
+    seenIds.current = new Set(cached?.map((m) => m.id));
     setHasMore(true);
+    if (!cached) {
+      loadPersisted<ChatMessage[]>(cacheKey).then((stored) => {
+        if (cancelled || fetched || !stored) return;
+        stored.forEach((m) => seenIds.current.add(m.id));
+        setMessages(stored);
+        setLoading(false);
+      });
+    }
 
     listMessages(groupId, channel, { limit: PAGE_SIZE })
       .then((page) => {
         if (cancelled) return;
+        fetched = true;
         page.forEach((m) => seenIds.current.add(m.id));
-        setMessages(page);
+        setMessages((prev) => mergeFreshPage(page, prev));
         setHasMore(page.length === PAGE_SIZE);
       })
       .catch((e) => !cancelled && setError(e))
@@ -66,7 +79,11 @@ export function useMessages(groupId: string | undefined, channel: ChatChannel) {
       cancelled = true;
       supabase.removeChannel(sub); // cleanup on unmount AND on groupId/channel change
     };
-  }, [groupId, channel]);
+  }, [groupId, channel, cacheKey]);
+
+  useEffect(() => {
+    if (cacheKey && !loading) writeCache(cacheKey, messages.slice(0, PAGE_SIZE));
+  }, [cacheKey, loading, messages]);
 
   const loadMore = useCallback(async () => {
     if (!groupId || loadingMore || !hasMore || messages.length === 0) return;

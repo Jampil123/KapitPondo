@@ -1,27 +1,24 @@
 import { useState } from 'react';
-import { View, FlatList, TextInput, Pressable, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, ActivityIndicator, ScrollView } from 'react-native';
+import { View, FlatList, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Alert } from '@/lib/alert';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
-import { Send, MessageCircle, Image as ImageIcon, Smile } from 'lucide-react-native';
+import { MessageCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { Avatar } from '@/components/ui/Avatar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { LoadingState } from '@/components/shared/LoadingState';
-import { MessageBubble } from '@/components/chat/MessageBubble';
-import { semantic } from '@/theme/colors';
+import { MessageBubble, DayDivider, startsNewDay } from '@/components/chat/MessageBubble';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { ChatSheet, CHAT_SHEET_OVERLAP } from '@/components/chat/ChatSheet';
+import { semantic, steel, intent } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 import { usePresentMembers } from '@/context/PresenceContext';
-import { useQuery } from '@/hooks/useApi';
-import { listMemberDirectory } from '@/api/groups';
+import { useMemberDirectory } from '@/features/chat/chatCache';
 import { uploadChatImage } from '@/lib/upload';
 import { useDirectMessages, useSendDirectMessage } from '@/features/chat/directMessages.hooks';
 import { useMarkChatSeen, useChatReads, hasSeen } from '@/features/chat/chatSeen';
 import { SeenReceipt } from '@/components/chat/SeenReceipt';
-
-const GRADIENT = ['#6CC5FF', '#2FA8FF', '#0F7FE0'] as const;
-const STICKERS = ['👍', '😊', '🎉', '🙏', '❤️', '😂', '✅', '💰'];
 
 const ROLE_LABEL: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
@@ -29,12 +26,10 @@ export default function DirectMessage() {
   const { groupId, memberId } = useLocalSearchParams<{ groupId: string; memberId: string }>();
   const { member } = useAuth();
   const present = usePresentMembers();
-  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
+  const directory = useMemberDirectory(groupId);
   const other = directory.data?.find((m) => m.member_id === memberId);
   const isOnline = present.some((p) => p.member_id === memberId);
 
-  const [draft, setDraft] = useState('');
-  const [showStickers, setShowStickers] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
 
   const { messages, loading, loadingMore, loadMore } = useDirectMessages(groupId, memberId, member?.id);
@@ -45,16 +40,12 @@ export default function DirectMessage() {
   const newestMine = !!newest && newest.sender_id === member?.id;
   const newestSeen = newestMine && hasSeen(reads.data?.theirs[memberId!], newest.created_at);
 
-  async function onSend() {
-    const body = draft.trim();
-    if (!body) return;
-    setDraft('');
-    await send(body); // realtime echo appends it — see directMessages.hooks.ts
+  async function onSend(body: string) {
+    await send(body); // realtime echo appends it
   }
 
-  async function onSendSticker(emoji: string) {
-    setShowStickers(false);
-    await send(emoji);
+  async function onSendSticker(url: string) {
+    await send('', url);
   }
 
   async function onPickImage() {
@@ -80,10 +71,20 @@ export default function DirectMessage() {
   const subtitle = other ? `${ROLE_LABEL[other.role] ?? other.role}${isOnline ? ' · Active now' : ''}` : undefined;
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: semantic.background }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <AppBar title={title} subtitle={subtitle} />
-
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: steel[200] }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <BandHeader
+        title={title}
+        subtitle={subtitle}
+        leading={
+          <View>
+            <Avatar name={title} uri={other?.avatar_url} size={38} />
+            {isOnline ? (
+              <View style={{ position: 'absolute', right: 0, bottom: 0, width: 11, height: 11, borderRadius: 6, backgroundColor: intent.success.base, borderWidth: 2, borderColor: '#fff' }} />
+            ) : null}
+          </View>
+        }
+        bottomPadding={CHAT_SHEET_OVERLAP + 6} />
+      <ChatSheet>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
           <View style={{ flex: 1 }}>
             {loading ? (
@@ -101,13 +102,18 @@ export default function DirectMessage() {
                 data={messages}
                 inverted
                 keyExtractor={(m) => m.id}
-                renderItem={({ item }) => <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />}
+                renderItem={({ item, index }) => (
+                  <View>
+                    {startsNewDay(item, messages[index + 1]) ? <DayDivider iso={item.created_at} /> : null}
+                    <MessageBubble message={item} isOwn={item.sender_id === member?.id} avatarUrl={directory.data?.find((d) => d.member_id === item.sender_id)?.avatar_url} />
+                  </View>
+                )}
                 // Inverted list: the header renders below the newest message.
                 ListHeaderComponent={newestMine ? <SeenReceipt label={newestSeen ? 'Seen' : 'Sent'} seen={newestSeen} alignRight /> : null}
                 onEndReached={loadMore}
                 onEndReachedThreshold={0.4}
                 ListFooterComponent={loadingMore ? <LoadingState fullscreen={false} /> : null}
-                contentContainerStyle={{ padding: 12, gap: 6 }}
+                contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 6 }}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
               />
@@ -115,68 +121,8 @@ export default function DirectMessage() {
           </View>
         </TouchableWithoutFeedback>
 
-        {showStickers ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 10, paddingHorizontal: 14, paddingVertical: 10 }}
-            style={{ borderTopWidth: 1, borderColor: semantic.border, backgroundColor: semantic.surface }}
-          >
-            {STICKERS.map((emoji) => (
-              <Pressable
-                key={emoji}
-                onPress={() => onSendSticker(emoji)}
-                style={{ width: 42, height: 42, borderRadius: 21, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}
-              >
-                <Text style={{ fontSize: 22 }}>{emoji}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : null}
-
-        <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 8, padding: 10, borderTopWidth: showStickers ? 0 : 1, borderColor: semantic.border, backgroundColor: semantic.surface }}>
-          <Pressable onPress={onPickImage} disabled={uploadingImage} hitSlop={6} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
-            {uploadingImage ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <ImageIcon size={23} color={semantic.brandDark} strokeWidth={1.8} />}
-          </Pressable>
-
-          <TextInput
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Message…"
-            multiline
-            onFocus={() => setShowStickers(false)}
-            style={{ flex: 1, minHeight: 40, maxHeight: 120, backgroundColor: semantic.surfaceAlt, borderRadius: 18, paddingHorizontal: 14, paddingVertical: 8, color: semantic.textPrimary }}
-          />
-
-          {draft.trim() ? (
-            <Pressable onPress={onSend} disabled={sending}>
-              <LinearGradient
-                colors={GRADIENT}
-                locations={[0, 0.55, 1]}
-                start={{ x: 0.15, y: 0 }}
-                end={{ x: 0.85, y: 1 }}
-                style={{
-                  width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
-                  opacity: sending ? 0.5 : 1,
-                  shadowColor: '#2FA8FF', shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 3 }, elevation: 6,
-                }}
-              >
-                <Send size={18} color="#fff" strokeWidth={2.3} />
-              </LinearGradient>
-            </Pressable>
-          ) : (
-            <Pressable
-              onPress={() => { Keyboard.dismiss(); setShowStickers((s) => !s); }}
-              style={{
-                width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center',
-                backgroundColor: showStickers ? semantic.dashCard : semantic.surfaceAlt,
-              }}
-            >
-              <Smile size={20} color={showStickers ? '#fff' : semantic.brandDark} strokeWidth={1.8} />
-            </Pressable>
-          )}
-        </View>
-      </SafeAreaView>
+        <ChatComposer onSend={onSend} onPickImage={onPickImage} onSendSticker={onSendSticker} sending={sending} uploadingImage={uploadingImage} />
+      </ChatSheet>
     </KeyboardAvoidingView>
   );
 }

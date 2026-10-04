@@ -13,7 +13,7 @@ import { VerificationStepHeader } from '@/components/shared/VerificationStepHead
 import { PickerSheet } from '@/components/shared/PickerSheet';
 import { semantic } from '@/theme/colors';
 import { scanForBlur } from '@/lib/blurDetection';
-import { ID_TYPES, idTypeLabel } from '@/constants/idTypes';
+import { useAcceptedIdTypes, idTypeLabel } from '@/constants/idTypes';
 
 const DRAFT_KEY = 'identity_draft_v1';
 const CARD_ASPECT_RATIO = 1.586; // standard ID card ratio (CR80), width:height
@@ -56,6 +56,8 @@ function CornerBracket({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) {
 export default function IdentityCapture() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // Accepted ID types come from the System Administrator's verification settings.
+  const idTypes = useAcceptedIdTypes();
   const { from } = useLocalSearchParams<{ from?: string }>();
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
@@ -312,7 +314,7 @@ export default function IdentityCapture() {
       <PickerSheet
         visible={idPickerOpen}
         title="Select ID type"
-        options={ID_TYPES}
+        options={idTypes}
         selected={idType}
         onSelect={pickIdType}
         onClose={() => setIdPickerOpen(false)}

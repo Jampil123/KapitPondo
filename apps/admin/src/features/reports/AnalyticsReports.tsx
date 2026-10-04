@@ -16,6 +16,8 @@ import { formatDate, formatDateTime, formatPeso } from '../../lib/format';
 type Column = { key: string; label: string; type?: 'text' | 'number' | 'money' | 'date' | 'datetime' | 'status' };
 type FilterName = 'date' | 'status' | 'group' | 'user' | 'action';
 
+type StatusList = 'verification' | 'submission' | 'account' | 'group' | 'membership';
+
 type ReportDef = {
   key: string;
   category: string;
@@ -23,7 +25,7 @@ type ReportDef = {
   description: string;
   dateLabel: string;
   filters: FilterName[];
-  statusOptions: 'verification' | 'group' | 'membership' | null;
+  statusOptions: StatusList | null;
   actionSource: 'system' | 'account' | 'group' | null;
   columns: Column[];
 };
@@ -32,7 +34,7 @@ type Options = {
   groups: { id: string; name: string; fund_code: string; status: string }[];
   members: { id: string; name: string }[];
   actions: { system: string[]; account: string[]; group: string[] };
-  statuses: { verification: string[]; group: string[]; membership: string[] };
+  statuses: Partial<Record<StatusList, string[]>>;
 };
 
 type Row = Record<string, unknown>;
@@ -59,7 +61,28 @@ const STATUS_TONE: Record<string, string> = {
   rejected: 'bg-danger-bg text-danger',
   defaulted: 'bg-danger-bg text-danger',
   suspended: 'bg-danger-bg text-danger',
+  resubmission_required: 'bg-warning-bg text-warning',
 };
+
+// Display names where the raw value reads badly; anything else is prettified.
+const STATUS_LABEL: Record<string, string> = {
+  resubmission_required: 'Re-submission required',
+  archived: 'Closed (archived)',
+};
+function statusLabel(s: string) {
+  return STATUS_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1).replace(/[._]/g, ' ');
+}
+
+// Quick date ranges — fill the from/to fields; the admin can still edit them.
+function isoDay(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const DATE_PRESETS: { label: string; range: () => { from: string; to: string } }[] = [
+  { label: 'Last 7 days', range: () => { const d = new Date(); d.setDate(d.getDate() - 6); return { from: isoDay(d), to: isoDay(new Date()) }; } },
+  { label: 'Last 30 days', range: () => { const d = new Date(); d.setDate(d.getDate() - 29); return { from: isoDay(d), to: isoDay(new Date()) }; } },
+  { label: 'This month', range: () => { const n = new Date(); return { from: isoDay(new Date(n.getFullYear(), n.getMonth(), 1)), to: isoDay(n) }; } },
+  { label: 'This year', range: () => { const n = new Date(); return { from: `${n.getFullYear()}-01-01`, to: isoDay(n) }; } },
+];
 
 function cell(value: unknown, type: Column['type']) {
   if (value === null || value === undefined || value === '') return <span className="text-muted">—</span>;
@@ -70,7 +93,7 @@ function cell(value: unknown, type: Column['type']) {
     const key = String(value);
     return (
       <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_TONE[key] ?? 'bg-surface-alt text-muted'}`}>
-        {key.replace(/[._]/g, ' ')}
+        {statusLabel(key)}
       </span>
     );
   }
@@ -107,6 +130,7 @@ export function AnalyticsReports() {
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Catalogue + dropdown contents, once.
   useEffect(() => {
@@ -131,8 +155,10 @@ export function AnalyticsReports() {
       Object.entries(f).forEach(([k, v]) => { if (v) params.set(k, v); });
       const r = await api.get<{ report: Report }>(`/admin/reports/${key}?${params.toString()}`);
       setReport(r.report);
-    } catch {
+      setError(null);
+    } catch (e) {
       setReport(null);
+      setError((e as Error).message || 'Could not generate this report.');
     } finally {
       setLoading(false);
     }
@@ -150,7 +176,7 @@ export function AnalyticsReports() {
   }, [defs]);
 
   const has = (name: FilterName) => !!def?.filters.includes(name);
-  const statusList = def?.statusOptions && options ? options.statuses[def.statusOptions] : [];
+  const statusList = def?.statusOptions && options ? options.statuses[def.statusOptions] ?? [] : [];
   const actionList = def?.actionSource && options ? options.actions[def.actionSource] : [];
 
   return (
@@ -216,7 +242,7 @@ export function AnalyticsReports() {
                   <label className={labelClass}>Status</label>
                   <select value={filters.status} onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))} className={selectClass}>
                     <option value="">All statuses</option>
-                    {statusList.map((s) => <option key={s} value={s}>{s}</option>)}
+                    {statusList.map((s) => <option key={s} value={s}>{statusLabel(s)}</option>)}
                   </select>
                 </div>
               )}
@@ -243,11 +269,26 @@ export function AnalyticsReports() {
                   <label className={labelClass}>Action</label>
                   <select value={filters.action} onChange={(e) => setFilters((f) => ({ ...f, action: e.target.value }))} className={selectClass}>
                     <option value="">All actions</option>
-                    {actionList.map((a) => <option key={a} value={a}>{a.replace(/[._]/g, ' ')}</option>)}
+                    {actionList.map((a) => <option key={a} value={a}>{statusLabel(a)}</option>)}
                   </select>
                 </div>
               )}
             </div>
+
+            {has('date') && (
+              <div className="flex flex-wrap items-center gap-2 mt-3">
+                {DATE_PRESETS.map((p) => {
+                  const r = p.range();
+                  const on = filters.from === r.from && filters.to === r.to;
+                  return (
+                    <button key={p.label} onClick={() => setFilters((f) => (on ? { ...f, from: '', to: '' } : { ...f, ...r }))}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold border ${on ? 'border-brand bg-surface-alt text-brand-dark' : 'border-line bg-surface text-muted hover:text-ink'}`}>
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Summary */}
@@ -258,7 +299,7 @@ export function AnalyticsReports() {
                   <div className="text-lg font-bold text-ink leading-tight">
                     {typeof v === 'number' && /contribution|loan|balance/i.test(k) ? formatPeso(v) : v}
                   </div>
-                  <div className="text-[11px] text-muted mt-0.5 capitalize">{k.replace(/[._]/g, ' ')}</div>
+                  <div className="text-[11px] text-muted mt-0.5">{statusLabel(k)}</div>
                 </div>
               ))}
             </div>
@@ -277,6 +318,8 @@ export function AnalyticsReports() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={99} className="px-5 py-10 text-center text-muted">Generating…</td></tr>
+                ) : error ? (
+                  <tr><td colSpan={99} className="px-5 py-10 text-center text-danger">{error}</td></tr>
                 ) : !report || report.rows.length === 0 ? (
                   <tr>
                     <td colSpan={99} className="px-5 py-10 text-center text-muted">

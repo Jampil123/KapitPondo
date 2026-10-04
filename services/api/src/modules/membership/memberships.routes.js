@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../../middleware/auth');
+const { groupSuspension } = require('../../lib/groupSuspension');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./memberships.service');
 const { logAudit } = require('../../lib/auditLog');
@@ -10,6 +11,9 @@ router.post('/groups/:groupId/join', requireAuth, async (req, res, next) => {
   try {
     if (req.member.verification_status !== 'verified') {
       return res.status(403).json({ error: 'Only verified members can join a group' });
+    }
+    if (await groupSuspension(req.params.groupId)) {
+      return res.status(403).json({ error: 'This fund group is suspended and is not accepting new members.' });
     }
     const membership = await service.requestToJoin({
       memberId: req.member.id, groupId: req.params.groupId,

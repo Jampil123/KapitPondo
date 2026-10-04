@@ -11,7 +11,7 @@ import { Users } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Avatar } from '@/components/ui/Avatar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { intent, semantic, shadowToken } from '@/theme/colors';
 import type { MyGroup } from '@/api/groups';
 
 export function GroupCard({ item, onPress }: { item: MyGroup; onPress: () => void }) {
@@ -34,7 +34,14 @@ export function GroupCard({ item, onPress }: { item: MyGroup; onPress: () => voi
         shadowToken.card,
       ]}
     >
-      <Text variant="label" style={{ fontSize: 16 }} numberOfLines={1}>{item.groups.name}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <Text variant="label" style={{ fontSize: 16, flexShrink: 1 }} numberOfLines={1}>{item.groups.name}</Text>
+        {item.groups.suspended_at ? (
+          <View style={{ backgroundColor: intent.danger.soft, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 }}>
+            <Text variant="caption" style={{ color: intent.danger.strong, fontWeight: '700' }}>Suspended</Text>
+          </View>
+        ) : null}
+      </View>
 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
         <View style={{ width: 58, height: 58, borderRadius: 16, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }}>

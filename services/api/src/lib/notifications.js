@@ -19,6 +19,7 @@
  * the source of truth for which `type` belongs to which toggle.
  */
 const supabase = require('../config/supabase');
+const { renderTemplate } = require('./systemConfig');
 
 const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -94,9 +95,20 @@ async function sendPush(memberId, { title, message, data }) {
 }
 
 // `data` is optional extra context for navigation, e.g. { sender_id } for a DM.
-async function notify({ memberId, groupId = null, type, title, message, data = null }) {
+// `vars` fills the {placeholders} of an administrator's template for this
+// type (System Configuration, lib/systemConfig.js); without an override the
+// sender's own title/message are used as-is.
+async function notify({ memberId, groupId = null, type, title, message, data = null, vars }) {
   if (!memberId || !type) return;
   if (!(await isCategoryEnabled(memberId, type))) return;
+  if (vars) {
+    try {
+      const t = await renderTemplate(type, vars);
+      if (t) ({ title, message } = t);
+    } catch (e) {
+      console.error(`[notifications] template for "${type}" failed, using default text:`, e.message);
+    }
+  }
   const { data: row, error } = await supabase.from('notifications').insert({
     member_id: memberId,
     group_id: groupId,

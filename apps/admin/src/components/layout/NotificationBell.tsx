@@ -110,14 +110,14 @@ export function NotificationBell({ memberId }: { memberId: string | undefined })
     <div className="relative" ref={ref}>
       <button
         onClick={() => { setOpen((v) => !v); if (!open) load(); }}
-        className="relative p-1.5 text-muted hover:text-ink"
+        className="relative p-1.5 text-brand-dark hover:text-ink"
         aria-label={unread ? `Notifications (${unread} unread)` : 'Notifications'}
         aria-haspopup="menu"
         aria-expanded={open}
       >
         <Bell size={21} />
         {unread > 0 ? (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-semibold flex items-center justify-center border-2 border-surface">
+          <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[10px] font-semibold flex items-center justify-center border-2 border-surface-alt">
             {unread > 9 ? '9+' : unread}
           </span>
         ) : null}

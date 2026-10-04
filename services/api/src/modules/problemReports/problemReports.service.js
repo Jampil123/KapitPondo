@@ -14,15 +14,15 @@
  */
 const supabase = require('../../config/supabase');
 const { notify, notifyAdmins } = require('../../lib/notifications');
+const { getSetting } = require('../../lib/systemConfig');
 
-const CATEGORIES = [
-  { key: 'account_information', label: 'Incorrect account information' },
-  { key: 'identity_verification', label: 'Identity verification problem' },
-  { key: 'technical', label: 'Technical problem' },
-  { key: 'group_activity', label: 'Inappropriate group activity' },
-  { key: 'account_concern', label: 'Account-related concern' },
-  { key: 'other', label: 'Other' },
-];
+// Categories are managed in System Configuration (migration 0066); the
+// built-in list is the default (lib/systemConfig.js). All of them — inactive
+// included — are returned so older reports keep their labels; only active
+// ones can be filed.
+async function getCategories() {
+  return getSetting('complaint_categories');
+}
 
 // The workflow, in order. Each step may also be closed outright.
 const STATUSES = ['new', 'under_review', 'investigating', 'resolved', 'closed'];
@@ -165,7 +165,9 @@ async function updateStatus({ id, status, note, resolution, resolutionNote, admi
 // --- member side -----------------------------------------------------------
 
 async function fileReport({ memberId, category, subject, description, groupId }) {
-  if (!CATEGORIES.some((c) => c.key === category)) return { error: `Unknown category "${category}"` };
+  const categories = await getCategories();
+  const cat = categories.find((c) => c.key === category && c.active !== false);
+  if (!cat) return { error: `Unknown category "${category}"` };
   if (!subject || !description) return { error: 'subject and description are required' };
 
   const { data, error } = await supabase.from('problem_reports')
@@ -190,7 +192,7 @@ async function fileReport({ memberId, category, subject, description, groupId })
   await notifyAdmins({
     type: 'problem_report.filed',
     title: 'New problem report',
-    message: `${CATEGORIES.find((c) => c.key === category).label}: ${subject}`,
+    message: `${cat.label}: ${subject}`,
   });
 
   return { report: shape(data) };
@@ -208,6 +210,6 @@ async function listMyReports(memberId) {
 }
 
 module.exports = {
-  CATEGORIES, STATUSES, RESOLUTIONS, NEXT_STATUS,
+  getCategories, STATUSES, RESOLUTIONS, NEXT_STATUS,
   listReports, getReport, updateStatus, fileReport, listMyReports,
 };

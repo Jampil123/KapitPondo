@@ -11,13 +11,14 @@
  *
  * Filters (a report opts into the ones that make sense for it):
  *   from / to  — date range over that report's own date field
- *   status     — verification status, group status, or membership status
+ *   status     — verification / account status, group status, or membership status
  *   group_id   — one fund group
  *   member_id  — one user
  *   action     — one audit action
  */
 const supabase = require('../../config/supabase');
 const monitoring = require('../monitoring/monitoring.service');
+const fundGroups = require('../monitoring/fundGroups.service');
 
 const MAX_ROWS = 5000; // generous, but keeps one bad filter from dumping the DB
 
@@ -65,6 +66,30 @@ async function memberNames() {
 async function groupNames() {
   const rows = await fetchAll(supabase.from('groups').select('id, name'));
   return new Map(rows.map((g) => [g.id, g.name]));
+}
+
+// Members with their platform-suspension columns (migration 0057). Before that
+// migration the columns don't exist, so retry without them — every account
+// then simply reads as not suspended.
+async function fetchMembers(columns, build) {
+  try {
+    return await fetchAll(build(supabase.from('members').select(`${columns}, suspended_at`)));
+  } catch (error) {
+    if (error?.code !== '42703' && !/suspended_at/.test(error?.message ?? '')) throw error;
+    return fetchAll(build(supabase.from('members').select(columns)));
+  }
+}
+
+// Fund Group Monitoring rows plus suspension (migration 0065), with
+// `group_state` = 'suspended' when suspended, else the group's own status.
+async function groupRows() {
+  const rows = await fundGroups.withSuspensionAndReports(await monitoring.fundGroupsMonitoring());
+  return rows.map((g) => ({ ...g, group_state: g.suspended_at ? 'suspended' : g.group_status }));
+}
+
+function matchesGroupStatus(g, status) {
+  if (!status) return true;
+  return status === 'suspended' ? g.group_state === 'suspended' : g.group_status === status;
 }
 
 function daysBetween(a, b) {
@@ -129,39 +154,47 @@ const REPORTS = {
     description: 'Every ID submission and how it was decided, with review turnaround.',
     dateLabel: 'Submitted',
     filters: ['date', 'status', 'user'],
-    statusOptions: 'verification',
+    statusOptions: 'submission',
     columns: [
       { key: 'full_name', label: 'Name' },
       { key: 'email', label: 'Email' },
       { key: 'id_type', label: 'ID type' },
       { key: 'submitted_at', label: 'Submitted', type: 'datetime' },
-      { key: 'verification_status', label: 'Status', type: 'status' },
-      { key: 'verified_at', label: 'Decided', type: 'datetime' },
+      { key: 'status', label: 'Decision', type: 'status' },
+      { key: 'reviewed_at', label: 'Decided', type: 'datetime' },
       { key: 'turnaround_days', label: 'Days to decide', type: 'number' },
-      { key: 'verified_by_name', label: 'Reviewed by' },
-      { key: 'verification_rejection_reason', label: 'Rejection reason' },
+      { key: 'reviewed_by_name', label: 'Reviewed by' },
+      { key: 'reason', label: 'Reason' },
     ],
     async run(f) {
-      let q = supabase.from('members')
-        .select('id, full_name, email, id_type, submitted_at, verified_at, verified_by, verification_status, verification_rejection_reason')
-        .not('submitted_at', 'is', null)
+      // One row per submission (identity_submissions), so a member who had to
+      // re-submit shows each attempt and its outcome.
+      let q = supabase.from('identity_submissions')
+        .select('id, member_id, id_type, status, reason, submitted_at, reviewed_at, reviewed_by, member:members!member_id(full_name, email)')
         .order('submitted_at', { ascending: false });
       q = applyDateRange(q, 'submitted_at', f);
-      if (f.status) q = q.eq('verification_status', f.status);
-      if (f.member_id) q = q.eq('id', f.member_id);
+      if (f.status) q = q.eq('status', f.status);
+      if (f.member_id) q = q.eq('member_id', f.member_id);
 
       const [rows, names] = await Promise.all([fetchAll(q), memberNames()]);
-      const out = rows.map((m) => ({
-        ...m,
-        verified_by_name: m.verified_by ? names.byId.get(m.verified_by) ?? null : null,
-        turnaround_days: daysBetween(m.submitted_at, m.verified_at),
+      const out = rows.map((r) => ({
+        id: r.id,
+        full_name: r.member?.full_name ?? null,
+        email: r.member?.email ?? null,
+        id_type: r.id_type,
+        submitted_at: r.submitted_at,
+        status: r.status,
+        reviewed_at: r.reviewed_at,
+        reviewed_by_name: r.reviewed_by ? names.byId.get(r.reviewed_by) ?? null : null,
+        turnaround_days: daysBetween(r.submitted_at, r.reviewed_at),
+        reason: r.reason,
       }));
       const decided = out.filter((r) => r.turnaround_days !== null);
       return {
         rows: out,
         summary: {
           Submissions: out.length,
-          ...countBy(out, 'verification_status'),
+          ...countBy(out, 'status'),
           'Avg days to decide': decided.length
             ? Math.round((sumBy(decided, 'turnaround_days') / decided.length) * 10) / 10
             : '—',
@@ -173,35 +206,51 @@ const REPORTS = {
   'account-status': {
     category: 'User Reports',
     label: 'Account Status Report',
-    description: 'Current verification standing of every account, with group membership.',
+    description: 'Current standing of every account — verification, platform suspension and group membership.',
     dateLabel: 'Registered',
     filters: ['date', 'status', 'user', 'group'],
-    statusOptions: 'verification',
+    statusOptions: 'account',
     columns: [
       { key: 'full_name', label: 'Name' },
       { key: 'email', label: 'Email' },
       { key: 'phone', label: 'Phone' },
-      { key: 'verification_status', label: 'Status', type: 'status' },
-      { key: 'verified_at', label: 'Verified on', type: 'datetime' },
+      { key: 'verification_status', label: 'Verification', type: 'status' },
+      { key: 'access', label: 'Access', type: 'status' },
+      { key: 'suspended_at', label: 'Suspended on', type: 'date' },
       { key: 'group_count', label: 'Groups', type: 'number' },
       { key: 'created_at', label: 'Registered', type: 'datetime' },
     ],
     async run(f) {
-      let q = supabase.from('members')
-        .select('id, full_name, email, phone, verification_status, verified_at, created_at')
-        .order('full_name', { ascending: true });
-      q = applyDateRange(q, 'created_at', f);
-      if (f.status) q = q.eq('verification_status', f.status);
-      if (f.member_id) q = q.eq('id', f.member_id);
+      const suspendedOnly = f.status === 'suspended';
+      const rows = await fetchMembers('id, full_name, email, phone, verification_status, verified_at, created_at', (q) => {
+        q = q.order('full_name', { ascending: true });
+        q = applyDateRange(q, 'created_at', f);
+        if (f.status && !suspendedOnly) q = q.eq('verification_status', f.status);
+        if (f.member_id) q = q.eq('id', f.member_id);
+        return q;
+      });
 
       let memberships = supabase.from('memberships').select('member_id, group_id').eq('status', 'active');
       if (f.group_id) memberships = memberships.eq('group_id', f.group_id);
-
-      const [rows, mships] = await Promise.all([fetchAll(q), fetchAll(memberships)]);
+      const mships = await fetchAll(memberships);
       const counts = mships.reduce((acc, m) => acc.set(m.member_id, (acc.get(m.member_id) ?? 0) + 1), new Map());
-      let out = rows.map((m) => ({ ...m, group_count: counts.get(m.id) ?? 0 }));
+
+      let out = rows.map((m) => ({
+        ...m,
+        suspended_at: m.suspended_at ?? null,
+        access: m.suspended_at ? 'suspended' : 'active',
+        group_count: counts.get(m.id) ?? 0,
+      }));
+      if (suspendedOnly) out = out.filter((m) => m.suspended_at);
       if (f.group_id) out = out.filter((m) => counts.has(m.id)); // only members of that group
-      return { rows: out, summary: { Accounts: out.length, ...countBy(out, 'verification_status') } };
+      return {
+        rows: out,
+        summary: {
+          Accounts: out.length,
+          ...countBy(out, 'verification_status'),
+          Suspended: out.filter((m) => m.access === 'suspended').length,
+        },
+      };
     },
   },
 
@@ -222,15 +271,15 @@ const REPORTS = {
       { key: 'total_contributions', label: 'Total Contributions', type: 'money' },
       { key: 'outstanding_loans', label: 'Outstanding Loans', type: 'money' },
       { key: 'fund_balance', label: 'Fund Balance', type: 'money' },
-      { key: 'group_status', label: 'Status', type: 'status' },
+      { key: 'group_state', label: 'Status', type: 'status' },
       { key: 'created_at', label: 'Created', type: 'date' },
       { key: 'last_activity_at', label: 'Last Activity', type: 'datetime' },
     ],
     async run(f) {
       // Same source as Fund Group Monitoring, so the numbers always agree.
-      const all = await monitoring.fundGroupsMonitoring();
+      const all = await groupRows();
       const rows = all.filter((g) =>
-        (!f.status || g.group_status === f.status) &&
+        matchesGroupStatus(g, f.status) &&
         (!f.group_id || g.group_id === f.group_id) &&
         inRange(g.created_at, f));
       return {
@@ -249,14 +298,14 @@ const REPORTS = {
   'group-status': {
     category: 'Fund Group Reports',
     label: 'Active / Closed Group Report',
-    description: 'Group standing with cycle history — active groups versus archived ones.',
+    description: 'Group standing with cycle history — active, closed (archived) and suspended groups.',
     dateLabel: 'Created',
     filters: ['date', 'status', 'group'],
     statusOptions: 'group',
     columns: [
       { key: 'group_name', label: 'Fund Group' },
       { key: 'fund_code', label: 'Fund Code' },
-      { key: 'group_status', label: 'Group Status', type: 'status' },
+      { key: 'group_state', label: 'Group Status', type: 'status' },
       { key: 'member_count', label: 'Members', type: 'number' },
       { key: 'active_cycles', label: 'Active Cycles', type: 'number' },
       { key: 'closed_cycles', label: 'Closed Cycles', type: 'number' },
@@ -267,7 +316,7 @@ const REPORTS = {
     ],
     async run(f) {
       const [all, cycles] = await Promise.all([
-        monitoring.fundGroupsMonitoring(),
+        groupRows(),
         fetchAll(supabase.from('cycles').select('group_id, status')),
       ]);
       const byGroup = new Map();
@@ -280,7 +329,7 @@ const REPORTS = {
       }
       const rows = all
         .filter((g) =>
-          (!f.status || g.group_status === f.status) &&
+          matchesGroupStatus(g, f.status) &&
           (!f.group_id || g.group_id === f.group_id) &&
           inRange(g.created_at, f))
         .map((g) => {
@@ -296,8 +345,9 @@ const REPORTS = {
         rows,
         summary: {
           'Fund groups': rows.length,
-          Active: rows.filter((g) => g.group_status === 'active').length,
-          Archived: rows.filter((g) => g.group_status === 'archived').length,
+          Active: rows.filter((g) => g.group_state === 'active').length,
+          'Closed (archived)': rows.filter((g) => g.group_status === 'archived').length,
+          Suspended: rows.filter((g) => g.group_state === 'suspended').length,
           'Closed cycles': sumBy(rows, 'closed_cycles'),
         },
       };
@@ -421,7 +471,7 @@ const REPORTS = {
     label: 'Administrative Action Report',
     description: 'Every System Administrator action recorded in the system audit log.',
     dateLabel: 'When',
-    filters: ['date', 'user', 'action'],
+    filters: ['date', 'user', 'group', 'action'],
     actionSource: 'system',
     columns: [
       { key: 'created_at', label: 'When', type: 'datetime' },
@@ -437,10 +487,17 @@ const REPORTS = {
         .order('created_at', { ascending: false });
       q = applyDateRange(q, 'created_at', f);
       if (f.action) q = q.eq('action', f.action);
-      if (f.member_id) q = q.eq('target_id', f.member_id);
+      if (f.group_id) q = q.eq('target_id', f.group_id);
 
       const [rows, names, groups] = await Promise.all([fetchAll(q), memberNames(), groupNames()]);
-      const out = rows.map((e) => ({
+      // A user matches as either the administrator who acted or the account
+      // acted on. actor_id is an auth.users id, so compare through auth_id.
+      let matched = rows;
+      if (f.member_id) {
+        const { data: m } = await supabase.from('members').select('auth_id').eq('id', f.member_id).maybeSingle();
+        matched = rows.filter((e) => e.target_id === f.member_id || (m?.auth_id && e.actor_id === m.auth_id));
+      }
+      const out = matched.map((e) => ({
         ...e,
         actor_name: e.actor_id ? names.byAuthId.get(e.actor_id) ?? null : null,
         target_name: e.target_id
@@ -501,8 +558,10 @@ async function filterOptions() {
       group: distinct(groupActions),
     },
     statuses: {
-      verification: ['unverified', 'pending', 'verified', 'rejected'],
-      group: ['active', 'archived'],
+      verification: ['unverified', 'pending', 'verified', 'resubmission_required', 'rejected'],
+      submission: ['pending', 'verified', 'resubmission_required', 'rejected'],
+      account: ['unverified', 'pending', 'verified', 'resubmission_required', 'rejected', 'suspended'],
+      group: ['active', 'archived', 'suspended'],
       membership: ['pending', 'active', 'suspended', 'exited', 'rejected'],
     },
   };

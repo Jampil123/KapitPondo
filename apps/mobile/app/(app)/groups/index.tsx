@@ -5,6 +5,7 @@ import { useRouter } from 'expo-router';
 import { Plus, X, Users, UserPlus, Bell } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { GroupCard } from '@/components/shared/GroupCard';
+import { SystemAnnouncements } from '@/components/shared/SystemAnnouncements';
 import { Wordmark, LogoMark } from '@/components/shared/ScreenHeader';
 import { semantic, shadowToken } from '@/theme/colors';
 import { useGroups } from '@/context/GroupContext';
@@ -26,9 +27,11 @@ export default function GroupsDashboard() {
   const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
+  const [announcementsKey, setAnnouncementsKey] = useState(0);
 
   async function onRefresh() {
     setRefreshing(true);
+    setAnnouncementsKey((k) => k + 1);
     await refresh();
     setRefreshing(false);
   }
@@ -88,6 +91,7 @@ export default function GroupsDashboard() {
         </View>
       ) : groups.length === 0 ? (
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 36 }}>
+          <View style={{ alignSelf: 'stretch' }}><SystemAnnouncements /></View>
           <Pressable onPress={() => router.push('/(app)/groups/create')} style={{ alignItems: 'center', marginBottom: 24 }}>
             <View style={{ width: 130, height: 100, borderWidth: 2, borderColor: semantic.borderStrong, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: semantic.background }}>
               <Users size={56} color={semantic.textMuted} />
@@ -100,6 +104,7 @@ export default function GroupsDashboard() {
           contentContainerStyle={{ padding: 20, paddingBottom: fabBottom + 100 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         >
+          <SystemAnnouncements refreshKey={announcementsKey} />
           <Text variant="overline" color="secondary" style={{ marginBottom: 12 }}>My Groups</Text>
           <View style={{ gap: 12 }}>
             {groups.map((item) => (

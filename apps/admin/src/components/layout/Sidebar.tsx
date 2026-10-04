@@ -1,33 +1,29 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, Boxes, Activity, BarChart3, Database, Shield, HardDrive, Cog, HeartPulse } from 'lucide-react';
+import { LayoutDashboard, Users, Boxes, Activity, BarChart3, MessageSquareWarning, SlidersHorizontal } from 'lucide-react';
 import kapitlogo from '../../assets/images/KapitPondoL.png';
 import type { AdminMe } from '../../context/AdminAuthContext';
 import { AccountMenu } from './AccountMenu';
 
-type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: 'pending_verifications' };
+export type SidebarBadges = { pending_verifications: number | null; new_complaints: number | null };
+type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: keyof SidebarBadges };
 
 const HOME_NAV: NavItem[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/verifications', label: 'Users', icon: Users, badgeKey: 'pending_verifications' },
   { to: '/groups', label: 'Fund Groups', icon: Boxes },
   { to: '/audit', label: 'Activity', icon: Activity },
-  { to: '/reports', label: 'Reports', icon: BarChart3 },
+  { to: '/complaints', label: 'Complaints', icon: MessageSquareWarning, badgeKey: 'new_complaints' },
+  { to: '/reports', label: 'Reports & Analytics', icon: BarChart3 },
+  { to: '/system-config', label: 'Configuration', icon: SlidersHorizontal },
 ];
 
-const SYSTEM_HEALTH_NAV: NavItem[] = [
-  { to: '/system/database', label: 'Database', icon: Database },
-  { to: '/system/database-health', label: 'Database Health', icon: HeartPulse },
-  { to: '/system/auth-service', label: 'Auth Services', icon: Shield },
-  { to: '/system/storage', label: 'Storage Health', icon: HardDrive },
-  { to: '/system/background-jobs', label: 'Background Jobs', icon: Cog },
-];
 
-function NavSection({ title, items, pending, expanded }: {
+function NavSection({ title, items, badges, expanded }: {
   title: string;
   items: NavItem[];
-  pending: number | null;
+  badges: SidebarBadges;
   expanded: boolean;
 }) {
   return (
@@ -39,7 +35,7 @@ function NavSection({ title, items, pending, expanded }: {
       )}
       <div className="space-y-1.5">
         {items.map((n) => {
-          const badge = n.badgeKey === 'pending_verifications' ? pending : null;
+          const badge = n.badgeKey ? badges[n.badgeKey] : null;
           return (
             <NavLink key={n.to} to={n.to} end={n.end} title={expanded ? undefined : n.label}
               className={({ isActive }) =>
@@ -76,12 +72,12 @@ function NavSection({ title, items, pending, expanded }: {
 }
 
 type SidebarProps = {
-  pending: number | null;
+  badges: SidebarBadges;
   admin: AdminMe | null;
   onSignOut: () => void | Promise<void>;
 };
 
-export function Sidebar({ pending, admin, onSignOut }: SidebarProps) {
+export function Sidebar({ badges, admin, onSignOut }: SidebarProps) {
   const [hovering, setHovering] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const expanded = hovering || menuOpen;
@@ -104,8 +100,7 @@ export function Sidebar({ pending, admin, onSignOut }: SidebarProps) {
       </div>
 
       <nav className="flex-1 px-3.5 overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <NavSection title="Home" items={HOME_NAV} pending={pending} expanded={expanded} />
-        <NavSection title="Platform Health" items={SYSTEM_HEALTH_NAV} pending={pending} expanded={expanded} />
+        <NavSection title="Home" items={HOME_NAV} badges={badges} expanded={expanded} />
       </nav>
 
       <div className="px-3.5 pb-5">

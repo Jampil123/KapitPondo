@@ -24,6 +24,10 @@ const FILTERS = [
   { key: 'account.verified', label: 'Verifications' },
   { key: 'account.rejected', label: 'Rejections' },
   { key: 'account.id_viewed', label: 'ID views' },
+  { key: 'account.suspended', label: 'Suspensions' },
+  { key: 'account.reinstated', label: 'Reinstatements' },
+  { key: 'group.suspended', label: 'Group suspensions' },
+  { key: 'config.updated', label: 'Configuration' },
 ];
 
 // action → the verb phrase shown in the Action column, and the outcome shown
@@ -35,6 +39,15 @@ const ACTION_META: Record<string, { action: string; result: string; tone: string
   'account.id_viewed': { action: 'Review ID Document', result: 'Viewed', tone: 'bg-surface-alt text-secondary' },
   'account.suspended': { action: 'Suspend Account', result: 'Suspended', tone: 'bg-danger-bg text-danger' },
   'account.reinstated': { action: 'Reinstate Account', result: 'Reinstated', tone: 'bg-success-bg text-success' },
+  'group.suspended': { action: 'Suspend Fund Group', result: 'Suspended', tone: 'bg-danger-bg text-danger' },
+  'group.reinstated': { action: 'Reinstate Fund Group', result: 'Reinstated', tone: 'bg-success-bg text-success' },
+  'config.updated': { action: 'Update System Configuration', result: 'Updated', tone: 'bg-surface-alt text-secondary' },
+  'announcement.published': { action: 'Publish Announcement', result: 'Published', tone: 'bg-success-bg text-success' },
+  'announcement.saved': { action: 'Save Announcement', result: 'Saved', tone: 'bg-surface-alt text-secondary' },
+  'announcement.deleted': { action: 'Delete Announcement', result: 'Deleted', tone: 'bg-danger-bg text-danger' },
+  'policy.published': { action: 'Publish Policy', result: 'Published', tone: 'bg-success-bg text-success' },
+  'policy.drafted': { action: 'Draft Policy', result: 'Drafted', tone: 'bg-surface-alt text-secondary' },
+  'policy.draft_deleted': { action: 'Delete Policy Draft', result: 'Deleted', tone: 'bg-danger-bg text-danger' },
 };
 
 function titleCase(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }

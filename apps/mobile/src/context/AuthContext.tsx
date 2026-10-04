@@ -5,6 +5,8 @@ import { supabase } from '../lib/supabase';
 import { toE164PH } from '../lib/phone';
 import { getMyProfile, type Member } from '../api/members';
 import { API_BASE_URL } from '../api/client';
+import { clearChatCache } from '../features/chat/chatCache';
+import { Alert } from '../lib/alert';
 
 const IDENTITY_DRAFT_KEY = 'identity_draft_v1';
 
@@ -90,6 +92,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return path;
   }, []);
 
+  // Platform suspension (an admin action) ends the session. While a sign-in is
+  // in flight the message is stashed and thrown back to the sign-in screen,
+  // which shows it inline; otherwise (app already open) it's an alert.
+  const signingInRef = useRef(false);
+  const suspendedMessageRef = useRef<string | null>(null);
+  const endSuspendedSession = useCallback(async (message: string) => {
+    if (signingInRef.current) suspendedMessageRef.current = message;
+    else Alert.alert('Account suspended', message);
+    setMember(null);
+    await clearChatCache().catch(() => {});
+    await supabase.auth.signOut();
+  }, []);
+
   const loadMember = useCallback(async (active: Session | null) => {
     if (!active) {
       await clearIdentityDraft();
@@ -100,6 +115,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const profile = await getMyProfile();
       setMember(profile);
     } catch (e) {
+      if ((e as any).status === 403 && (e as any).details?.suspended) {
+        await endSuspendedSession((e as Error).message);
+        return;
+      }
       console.warn('[auth] could not load member profile', {
         message: (e as Error).message,
         status: (e as any).status,
@@ -116,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
       }
     }
-  }, []);
+  }, [endSuspendedSession]);
 
   useEffect(() => {
     let mounted = true;
@@ -174,7 +193,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'members', filter: `auth_id=eq.${authId}` },
           (payload) => {
-            setMember((prev) => ({ ...(prev ?? ({} as Member)), ...(payload.new as Member) }));
+            const next = payload.new as Member & { suspended_at?: string | null; suspension_reason?: string | null };
+            // Suspended while the app is open — end the session right away
+            // rather than waiting for the next API call to be refused.
+            if (next.suspended_at) {
+              endSuspendedSession(next.suspension_reason
+                ? `Your account is suspended: ${next.suspension_reason}`
+                : 'Your account is suspended. Contact support for help.');
+              return;
+            }
+            setMember((prev) => ({ ...(prev ?? ({} as Member)), ...next }));
           },
         )
         .subscribe();
@@ -184,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       if (channel) supabase.removeChannel(channel);
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, endSuspendedSession]);
 
   const signUp = useCallback(async ({ phone, password, firstName, middleName, lastName, birthday, email, consentAccepted }: SignUpInput) => {
     if (!consentAccepted) throw new Error('You must agree to the Terms & Privacy Policy to continue.');
@@ -235,7 +263,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
     // Same as confirmOtp: wait until `status` is really 'signedIn' before the screen navigates into (app),
     // or the root guard still sees 'signedOut', flashes (auth)/landing, then bounces to (app)/groups.
-    await applySessionRef.current(data.session);
+    signingInRef.current = true;
+    suspendedMessageRef.current = null;
+    try {
+      await applySessionRef.current(data.session);
+    } finally {
+      signingInRef.current = false;
+    }
+    // Normally the auth ban rejects a suspended account above; this catches
+    // one whose ban didn't apply, after loadMember has signed it back out.
+    const suspended = suspendedMessageRef.current;
+    suspendedMessageRef.current = null;
+    if (suspended) throw new Error(suspended);
   }, []);
 
   const refreshMember = useCallback(async () => {
@@ -246,6 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSigningOut(true);
     try {
       await clearIdentityDraft();
+      await clearChatCache().catch(() => {});
       await supabase.auth.signOut();
     } catch (e) {
       setSigningOut(false);

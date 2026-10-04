@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
@@ -17,6 +17,7 @@ import { AuditorDashboard, AuditorHero } from '@/features/dashboard/AuditorDashb
 import { MemberDashboard, MemberHero } from '@/features/dashboard/MemberDashboard';
 import { semantic } from '@/theme/colors';
 import { onBandText } from '@/components/shared/DashboardBand';
+import { GroupSuspendedBanner } from '@/components/shared/GroupSuspendedBanner';
 
 const OFFICER_VIEWS = {
   owner: { Hero: OwnerHero, Body: OwnerDashboard },
@@ -86,6 +87,11 @@ export default function GroupDashboard() {
     set(v);
   };
   const [auditorView, setAuditorView] = useState<'officer' | 'member'>('officer');
+
+  // The groups list is loaded once at sign-in; re-read it on opening a group
+  // so a suspension (or reinstatement) since then shows straight away.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { refresh(); }, [groupId]);
 
   // Each dashboard's data hooks live inside its own component tree, so
   // rather than threading refetch callbacks through every nested piece,
@@ -191,6 +197,7 @@ export default function GroupDashboard() {
       refreshing={refreshing}
       onRefresh={onRefresh}
     >
+      <GroupSuspendedBanner group={group} />
       <Animated.View key={`body-${officerView}`} entering={slideIn}>
         <Body key={refreshKey} groupId={groupId!} />
       </Animated.View>

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAction } from '../../hooks/useApi';
 import { listDirectMessages, sendDirectMessage, type DirectMessage } from '../../api/directMessages';
+import { readCache, writeCache, loadPersisted, dmCacheKey, mergeFreshPage } from './chatCache';
 
 const PAGE_SIZE = 30;
 
@@ -22,27 +23,41 @@ export function useDirectMessages(
   otherMemberId: string | undefined,
   myMemberId: string | undefined,
 ) {
-  const [messages, setMessages] = useState<DirectMessage[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = groupId && otherMemberId && myMemberId ? dmCacheKey(myMemberId, groupId, otherMemberId) : undefined;
+  // Seeded from the cache so a reopened conversation is on screen in the very first frame.
+  const [messages, setMessages] = useState<DirectMessage[]>(() => (cacheKey && readCache<DirectMessage[]>(cacheKey)) || []);
+  const [loading, setLoading] = useState(() => !(cacheKey && readCache(cacheKey)));
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
 
+  // Cached messages show first; the fetch then refreshes them.
   useEffect(() => {
-    if (!groupId || !otherMemberId || !myMemberId) return;
+    if (!groupId || !otherMemberId || !myMemberId || !cacheKey) return;
     let cancelled = false;
-    setLoading(true);
+    let fetched = false;
+    const cached = readCache<DirectMessage[]>(cacheKey);
+    setLoading(!cached);
     setError(null);
-    setMessages([]);
-    seenIds.current = new Set();
+    setMessages(cached ?? []);
+    seenIds.current = new Set(cached?.map((m) => m.id));
     setHasMore(true);
+    if (!cached) {
+      loadPersisted<DirectMessage[]>(cacheKey).then((stored) => {
+        if (cancelled || fetched || !stored) return;
+        stored.forEach((m) => seenIds.current.add(m.id));
+        setMessages(stored);
+        setLoading(false);
+      });
+    }
 
     listDirectMessages(groupId, otherMemberId, { limit: PAGE_SIZE })
       .then((page) => {
         if (cancelled) return;
+        fetched = true;
         page.forEach((m) => seenIds.current.add(m.id));
-        setMessages(page);
+        setMessages((prev) => mergeFreshPage(page, prev));
         setHasMore(page.length === PAGE_SIZE);
       })
       .catch((e) => !cancelled && setError(e))
@@ -70,7 +85,11 @@ export function useDirectMessages(
       cancelled = true;
       supabase.removeChannel(sub);
     };
-  }, [groupId, otherMemberId, myMemberId]);
+  }, [groupId, otherMemberId, myMemberId, cacheKey]);
+
+  useEffect(() => {
+    if (cacheKey && !loading) writeCache(cacheKey, messages.slice(0, PAGE_SIZE));
+  }, [cacheKey, loading, messages]);
 
   const loadMore = useCallback(async () => {
     if (!groupId || !otherMemberId || loadingMore || !hasMore || messages.length === 0) return;

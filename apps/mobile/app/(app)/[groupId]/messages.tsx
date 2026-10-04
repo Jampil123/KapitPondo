@@ -6,19 +6,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Search, Megaphone, MessageCircle, Users, Plus } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { usePresentMembers } from '@/context/PresenceContext';
 import type { GroupRole } from '@/constants/roles';
-import { useQuery } from '@/hooks/useApi';
-import { listMemberDirectory } from '@/api/groups';
 import type { ChatMessage } from '@/api/messages';
 import type { RoomReader } from '@/api/chatReads';
 import type { DirectMessage } from '@/api/directMessages';
 import { useRoomReaders, hasSeen, seenBy } from '@/features/chat/chatSeen';
 import { useChatOverview } from '@/features/chat/chatOverview';
+import { useMemberDirectory, usePrefetchConversations } from '@/features/chat/chatCache';
 import { PillFilters } from '@/components/shared/PillFilters';
 
 const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
@@ -93,7 +92,7 @@ function AvatarCircle({ name, uri, label, online }: { name: string | null | unde
 
 function AvatarStrip({ groupId }: { groupId: string | undefined }) {
   const { member } = useAuth();
-  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
+  const directory = useMemberDirectory(groupId);
   const present = usePresentMembers();
 
   const onlineIds = new Set(present.filter((p) => p.member_id !== member?.id).map((p) => p.member_id));
@@ -206,6 +205,11 @@ export default function Messages() {
     latestAnnouncement, latestGeneral, latestOfficers, latestDm,
     unread: unreadOf, refetch: refetchChats,
   } = useChatOverview(groupId);
+  usePrefetchConversations(
+    groupId, member?.id,
+    canOfficersRoom ? ['general', 'officers'] : ['general'],
+    others.map((m) => m.member_id),
+  );
   const [filter, setFilter] = useState<Filter>('all');
   const present = usePresentMembers();
   const onlineIds = new Set(present.map((p) => p.member_id));
@@ -346,8 +350,9 @@ export default function Messages() {
     .filter((g) => g.list.length > 0);
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      {/* Same steel band as the dashboard header (BandHeader draws the status-bar inset itself). */}
+      <BandHeader
         title="Messages"
         right={composeRoute ? (
           <Pressable onPress={() => go(composeRoute)} hitSlop={8}>

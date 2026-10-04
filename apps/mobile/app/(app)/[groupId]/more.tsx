@@ -2,21 +2,20 @@ import { View, Pressable, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
-  ArrowUpCircle, Coins, Image as ImageIcon, Layers, BarChart3, Users, PiggyBank, Repeat, LifeBuoy,
+  Coins, Users, PiggyBank, Repeat, LifeBuoy,
   UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ClipboardCheck,
   ChevronRight, Banknote, Flag, Clock, Download, ScrollText, FileText, Stamp, HandCoins, Wallet, Inbox,
-  ShieldQuestion, UserCog, LogOut, LayoutGrid,
+  ShieldQuestion, UserCog, LayoutGrid,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { Alert } from '@/lib/alert';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import type { GroupRole } from '@/constants/roles';
 
-type Item = { icon: any; label: string; to: string; replace?: boolean; danger?: boolean };
+type Item = { icon: any; label: string; to: string; replace?: boolean };
 type Section = { title: string; items: Item[] };
 
 const ROLE_NAME: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
@@ -83,7 +82,6 @@ function sectionsFor(role: GroupRole): Section[] {
       { icon: ShieldQuestion, label: role === 'member' ? 'What members can do' : `What ${ROLE_NAME[role].toLowerCase()}s can't do`, to: 'role-guide' },
       { icon: UserCog, label: 'Profile and security', to: 'profile' },
       { icon: LifeBuoy, label: 'Help center', to: '/(app)/help-center' },
-      { icon: LogOut, label: 'Log out', to: '#logout', danger: true },
     ],
   };
   // A member's records and group pages live on the Shortcuts page (the dashboard's "See more").
@@ -93,20 +91,11 @@ function sectionsFor(role: GroupRole): Section[] {
       account,
     ];
   }
+  // An officer's own member records are on the dashboard's "My member view",
+  // so this page keeps to their role's tools and the group.
   const tools = ROLE_TOOLS[role];
   return [
     ...(tools ? [tools] : []),
-    {
-      title: 'My records',
-      items: [
-        { icon: ArrowUpCircle, label: 'Contributions', to: 'contributions' },
-        { icon: Coins, label: 'Loans', to: 'loans' },
-        { icon: ImageIcon, label: 'Proofs', to: 'proofs' },
-        { icon: HandCoins, label: 'Recorded for you', to: 'recorded-for-me' },
-        { icon: Layers, label: 'Heads', to: 'heads' },
-        { icon: BarChart3, label: 'My Ledger', to: 'reports' },
-      ],
-    },
     {
       title: 'Group',
       items: [
@@ -122,12 +111,12 @@ function sectionsFor(role: GroupRole): Section[] {
 function Row({ item, last, onPress }: { item: Item; last: boolean; onPress: () => void }) {
   const Icon = item.icon;
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
-      <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: item.danger ? semantic.surfaceAlt : intent.info.soft, alignItems: 'center', justifyContent: 'center' }}>
-        <Icon size={18} color={item.danger ? semantic.textSecondary : semantic.brandDark} />
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: 2, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ width: 38, height: 38, borderRadius: 11, backgroundColor: intent.info.soft, alignItems: 'center', justifyContent: 'center' }}>
+        <Icon size={18} color={semantic.brandDark} />
       </View>
       <Text style={{ flex: 1, fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{item.label}</Text>
-      {item.danger ? null : <ChevronRight size={18} color={semantic.textSecondary} />}
+      <ChevronRight size={18} color={semantic.textSecondary} />
     </Pressable>
   );
 }
@@ -135,19 +124,12 @@ function Row({ item, last, onPress }: { item: Item; last: boolean; onPress: () =
 export default function More() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { member, signOut } = useAuth();
+  const { member } = useAuth();
   const { role, group } = useActiveGroup();
   const r = (role ?? 'member') as GroupRole;
   const verified = member?.verification_status === 'verified';
 
   function go(item: Item) {
-    if (item.to === '#logout') {
-      Alert.alert('Log out?', 'You can sign back in any time.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Log out', style: 'destructive', onPress: () => { signOut(); } },
-      ]);
-      return;
-    }
     if (item.to.startsWith('/')) {
       if (item.replace) router.replace(item.to as any);
       else router.push(item.to as any);
@@ -175,8 +157,9 @@ export default function More() {
 
         {sectionsFor(r).map((section) => (
           <View key={section.title}>
-            <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 22, marginBottom: 9 }}>{section.title}</Text>
-            <View style={[{ backgroundColor: semantic.card, borderRadius: 20, overflow: 'hidden' }, shadowToken.soft]}>
+            <Text style={{ fontSize: 15, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 24, marginBottom: 4 }}>{section.title}</Text>
+            {/* Rows sit straight on the page — only the profile keeps a card. */}
+            <View>
               {section.items.map((it, i) => <Row key={it.label} item={it} last={i === section.items.length - 1} onPress={() => go(it)} />)}
             </View>
           </View>

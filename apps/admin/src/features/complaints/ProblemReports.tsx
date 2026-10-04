@@ -1,5 +1,5 @@
 /**
- * apps/admin/src/features/reports/ProblemReports.tsx — Reports of Problems /
+ * apps/admin/src/features/complaints/ProblemReports.tsx — Reports of Problems /
  * Complaints: the queue members file into, and the System Administrator's
  * Review → Investigate → Resolve → Close workflow over it.
  *

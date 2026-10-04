@@ -237,17 +237,48 @@ function flattenLatestSubmission(member) {
   return withSubmission(member, latest);
 }
 
+// Supabase Auth ban that backs a platform suspension: a banned user can't
+// sign in or refresh their session, so access ends even for clients that
+// talk to Supabase directly (realtime). ~100 years stands in for "until
+// reinstated"; 'none' lifts it. A failed ban is logged, not thrown — the
+// suspended_at column is still the source of truth and middleware/auth.js
+// enforces it on every API request regardless.
+const SUSPENSION_BAN = '876000h';
+async function setAuthBan(authId, banned) {
+  if (!authId) return;
+  const { error } = await supabase.auth.admin.updateUserById(authId, { ban_duration: banned ? SUSPENSION_BAN : 'none' });
+  if (error) console.error(`[identity] could not ${banned ? 'ban' : 'unban'} auth user ${authId}:`, error.message ?? error);
+}
+
+// System administrators can't be suspended from the console — removing an
+// admin goes through platform_admins, not this.
+async function isPlatformAdmin(memberId) {
+  const { data: member, error } = await supabase.from('members').select('auth_id').eq('id', memberId).maybeSingle();
+  if (error) throw error;
+  if (!member?.auth_id) return false;
+  const { data, error: aErr } = await supabase
+    .from('platform_admins')
+    .select('user_id')
+    .eq('user_id', member.auth_id)
+    .eq('active', true)
+    .maybeSingle();
+  if (aErr) throw aErr;
+  return !!data;
+}
+
 // Sysadmin suspends an account: platform access is withdrawn until reinstated
-// (middleware/auth.js blocks the suspended member on their next request).
-// Verification status is left alone — suspension is a separate axis.
+// (middleware/auth.js blocks the suspended member on their next request, and
+// the auth ban stops new sign-ins). Verification status is left alone —
+// suspension is a separate axis.
 async function suspendMember({ memberId, adminMemberId, actorAuthId, reason }) {
+  const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('members')
     .update({
-      suspended_at: new Date().toISOString(),
+      suspended_at: now,
       suspended_by: adminMemberId,
       suspension_reason: reason ?? null,
-      updated_at: new Date().toISOString(),
+      updated_at: now,
     })
     .eq('id', memberId)
     .is('suspended_at', null) // already-suspended accounts are a no-op, not a re-suspend
@@ -255,18 +286,23 @@ async function suspendMember({ memberId, adminMemberId, actorAuthId, reason }) {
     .maybeSingle();
   if (error) throw error;
   if (data) {
-    await writeAudit(actorAuthId, 'account.suspended', memberId, { reason: reason ?? null });
-    await notify({
-      memberId,
-      type: 'account.suspended',
-      title: 'Account suspended',
-      message: reason ? `Your account has been suspended: ${reason}` : 'Your account has been suspended. Contact support for help.',
-    });
+    await Promise.all([
+      setAuthBan(data.auth_id, true),
+      writeAudit(actorAuthId, 'account.suspended', memberId, { reason: reason ?? null }),
+      notify({
+        memberId,
+        type: 'account.suspended',
+        vars: { reason },
+        title: 'Account suspended',
+        message: reason ? `Your account has been suspended: ${reason}` : 'Your account has been suspended. Contact support for help.',
+      }),
+    ]);
   }
   return data;
 }
 
 async function reinstateMember({ memberId, actorAuthId }) {
+  const { data: before } = await supabase.from('members').select('suspension_reason').eq('id', memberId).maybeSingle();
   const { data, error } = await supabase
     .from('members')
     .update({
@@ -280,6 +316,19 @@ async function reinstateMember({ memberId, actorAuthId }) {
     .select()
     .maybeSingle();
   if (error) throw error;
+  if (data) {
+    await Promise.all([
+      setAuthBan(data.auth_id, false),
+      writeAudit(actorAuthId, 'account.reinstated', memberId, { previous_reason: before?.suspension_reason ?? null }),
+      notify({
+        memberId,
+        type: 'account.reinstated',
+        vars: {},
+        title: 'Account reinstated',
+        message: 'Your account has been reinstated. You can sign in again.',
+      }),
+    ]);
+  }
   return data;
 }
 
@@ -313,14 +362,18 @@ async function getMember(id, actorAuthId) {
   if (error) throw error;
   const member = withSubmission(data, sub);
 
-  const [, id_document_signed_url, id_document_back_signed_url, selfie_signed_url] = await Promise.all([
+  const [, id_document_signed_url, id_document_back_signed_url, selfie_signed_url, suspended_by_name] = await Promise.all([
     actorAuthId ? writeAudit(actorAuthId, 'account.id_viewed', id, null) : Promise.resolve(),
     signUrl(member.id_document_url),
     signUrl(member.id_document_back_url),
     signUrl(member.selfie_url),
+    // Who suspended the account — only the admin console shows this.
+    actorAuthId && member.suspended_by
+      ? supabase.from('members').select('full_name').eq('id', member.suspended_by).maybeSingle().then((r) => r.data?.full_name ?? null)
+      : Promise.resolve(null),
   ]);
 
-  return { ...member, id_document_signed_url, id_document_back_signed_url, selfie_signed_url };
+  return { ...member, id_document_signed_url, id_document_back_signed_url, selfie_signed_url, suspended_by_name };
 }
 
 // Records a sysadmin decision on the submission in review. Returns the
@@ -357,6 +410,7 @@ async function approveMember({ memberId, reviewerId, actorAuthId }) {
     await notify({
       memberId,
       type: 'identity.verified',
+      vars: {},
       title: 'Account verified',
       message: 'Your identity has been verified. You can now create groups, request loans, and be appointed an officer.',
     });
@@ -373,6 +427,7 @@ async function requestResubmission({ memberId, reviewerId, actorAuthId, reason }
     await notify({
       memberId,
       type: 'identity.resubmission_required',
+      vars: { reason },
       title: 'Please resubmit your ID',
       message: `Your ID needs to be submitted again: ${reason}`,
     });
@@ -389,6 +444,7 @@ async function rejectMember({ memberId, reviewerId, actorAuthId, reason }) {
     await notify({
       memberId,
       type: 'identity.rejected',
+      vars: { reason },
       title: 'Verification rejected',
       message: reason ? `Your ID verification was rejected: ${reason}` : 'Your ID verification was rejected.',
     });
@@ -403,5 +459,6 @@ async function getMyProfile(memberId) {
 
 module.exports = {
   submitDocument, updateProfile, listForReview, getMember,
-  approveMember, rejectMember, getMyProfile,
+  approveMember, requestResubmission, rejectMember, getMyProfile,
+  suspendMember, reinstateMember, isPlatformAdmin,
 };

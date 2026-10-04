@@ -17,6 +17,7 @@ export function AppBar({
   back = true,
   onBack,
   right,
+  leading,
   backgroundColor,
   tintColor,
 }: {
@@ -26,6 +27,8 @@ export function AppBar({
   /** Override the default router.back() — e.g. to step back to a previous in-screen stage instead of leaving the route entirely. */
   onBack?: () => void;
   right?: ReactNode;
+  /** Shown just before the title, e.g. a chat partner's avatar. */
+  leading?: ReactNode;
   /** Override the default white bar — e.g. to blend into a colored band underneath (see [groupId]/profile.tsx). */
   backgroundColor?: string;
   /** Back-icon + title color, for use against a dark backgroundColor. */
@@ -53,6 +56,7 @@ export function AppBar({
       ) : (
         <View style={{ width: 12 }} />
       )}
+      {leading}
       <View style={{ flex: 1 }}>
         <Text variant="h3" style={{ fontSize: 16, color: tintColor }} numberOfLines={1}>{title}</Text>
         {subtitle ? <Text variant="caption" color={tintColor ? 'inherit' : 'secondary'} style={tintColor ? { color: tintColor, opacity: 0.8 } : undefined}>{subtitle}</Text> : null}

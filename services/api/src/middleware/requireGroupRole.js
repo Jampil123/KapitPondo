@@ -1,4 +1,5 @@
 const supabaseAdmin = require('../config/supabase');
+const { groupSuspension, suspendedGroupMessage, isPlatformAdminUser } = require('../lib/groupSuspension');
 
 // Usage: requireGroupRole(['owner', 'treasurer'])
 // Looks for a group id in params, body, or query.
@@ -27,6 +28,26 @@ function requireGroupRole(allowedRoles) {
       }
       if (allowedRoles && !allowedRoles.includes(membership.role)) {
         return res.status(403).json({ error: 'Insufficient role for this action' });
+      }
+
+      if (req.method !== 'GET') {
+        // A fund group the System Administrator suspended is read-only for
+        // everyone in it until reinstated (migration 0065).
+        const suspension = await groupSuspension(groupId);
+        if (suspension) {
+          return res.status(403).json({ error: suspendedGroupMessage(suspension), group_suspended: true });
+        }
+        // Separation of platform administration and fund management: an
+        // account that is a System Administrator can't take officer actions
+        // (approvals, ledger, cycle terms, recording transactions) even in a
+        // group where it holds an officer role. Member-level actions — paying
+        // their own contribution, applying for a loan — still work.
+        const officerOnly = allowedRoles && !allowedRoles.includes('member');
+        if (officerOnly && (await isPlatformAdminUser(req.authUser?.id))) {
+          return res.status(403).json({
+            error: "System administrators can't manage a group's funds. That stays with the group's officers.",
+          });
+        }
       }
 
       req.membership = membership;

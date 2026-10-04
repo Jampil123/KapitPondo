@@ -5,6 +5,7 @@
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../../middleware/auth');
+const notSystemAdmin = require('../../middleware/notSystemAdmin');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./lending.service');
 const { logAudit } = require('../../lib/auditLog');
@@ -178,7 +179,7 @@ router.get(
 // disburse — see /disburse below.
 router.post(
   '/groups/:groupId/loans/:id/approve',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['owner', 'treasurer']),
   async (req, res, next) => {
     try {
@@ -235,7 +236,7 @@ router.post(
 // { cleared: false, note } sends it back to pending.
 router.post(
   '/groups/:groupId/loans/:id/review',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['auditor', 'treasurer', 'owner']),
   async (req, res, next) => {
     try {
@@ -272,7 +273,7 @@ router.post(
 // the Treasurer is the borrower (disburse_loan() checks which).
 router.post(
   '/groups/:groupId/loans/:id/disburse',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['treasurer', 'owner']),
   async (req, res, next) => {
     try {
@@ -307,7 +308,7 @@ router.post(
 // Organizer when the Auditor borrows.
 router.post(
   '/groups/:groupId/loans/:id/verify-release',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['auditor', 'owner']),
   async (req, res, next) => {
     try {
@@ -335,7 +336,7 @@ router.post(
 // only, except the Treasurer decides when the Owner is the borrower.
 router.post(
   '/groups/:groupId/loans/:id/reject',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['owner', 'treasurer']),
   async (req, res, next) => {
     try {
@@ -570,22 +571,22 @@ function repaymentStep(pick) {
 const officerOnly = requireGroupRole(['treasurer', 'auditor', 'owner']);
 
 // Step 1 — confirm the money arrived (Treasurer; Organizer for the Treasurer's own loan).
-router.post('/groups/:groupId/repayments/:paymentId/confirm-receipt', requireAuth, officerOnly,
+router.post('/groups/:groupId/repayments/:paymentId/confirm-receipt', requireAuth, notSystemAdmin, officerOnly,
   repaymentStep((status) => (status === 'submitted' ? 'confirm' : null)));
 
 // Step 2 — verify and post (Auditor; Organizer for the Auditor's own loan).
-router.post('/groups/:groupId/repayments/:paymentId/verify', requireAuth, officerOnly,
+router.post('/groups/:groupId/repayments/:paymentId/verify', requireAuth, notSystemAdmin, officerOnly,
   repaymentStep((status) => (status === 'confirmed' ? 'verify' : null)));
 
 // Older clients: "confirm" does whichever step is next.
-router.post('/groups/:groupId/repayments/:paymentId/confirm', requireAuth, officerOnly,
+router.post('/groups/:groupId/repayments/:paymentId/confirm', requireAuth, notSystemAdmin, officerOnly,
   repaymentStep((status) => (status === 'submitted' ? 'confirm' : status === 'confirmed' ? 'verify' : null)));
 
 // The borrower's "This isn't right" on a repayment recorded for them — raises
 // a flag the Auditor sees; blocks nothing.
 router.post(
   '/groups/:groupId/repayments/:paymentId/dispute',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
@@ -620,7 +621,7 @@ router.post(
 // once 'confirmed' — under the same bars as taking the step.
 router.post(
   '/groups/:groupId/repayments/:paymentId/reject',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {

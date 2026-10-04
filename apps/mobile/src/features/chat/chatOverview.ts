@@ -3,7 +3,7 @@ import { useQuery } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { can } from '@/constants/roles';
-import { listMemberDirectory } from '@/api/groups';
+import { useMemberDirectory } from './chatCache';
 import { listMessages } from '@/api/messages';
 import { listDirectMessages, type DirectMessage } from '@/api/directMessages';
 import { useAnnouncements } from '@/features/announcements/announcements.hooks';
@@ -20,7 +20,7 @@ export function useChatOverview(groupId: string | undefined) {
   const canOfficersRoom = can(role, 'viewOfficersChat');
   const groupFilter = `group_id=eq.${groupId}`;
 
-  const directory = useQuery(() => listMemberDirectory(groupId!), [groupId]);
+  const directory = useMemberDirectory(groupId);
   const lastGeneral = useQuery(
     () => listMessages(groupId!, 'general', { limit: 1 }),
     [groupId],

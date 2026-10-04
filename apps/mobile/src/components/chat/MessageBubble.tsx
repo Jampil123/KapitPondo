@@ -10,7 +10,9 @@
 import { View, Image } from 'react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { semantic, shadowToken } from '@/theme/colors';
+import { Image as AnimatedImage } from 'expo-image';
+import { semantic } from '@/theme/colors';
+import { isStickerUrl } from '@/api/stickers';
 
 /** The shape any message needs to render as a bubble — both ChatMessage
  *  (api/messages.ts) and DirectMessage (api/directMessages.ts) satisfy this
@@ -22,8 +24,38 @@ export interface BubbleMessage {
   created_at: string;
 }
 
+function dayKey(iso: string) {
+  return new Date(iso).toDateString();
+}
+
+/** True when `message` starts a new day relative to the message before it
+ *  (`older` — the next item in an inverted, newest-first list). */
+export function startsNewDay(message: BubbleMessage, older?: BubbleMessage) {
+  return !older || dayKey(older.created_at) !== dayKey(message.created_at);
+}
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+}
+
+/** Centered "Today" / "Yesterday" / date pill between days. */
+export function DayDivider({ iso }: { iso: string }) {
+  return (
+    <View style={{ alignSelf: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 3, marginVertical: 8 }}>
+      <Text style={{ fontSize: 11, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{dayLabel(iso)}</Text>
+    </View>
+  );
+}
+
 export function MessageBubble({ message, isOwn, avatarUrl }: { message: BubbleMessage; isOwn: boolean; avatarUrl?: string | null }) {
-  const time = new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const sticker = isStickerUrl(message.image_url) && !message.body;
+  const time = new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
   return (
     <View style={{ flexDirection: 'row', justifyContent: isOwn ? 'flex-end' : 'flex-start', gap: 8, maxWidth: '100%' }}>
@@ -34,20 +66,23 @@ export function MessageBubble({ message, isOwn, avatarUrl }: { message: BubbleMe
             {message.sender_name}
           </Text>
         )}
+        {sticker ? (
+          <AnimatedImage
+            source={{ uri: message.image_url! }}
+            style={{ width: 130, height: 130, alignSelf: isOwn ? 'flex-end' : 'flex-start' }}
+            contentFit="contain"
+          />
+        ) : (
         <View
-          style={[
-            {
-              backgroundColor: isOwn ? semantic.brand : semantic.surface,
-              borderRadius: 16,
-              borderBottomRightRadius: isOwn ? 4 : 16,
-              borderBottomLeftRadius: isOwn ? 16 : 4,
-              overflow: 'hidden',
-              padding: message.image_url ? 4 : undefined,
-              paddingHorizontal: message.image_url ? 4 : 12,
-              paddingVertical: message.image_url ? 4 : 8,
-            },
-            shadowToken.card,
-          ]}
+          style={{
+            backgroundColor: isOwn ? semantic.brand : semantic.surfaceAlt,
+            borderRadius: 20,
+            borderBottomRightRadius: isOwn ? 6 : 20,
+            borderBottomLeftRadius: isOwn ? 20 : 6,
+            overflow: 'hidden',
+            paddingHorizontal: message.image_url ? 4 : 14,
+            paddingVertical: message.image_url ? 4 : 10,
+          }}
         >
           {message.image_url ? (
             <Image
@@ -62,7 +97,8 @@ export function MessageBubble({ message, isOwn, avatarUrl }: { message: BubbleMe
             </Text>
           ) : null}
         </View>
-        <Text variant="caption" color="muted" style={{ marginTop: 2, textAlign: isOwn ? 'right' : 'left', marginHorizontal: 4 }}>
+        )}
+        <Text variant="caption" color="muted" style={{ fontSize: 11, marginTop: 3, textAlign: isOwn ? 'right' : 'left', marginHorizontal: 6 }}>
           {time}
         </Text>
       </View>

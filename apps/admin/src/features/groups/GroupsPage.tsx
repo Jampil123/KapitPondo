@@ -8,8 +8,8 @@
  * group's officers (Owner / Treasurer / Auditor).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Boxes, Users, Wallet, Landmark, Search } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Boxes, Search, Lock, MessageSquareWarning } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatDate, formatDateTime, formatPeso } from '../../lib/format';
 
@@ -31,15 +31,23 @@ type FundGroup = {
   group_status: 'active' | 'archived';
   created_at: string;
   last_activity_at: string | null;
+  suspended_at: string | null;      // platform suspension (migration 0065)
+  open_report_count: number;        // open problem reports about the group
+  is_closed: boolean;               // fund cycle finished, no new cycle started
 };
 
-type StatusFilter = 'all' | 'active' | 'archived';
+type StatusFilter = 'all' | 'active' | 'closed' | 'archived' | 'suspended' | 'reported';
 
-const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'archived', label: 'Archived' },
+// Suspended and Reported cut across Active/Archived, so a group can be in more than one.
+const STATUS_FILTERS: { key: StatusFilter; label: string; match: (g: FundGroup) => boolean }[] = [
+  { key: 'all', label: 'All', match: () => true },
+  { key: 'active', label: 'Active', match: (g) => g.group_status === 'active' && !g.is_closed && !g.suspended_at },
+  { key: 'closed', label: 'Closed', match: (g) => g.is_closed },
+  { key: 'archived', label: 'Archived', match: (g) => g.group_status === 'archived' },
+  { key: 'suspended', label: 'Suspended', match: (g) => !!g.suspended_at },
+  { key: 'reported', label: 'Reported', match: (g) => g.open_report_count > 0 },
 ];
+const STATUS_KEYS = STATUS_FILTERS.map((f) => f.key) as string[];
 
 function initials(n: string) { return n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'; }
 
@@ -57,27 +65,14 @@ function timeAgo(iso: string | null): string {
   return formatDate(iso);
 }
 
-function Kpi({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Boxes }) {
-  return (
-    <div className="rounded-2xl bg-surface border border-line p-5">
-      <div className="flex items-start justify-between">
-        <div className="text-2xl font-bold text-ink">{value}</div>
-        <div className="w-10 h-10 rounded-xl bg-surface-alt text-brand-dark flex items-center justify-center"><Icon size={20} /></div>
-      </div>
-      <div className="text-xs text-secondary mt-1">{label}</div>
-    </div>
-  );
-}
-
 export function GroupsPage() {
+  const nav = useNavigate();
   const [groups, setGroups] = useState<FundGroup[]>([]);
   const [loading, setLoading] = useState(true);
-  // ?status=active|archived — the Dashboard's Fund Group Statistics tiles link here.
+  // ?status=active|archived|… — the Dashboard's Fund Group Statistics tiles link here.
   const [searchParams] = useSearchParams();
-  const linkedStatus = searchParams.get('status');
-  const [status, setStatus] = useState<StatusFilter>(
-    linkedStatus === 'active' || linkedStatus === 'archived' ? linkedStatus : 'all',
-  );
+  const linkedStatus = searchParams.get('status') ?? '';
+  const [status, setStatus] = useState<StatusFilter>(STATUS_KEYS.includes(linkedStatus) ? (linkedStatus as StatusFilter) : 'all');
   const [query, setQuery] = useState('');
 
   useEffect(() => {
@@ -89,17 +84,11 @@ export function GroupsPage() {
     return () => { mounted = false; };
   }, []);
 
-  const totals = useMemo(() => ({
-    groups: groups.length,
-    members: groups.reduce((sum, g) => sum + (g.member_count ?? 0), 0),
-    fund: groups.reduce((sum, g) => sum + (Number(g.fund_balance) || 0), 0),
-    outstanding: groups.reduce((sum, g) => sum + (Number(g.outstanding_loans) || 0), 0),
-  }), [groups]);
-
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const match = STATUS_FILTERS.find((f) => f.key === status)!.match;
     return groups.filter((g) =>
-      (status === 'all' || g.group_status === status) &&
+      match(g) &&
       (!q || g.group_name.toLowerCase().includes(q) || g.fund_code.toLowerCase().includes(q) || (g.organizer_name ?? '').toLowerCase().includes(q)),
     );
   }, [groups, status, query]);
@@ -109,17 +98,10 @@ export function GroupsPage() {
 
   return (
     <div className="mx-auto max-w-8xl px-8 pt-6 pb-8">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Kpi label="Total Fund Groups" value={String(totals.groups)} icon={Boxes} />
-        <Kpi label="Active Members" value={String(totals.members)} icon={Users} />
-        <Kpi label="Fund Under Management" value={formatPeso(totals.fund)} icon={Wallet} />
-        <Kpi label="Outstanding Loans" value={formatPeso(totals.outstanding)} icon={Landmark} />
-      </div>
-
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex gap-2">
           {STATUS_FILTERS.map((f) => {
-            const count = f.key === 'all' ? groups.length : groups.filter((g) => g.group_status === f.key).length;
+            const count = groups.filter(f.match).length;
             return (
               <button key={f.key} onClick={() => setStatus(f.key)}
                 className={`px-4 py-2 rounded-full text-sm font-semibold border ${status === f.key ? 'border-brand bg-surface-alt text-brand-dark' : 'border-line bg-surface text-muted'}`}>
@@ -128,10 +110,16 @@ export function GroupsPage() {
             );
           })}
         </div>
-        <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3.5 py-2.5 w-72">
-          <Search size={17} className="text-muted" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search group, fund code, organizer…"
-            className="flex-1 bg-transparent text-sm text-ink outline-none" />
+        <div className="flex items-center gap-2">
+          <span title="Contributions and loans are approved by each group's officers, not the System Administrator."
+            className="inline-flex items-center gap-1.5 rounded-full bg-surface-alt px-3 py-1.5 text-xs font-semibold text-secondary">
+            <Lock size={13} /> Read-only
+          </span>
+          <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3.5 py-2.5 w-72">
+            <Search size={17} className="text-muted" />
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search group, fund code, organizer…"
+              className="flex-1 bg-transparent text-sm text-ink outline-none" />
+          </div>
         </div>
       </div>
 
@@ -162,7 +150,8 @@ export function GroupsPage() {
                 </td>
               </tr>
             ) : rows.map((g) => (
-              <tr key={g.group_id} className="border-b border-line last:border-0">
+              <tr key={g.group_id} onClick={() => nav(`/groups/${g.group_id}`)}
+                className="border-b border-line last:border-0 cursor-pointer hover:bg-surface-alt">
                 <td className={td}>
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-surface-alt text-brand-dark flex items-center justify-center text-[11px] font-semibold shrink-0">
@@ -191,9 +180,21 @@ export function GroupsPage() {
                 </td>
                 <td className={`${td} text-ink font-medium text-right`}>{formatPeso(g.fund_balance)}</td>
                 <td className={td}>
-                  <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${g.group_status === 'active' ? 'bg-success-bg text-success' : 'bg-surface-alt text-muted'}`}>
-                    {g.group_status === 'active' ? 'Active' : 'Archived'}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {g.suspended_at ? (
+                      <span className="inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold bg-danger-bg text-danger">Suspended</span>
+                    ) : (
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-[11px] font-semibold ${g.group_status === 'active' && !g.is_closed ? 'bg-success-bg text-success' : 'bg-surface-alt text-muted'}`}>
+                        {g.group_status === 'archived' ? 'Archived' : g.is_closed ? 'Closed' : 'Active'}
+                      </span>
+                    )}
+                    {g.open_report_count > 0 && (
+                      <span title={`${g.open_report_count} open report${g.open_report_count === 1 ? '' : 's'}`}
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold bg-warning-bg text-warning">
+                        <MessageSquareWarning size={12} /> {g.open_report_count}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className={`${td} text-secondary`}>{formatDate(g.created_at)}</td>
                 <td className={`${td} text-secondary`} title={formatDateTime(g.last_activity_at)}>{timeAgo(g.last_activity_at)}</td>

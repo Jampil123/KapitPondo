@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const requireAuth = require('../../middleware/auth');
+const notSystemAdmin = require('../../middleware/notSystemAdmin');
+const { isPlatformAdminUser } = require('../../lib/groupSuspension');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./contributions.service');
 const { checkLatePenaltiesIfDue, splitPenaltyShare, coverPenalties, settlePenaltiesFor } = require('../penalties/penalties.service');
@@ -48,6 +50,11 @@ router.post('/groups/:groupId/contributions',
       if (membership_id) {
         if (!isOfficer) {
           return res.status(403).json({ error: 'Only officers can record a contribution for another member' });
+        }
+        // Recording on someone else's behalf is fund management — never the
+        // System Administrator's, even when they hold an officer role here.
+        if (membership_id !== req.membership.id && (await isPlatformAdminUser(req.authUser.id))) {
+          return res.status(403).json({ error: "System administrators can't record transactions on a group's behalf." });
         }
         const target = await service.getActiveMembership(membership_id);
         if (!target || target.group_id !== req.params.groupId) {
@@ -271,21 +278,21 @@ function stepRoute(pick) {
 const officerOnly = requireGroupRole(['treasurer', 'auditor', 'owner']);
 
 // Step 1 — confirm the money arrived (Treasurer; Organizer for the Treasurer's own).
-router.post('/groups/:groupId/contributions/:id/confirm', requireAuth, officerOnly,
+router.post('/groups/:groupId/contributions/:id/confirm', requireAuth, notSystemAdmin, officerOnly,
   stepRoute((c) => (c.status === 'submitted' ? confirmStep : null)));
 
 // Step 2 — verify and post (Auditor; Organizer for the Auditor's own).
-router.post('/groups/:groupId/contributions/:id/verify', requireAuth, officerOnly,
+router.post('/groups/:groupId/contributions/:id/verify', requireAuth, notSystemAdmin, officerOnly,
   stepRoute((c) => (c.status === 'confirmed' ? verifyStep : null)));
 
 // Older clients: "approve" does whichever step is next.
-router.post('/groups/:groupId/contributions/:id/approve', requireAuth, officerOnly,
+router.post('/groups/:groupId/contributions/:id/approve', requireAuth, notSystemAdmin, officerOnly,
   stepRoute((c) => (c.status === 'submitted' ? confirmStep : c.status === 'confirmed' ? verifyStep : null)));
 
 // The member's "This isn't right" on a contribution recorded for them — raises
 // a flag the Auditor sees; blocks nothing.
 router.post('/groups/:groupId/contributions/:id/dispute',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
@@ -319,7 +326,7 @@ router.post('/groups/:groupId/contributions/:id/dispute',
 // whoever's step it is may send it back — the confirmer while 'submitted',
 // the verifier once 'confirmed' — under the same bars as taking the step.
 router.post('/groups/:groupId/contributions/:id/reject',
-  requireAuth,
+  requireAuth, notSystemAdmin,
   requireGroupRole(['treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {

@@ -7,6 +7,30 @@ const { extractText } = require('../../integrations/ocr/googleVision');
 const { parseIdFields } = require('../../integrations/ocr/idFieldParser');
 const { structureIdImage } = require('../../integrations/ai/gemini');
 const { LOCKABLE_FIELDS } = require('../profileUpdateRequests/profileUpdateRequests.service');
+const { getSetting } = require('../../lib/systemConfig');
+
+// Verification requirements set in System Configuration — the accepted ID
+// types, whether the back photo and selfie are required, and a minimum age.
+// Returns the first unmet requirement as a message, or null.
+function checkVerificationRequirements(req, { idType, idDocumentBackUrl, selfieUrl, birthday }) {
+  const accepted = (req.accepted_id_types ?? []).filter((t) => t.active !== false);
+  if (idType && accepted.length && !accepted.some((t) => t.value === idType)) {
+    return `This ID type isn't accepted. Use one of: ${accepted.map((t) => t.label).join(', ')}.`;
+  }
+  if (req.require_id_back && !idDocumentBackUrl) return 'A photo of the back of your ID is required.';
+  if (req.require_selfie && !selfieUrl) return 'A selfie is required.';
+  const minAge = Number(req.minimum_age) || 0;
+  if (minAge && birthday) {
+    const b = new Date(birthday);
+    if (!Number.isNaN(b.getTime())) {
+      const now = new Date();
+      let age = now.getFullYear() - b.getFullYear();
+      if (now < new Date(now.getFullYear(), b.getMonth(), b.getDate())) age -= 1;
+      if (age < minAge) return `You must be at least ${minAge} years old to verify an account.`;
+    }
+  }
+  return null;
+}
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 // ~8MB source image, base64-encoded (~1.37x larger) — same budget as
@@ -160,6 +184,11 @@ router.post('/me/identity', requireAuth, async (req, res, next) => {
     if (!id_document_url) {
       return res.status(400).json({ error: 'id_document_url is required' });
     }
+    const requirementError = checkVerificationRequirements(
+      await getSetting('verification_requirements'),
+      { idType: id_type, idDocumentBackUrl: id_document_back_url, selfieUrl: selfie_url, birthday },
+    );
+    if (requirementError) return res.status(400).json({ error: requirementError });
     const member = await service.submitDocument({
       memberId: req.member.id,
       idDocumentUrl: id_document_url,
@@ -268,11 +297,16 @@ router.post('/admin/accounts/:id/suspend', requireAuth, requireSystemAdmin, asyn
     if (req.params.id === req.member.id) {
       return res.status(400).json({ error: 'You cannot suspend your own account' });
     }
+    const reason = String(req.body?.reason ?? '').trim();
+    if (!reason) return res.status(400).json({ error: 'A reason is required so the member knows why.' });
+    if (await service.isPlatformAdmin(req.params.id)) {
+      return res.status(400).json({ error: 'System administrators cannot be suspended' });
+    }
     const member = await service.suspendMember({
       memberId: req.params.id,
       adminMemberId: req.member.id,
       actorAuthId: req.authUser.id,
-      reason: req.body?.reason,
+      reason,
     });
     if (!member) return res.status(409).json({ error: 'Account is already suspended, or not found' });
     res.json({ message: 'Account suspended', member });

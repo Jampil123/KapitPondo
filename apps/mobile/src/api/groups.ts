@@ -36,6 +36,9 @@ export interface Group {
   treasurer_gcash_submitted_at: string | null;
   treasurer_gcash_reviewed_by: string | null;
   treasurer_gcash_reviewed_at: string | null;
+  /** Set while the System Administrator has the group suspended (migration 0065) — the group is read-only until reinstated. Absent before that migration. */
+  suspended_at?: string | null;
+  suspension_reason?: string | null;
 }
 
 /** A membership row from GET /groups: my role + status + the nested group. */

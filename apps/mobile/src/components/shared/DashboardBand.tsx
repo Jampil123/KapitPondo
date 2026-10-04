@@ -145,14 +145,14 @@ export function DashboardBand({ children, tab }: { children: ReactNode; tab?: Re
 }
 
 /** The dashboard band's steel-blue backdrop behind a page's back/title bar, so sub-pages share the dashboard header's colour; square-cornered, unlike the dashboard band. */
-export function BandHeader({ title, subtitle, right }: { title: string; subtitle?: string; right?: ReactNode }) {
+export function BandHeader({ title, subtitle, right, leading, bottomPadding = 6 }: { title: string; subtitle?: string; right?: ReactNode; leading?: ReactNode; /** Extra room under the bar for a sheet that overlaps the band (see chat). */ bottomPadding?: number }) {
   const insets = useSafeAreaInsets();
 
   return (
     <View style={{ overflow: 'hidden', backgroundColor: steel[200] }}>
       <Backdrop />
-      <View style={{ paddingTop: insets.top, paddingBottom: 6 }}>
-        <AppBar title={title} subtitle={subtitle} right={right} backgroundColor="transparent" tintColor={semantic.textPrimary} />
+      <View style={{ paddingTop: insets.top, paddingBottom: bottomPadding }}>
+        <AppBar title={title} subtitle={subtitle} right={right} leading={leading} backgroundColor="transparent" tintColor={semantic.textPrimary} />
       </View>
     </View>
   );

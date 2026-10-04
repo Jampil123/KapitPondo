@@ -34,9 +34,11 @@ router.get('/me/problem-reports', requireAuth, async (req, res, next) => {
 // --- admin side ---
 // Categories, statuses and allowed transitions — the console builds its
 // workflow buttons from this rather than hardcoding them.
-router.get('/admin/problem-reports/meta', requireAuth, requireSystemAdmin, (req, res) => {
+router.get('/admin/problem-reports/meta', requireAuth, requireSystemAdmin, async (req, res, next) => {
+  let categories;
+  try { categories = await service.getCategories(); } catch (err) { return next(err); }
   res.json({
-    categories: service.CATEGORIES,
+    categories,
     statuses: service.STATUSES,
     resolutions: service.RESOLUTIONS,
     next_status: service.NEXT_STATUS,

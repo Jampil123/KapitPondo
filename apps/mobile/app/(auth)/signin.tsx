@@ -18,6 +18,8 @@ const PREFIX = '+63 ';
 function signInMessage(e: unknown): string {
   const msg = (e as Error)?.message ?? '';
   if (/invalid login credentials/i.test(msg)) return 'Incorrect phone number or password.';
+  // Supabase's error for an auth ban, which backs an admin suspension.
+  if (/banned/i.test(msg)) return 'This account is suspended. Contact support for help.';
   if (/not confirmed/i.test(msg)) return "This number isn't verified yet. Sign up again to get a new code.";
   if (/network|fetch|timed? ?out/i.test(msg)) return "Can't reach the server. Check your connection and try again.";
   return msg || 'Sign in failed. Please try again.';
