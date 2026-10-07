@@ -30,37 +30,51 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const [present, setPresent] = useState<PresentMember[]>([]);
 
   useEffect(() => {
-    if (!groupId || !member) {
-      setPresent([]);
-      return;
-    }
+    // No group or member: nothing to track (the previous run's cleanup has
+    // already cleared the list).
+    if (!groupId || !member) return;
 
-    const channel = supabase.channel(`presence:group:${groupId}`, {
-      config: { presence: { key: member.id } },
-    });
+    // Every member must join the same topic for presence to work, so it can't
+    // be made unique. Removing a channel is async, though: if this effect
+    // re-runs (navigating away and back, a role change) before the previous
+    // channel is gone, supabase.channel() hands back that still-subscribed
+    // channel and adding the presence listener throws "cannot add presence
+    // callbacks ... after subscribe()". So clear any leftover channel on this
+    // topic first, then create a fresh one.
+    const name = `presence:group:${groupId}`;
+    let cancelled = false;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
 
-    function sync() {
-      const state = channel.presenceState<PresentMember>();
-      // presenceState groups by key -> array of tracked payloads (one per
-      // device); collapse to one row per member so two tabs/devices for the
-      // same person don't double-count as "2 active now".
-      const seen = new Map<string, PresentMember>();
-      Object.values(state).forEach((entries) => {
-        entries.forEach((e) => seen.set(e.member_id, e));
+    (async () => {
+      const stale = supabase.getChannels().filter((c) => c.topic === `realtime:${name}`);
+      await Promise.all(stale.map((c) => supabase.removeChannel(c)));
+      if (cancelled) return;
+
+      const ch = supabase.channel(name, { config: { presence: { key: member.id } } });
+      channel = ch;
+
+      ch.on('presence', { event: 'sync' }, () => {
+        const state = ch.presenceState<PresentMember>();
+        // presenceState groups by key -> array of tracked payloads (one per
+        // device); collapse to one row per member so two tabs/devices for the
+        // same person don't double-count as "2 active now".
+        const seen = new Map<string, PresentMember>();
+        Object.values(state).forEach((entries) => {
+          entries.forEach((e) => seen.set(e.member_id, e));
+        });
+        setPresent(Array.from(seen.values()));
       });
-      setPresent(Array.from(seen.values()));
-    }
-
-    channel.on('presence', { event: 'sync' }, sync);
-    channel.subscribe(async (status) => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({ member_id: member.id, full_name: member.full_name, role });
-      }
-    });
+      ch.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await ch.track({ member_id: member.id, full_name: member.full_name, role });
+        }
+      });
+    })();
 
     return () => {
+      cancelled = true;
       setPresent([]);
-      supabase.removeChannel(channel);
+      if (channel) supabase.removeChannel(channel);
     };
   }, [groupId, member?.id, role]);
 

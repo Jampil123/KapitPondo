@@ -19,7 +19,7 @@ const TOPBAR_META: Record<string, { title: string; subtitle: string }> = {
   '/complaints': { title: 'Complaints', subtitle: 'Problems and complaints filed by members.' },
   '/reports': { title: 'Reports & Analytics', subtitle: 'Generate system-wide user, fund group and activity reports.' },
   '/system-config': { title: 'System Configuration', subtitle: 'Announcements, notification templates, categories, verification and policies.' },
-  '/settings': { title: 'Settings', subtitle: 'Your admin account and console preferences.' },
+  '/settings': { title: 'Profile & Settings', subtitle: 'Your profile, password, sessions and account recovery.' },
 };
 
 export function AppLayout() {
@@ -49,9 +49,11 @@ export function AppLayout() {
 
   return (
     <div className="flex h-full min-h-screen">
-      <Sidebar badges={{ pending_verifications: pending, new_complaints: newComplaints }} admin={admin} onSignOut={async () => { await signOut(); nav('/login'); }} />
+      <div className="contents print:hidden">
+        <Sidebar badges={{ pending_verifications: pending, new_complaints: newComplaints }} admin={admin} onSignOut={async () => { await signOut(); nav('/login'); }} />
+      </div>
 
-      <main className="flex-1 overflow-auto bg-bg">
+      <main className="flex-1 overflow-auto bg-bg print:overflow-visible print:bg-surface">
         <Topbar title={meta.title} subtitle={meta.subtitle} admin={admin} />
         <Outlet />
       </main>

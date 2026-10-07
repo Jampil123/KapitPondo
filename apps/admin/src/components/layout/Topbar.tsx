@@ -14,7 +14,7 @@ type TopbarProps = {
 
 export function Topbar({ title, subtitle, admin }: TopbarProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center gap-5 h-[80px] px-7 bg-surface-alt/80 backdrop-blur-md border-b border-line">
+    <header className="print:hidden sticky top-0 z-10 flex items-center gap-5 h-[80px] px-7 bg-surface-alt/80 backdrop-blur-md border-b border-line">
       <div className="shrink-0 leading-tight">
         <h1 className="text-xl font-bold text-ink">{title}</h1>
         <p className="text-[13px] text-muted">{subtitle}</p>

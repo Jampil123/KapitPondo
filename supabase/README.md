@@ -36,7 +36,7 @@ files that have already been applied to a shared database.
 supabase db reset      # local
 ```
 
-The reset also runs `seed.sql` and `seed_admin.sql`, which creates the platform
+The reset also runs `seed_admin.sql`, which creates the platform
 admin (`admin@kapitpondo.local` / `Admin1234` — development only).
 
 ## History

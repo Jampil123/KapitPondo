@@ -124,16 +124,26 @@ async function notify({ memberId, groupId = null, type, title, message, data = n
   await sendPush(memberId, { title, message, data: { type, group_id: groupId, notification_id: row.id, ...(data ?? {}) } });
 }
 
-// Fans one notification out to every system admin (members.is_system_admin)
-// — drives the admin console's topbar bell. Same fire-and-forget contract.
+// Fans one notification out to every system admin — drives the admin
+// console's topbar bell. platform_admins (keyed by auth user) is the single
+// source of truth for who is an admin; their member rows are found through
+// members.auth_id. Same fire-and-forget contract.
 async function notifyAdmins({ type, title, message }) {
   const { data: admins, error } = await supabase
-    .from('members').select('id').eq('is_system_admin', true);
+    .from('platform_admins').select('user_id').eq('active', true);
   if (error) {
     console.error(`[notifications] failed to look up admins for "${type}":`, error.message);
     return;
   }
-  await Promise.all((admins ?? []).map((a) => notify({ memberId: a.id, type, title, message })));
+  const authIds = (admins ?? []).map((a) => a.user_id);
+  if (!authIds.length) return;
+  const { data: members, error: mErr } = await supabase
+    .from('members').select('id').in('auth_id', authIds);
+  if (mErr) {
+    console.error(`[notifications] failed to look up admin members for "${type}":`, mErr.message);
+    return;
+  }
+  await Promise.all((members ?? []).map((m) => notify({ memberId: m.id, type, title, message })));
 }
 
 module.exports = { notify, notifyAdmins };

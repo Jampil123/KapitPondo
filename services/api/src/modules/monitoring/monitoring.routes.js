@@ -11,7 +11,12 @@ const dashboardService = require('./dashboard.service');
 // Confirms the caller is a system admin, and returns their identity for the
 // admin console's sidebar. requireSystemAdmin 403s anyone who isn't.
 router.get('/admin/me', requireAuth, requireSystemAdmin, async (req, res) => {
-  res.json({ user_id: req.member.id, email: req.member.email });
+  res.json({
+    user_id: req.member.id,
+    email: req.member.email ?? req.authUser.email,
+    full_name: req.member.full_name,
+    avatar_url: req.member.avatar_url,
+  });
 });
 
 // Platform overview — the headline dashboard numbers

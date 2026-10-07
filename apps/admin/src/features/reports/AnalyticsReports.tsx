@@ -9,9 +9,12 @@
  * Read-only: generate, read, export. Nothing here changes platform data.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BarChart3, Download, FileText, RotateCcw } from 'lucide-react';
+import { BarChart3, Download, FileText, Printer, RotateCcw } from 'lucide-react';
 import { api } from '../../lib/api';
 import { formatDate, formatDateTime, formatPeso } from '../../lib/format';
+import logo from '../../assets/images/KapitPondoL.png';
+import { statusLabel } from './reportFormat';
+import { ReportVisuals } from './ReportVisuals';
 
 type Column = { key: string; label: string; type?: 'text' | 'number' | 'money' | 'date' | 'datetime' | 'status' };
 type FilterName = 'date' | 'status' | 'group' | 'user' | 'action';
@@ -64,15 +67,6 @@ const STATUS_TONE: Record<string, string> = {
   resubmission_required: 'bg-warning-bg text-warning',
 };
 
-// Display names where the raw value reads badly; anything else is prettified.
-const STATUS_LABEL: Record<string, string> = {
-  resubmission_required: 'Re-submission required',
-  archived: 'Closed (archived)',
-};
-function statusLabel(s: string) {
-  return STATUS_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1).replace(/[._]/g, ' ');
-}
-
 // Quick date ranges — fill the from/to fields; the admin can still edit them.
 function isoDay(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -118,6 +112,17 @@ function downloadCsv(report: Report) {
   a.download = `${report.key}-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// "Status: Pending · Fund group: Alpha" — printed under the report title.
+function describeFilters(f: Filters, def: ReportDef | null, options: Options | null) {
+  const parts: string[] = [];
+  if (f.from || f.to) parts.push(`${def?.dateLabel ?? 'Date'}: ${f.from ? formatDate(f.from) : 'start'} – ${f.to ? formatDate(f.to) : 'today'}`);
+  if (f.status) parts.push(`Status: ${statusLabel(f.status)}`);
+  if (f.group_id) parts.push(`Fund group: ${options?.groups.find((g) => g.id === f.group_id)?.name ?? f.group_id}`);
+  if (f.member_id) parts.push(`User: ${options?.members.find((m) => m.id === f.member_id)?.name ?? f.member_id}`);
+  if (f.action) parts.push(`Action: ${statusLabel(f.action)}`);
+  return parts.length ? parts.join(' · ') : 'All records';
 }
 
 const selectClass = 'w-full bg-surface border border-line rounded-lg px-3 py-2 text-[13px] text-ink outline-none focus:border-brand';
@@ -184,7 +189,7 @@ export function AnalyticsReports() {
     <div className="@container">
       <div className="grid grid-cols-1 @3xl:grid-cols-[260px_1fr] gap-6">
         {/* Report picker */}
-        <div className="space-y-5">
+        <div className="space-y-5 print:hidden">
           {categories.map(([category, items]) => (
             <div key={category}>
               <div className="text-[11px] font-semibold uppercase tracking-wider text-muted mb-2">{category}</div>
@@ -206,7 +211,26 @@ export function AnalyticsReports() {
 
         {/* Selected report */}
         <div className="min-w-0 space-y-5">
-          <div className="rounded-2xl bg-surface border border-line p-5">
+          {/* Printed letterhead — the on-screen filter card is hidden on paper */}
+          <div className="hidden print:block border-b-2 border-ink pb-4">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <img src={logo} alt="" className="h-10 w-10 object-contain" />
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-secondary">KapitPondo · System Report</div>
+                  <h2 className="text-xl font-bold text-ink leading-tight">{report?.label ?? def?.label}</h2>
+                </div>
+              </div>
+              <div className="text-right text-[11px] text-secondary">
+                <div>Generated {report ? formatDateTime(report.generated_at) : ''}</div>
+                <div>{report?.row_count ?? 0} record{report?.row_count === 1 ? '' : 's'}</div>
+              </div>
+            </div>
+            <p className="mt-2 text-[12px] text-secondary">{report?.description ?? def?.description}</p>
+            <p className="mt-1 text-[12px] text-ink"><span className="font-semibold">Filters:</span> {describeFilters(filters, def, options)}</p>
+          </div>
+
+          <div className="rounded-2xl bg-surface border border-line p-5 print:hidden">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <h2 className="text-[15px] font-semibold text-ink">{def?.label ?? 'Reports & Analytics'}</h2>
@@ -216,6 +240,10 @@ export function AnalyticsReports() {
                 <button onClick={() => setFilters(EMPTY)}
                   className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-muted hover:text-ink">
                   <RotateCcw size={14} /> Reset
+                </button>
+                <button onClick={() => window.print()} disabled={!report || report.rows.length === 0}
+                  className="flex items-center gap-1.5 rounded-lg border border-line px-3 py-2 text-[13px] font-semibold text-ink hover:bg-surface-alt disabled:opacity-40">
+                  <Printer size={15} /> Print / PDF
                 </button>
                 <button onClick={() => report && downloadCsv(report)} disabled={!report || report.rows.length === 0}
                   className="flex items-center gap-1.5 rounded-lg bg-brand px-3.5 py-2 text-[13px] font-semibold text-white disabled:opacity-40">
@@ -291,27 +319,19 @@ export function AnalyticsReports() {
             )}
           </div>
 
-          {/* Summary */}
-          {report && report.rows.length > 0 && (
-            <div className="flex flex-wrap gap-3">
-              {Object.entries(report.summary).map(([k, v]) => (
-                <div key={k} className="rounded-xl bg-surface border border-line px-4 py-3 min-w-[120px]">
-                  <div className="text-lg font-bold text-ink leading-tight">
-                    {typeof v === 'number' && /contribution|loan|balance/i.test(k) ? formatPeso(v) : v}
-                  </div>
-                  <div className="text-[11px] text-muted mt-0.5">{statusLabel(k)}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Headline numbers + charts */}
+          {report && report.rows.length > 0 && !loading && <ReportVisuals report={report} />}
 
           {/* Rows */}
-          <div className="rounded-2xl bg-surface border border-line overflow-x-auto">
+          <div className="rounded-2xl bg-surface border border-line overflow-x-auto print:overflow-visible print:rounded-none print:border-0">
+            {report && report.rows.length > 0 && (
+              <div className="px-4 pt-4 pb-1 text-[14px] font-semibold text-ink">Records</div>
+            )}
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-line text-left text-xs text-muted">
+                <tr className="border-b border-line text-left text-xs text-muted bg-surface-alt/60">
                   {(report?.columns ?? def?.columns ?? []).map((c) => (
-                    <th key={c.key} className={`px-4 py-3 font-medium whitespace-nowrap ${c.type === 'money' || c.type === 'number' ? 'text-right' : ''}`}>{c.label}</th>
+                    <th key={c.key} className={`px-4 py-3 font-medium whitespace-nowrap print:px-2 print:py-1.5 print:text-[10px] ${c.type === 'money' || c.type === 'number' ? 'text-right' : ''}`}>{c.label}</th>
                   ))}
                 </tr>
               </thead>
@@ -328,9 +348,9 @@ export function AnalyticsReports() {
                     </td>
                   </tr>
                 ) : report.rows.map((r, i) => (
-                  <tr key={String(r.id ?? i)} className="border-b border-line last:border-0">
+                  <tr key={String(r.id ?? i)} className="border-b border-line last:border-0 even:bg-bg hover:bg-surface-alt/60 break-inside-avoid">
                     {report.columns.map((c) => (
-                      <td key={c.key} className={`px-4 py-3 text-ink whitespace-nowrap ${c.type === 'money' || c.type === 'number' ? 'text-right' : ''}`}>
+                      <td key={c.key} className={`px-4 py-3 text-ink whitespace-nowrap print:whitespace-normal print:px-2 print:py-1.5 print:text-[10px] ${c.type === 'money' || c.type === 'number' ? 'text-right' : ''}`}>
                         {cell(r[c.key], c.type)}
                       </td>
                     ))}

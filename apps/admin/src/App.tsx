@@ -69,6 +69,7 @@ export default function App() {
         <Route path="complaints" element={<ComplaintsPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="system-config" element={<SystemConfigPage />} />
+        <Route path="profile" element={<Navigate to="/settings" replace />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

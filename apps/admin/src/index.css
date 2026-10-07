@@ -22,4 +22,13 @@
 }
 
 html, body, #root { height: 100%; }
+html { font-family: var(--font-sans); }
 body { background: var(--color-bg); color: var(--color-ink); font-family: var(--font-sans); }
+button, input, select, textarea, svg text { font-family: inherit; }
+
+/* Printed reports (Reports & Analytics → Print / PDF): keep chart and band colors. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  html, body, #root { height: auto; background: #fff; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

@@ -1,12 +1,13 @@
 /**
  * apps/admin/src/components/layout/AccountMenu.tsx — sidebar-footer
- * avatar/name with an upward dropdown (Settings, Sign out). Collapses to
+ * avatar/name with an upward dropdown (Profile & Settings, Sign out). Collapses to
  * just the avatar when the sidebar is collapsed. Closes on outside click.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronUp, LogOut, Settings } from 'lucide-react';
+import { ChevronUp, LogOut, UserRound } from 'lucide-react';
 import type { AdminMe } from '../../context/AdminAuthContext';
+import { Avatar } from '../ui/Avatar';
 
 type AccountMenuProps = {
   admin: AdminMe | null;
@@ -46,8 +47,8 @@ export function AccountMenu({ admin, onSignOut, expanded, onOpenChange }: Accoun
             onClick={() => { setMenuOpen(false); nav('/settings'); }}
             className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-ink hover:bg-surface-alt"
           >
-            <Settings size={16} />
-            Settings
+            <UserRound size={16} />
+            Profile & Settings
           </button>
           <button
             onClick={async () => { setMenuOpen(false); await onSignOut(); }}
@@ -66,13 +67,11 @@ export function AccountMenu({ admin, onSignOut, expanded, onOpenChange }: Accoun
         aria-expanded={menuOpen}
         title={expanded ? undefined : admin?.email ?? 'Account'}
       >
-        <div className="w-9 h-9 rounded-lg bg-brand text-white flex items-center justify-center text-sm font-semibold shrink-0">
-          {(admin?.email ?? 'A').slice(0, 1).toUpperCase()}
-        </div>
+        <Avatar name={admin?.full_name} email={admin?.email} url={admin?.avatar_url} size={36} />
         {expanded ? (
           <>
             <div className="min-w-0 flex-1 text-left whitespace-nowrap">
-              <div className="text-[13px] font-semibold text-white truncate">Admin User</div>
+              <div className="text-[13px] font-semibold text-white truncate">{admin?.full_name || 'Admin User'}</div>
               <div className="text-[11px] text-white/50 truncate">{admin?.email ?? admin?.user_id}</div>
             </div>
             <ChevronUp size={16} className={`text-white/50 shrink-0 transition-transform ${menuOpen ? '' : 'rotate-180'}`} />

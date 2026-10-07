@@ -48,6 +48,11 @@ const ACTION_META: Record<string, { action: string; result: string; tone: string
   'policy.published': { action: 'Publish Policy', result: 'Published', tone: 'bg-success-bg text-success' },
   'policy.drafted': { action: 'Draft Policy', result: 'Drafted', tone: 'bg-surface-alt text-secondary' },
   'policy.draft_deleted': { action: 'Delete Policy Draft', result: 'Deleted', tone: 'bg-danger-bg text-danger' },
+  'admin.profile_updated': { action: 'Update Own Profile', result: 'Updated', tone: 'bg-surface-alt text-secondary' },
+  'admin.photo_updated': { action: 'Change Own Photo', result: 'Updated', tone: 'bg-surface-alt text-secondary' },
+  'admin.photo_removed': { action: 'Remove Own Photo', result: 'Removed', tone: 'bg-surface-alt text-secondary' },
+  'admin.password_changed': { action: 'Change Own Password', result: 'Changed', tone: 'bg-warning-bg text-warning' },
+  'admin.sessions_revoked': { action: 'Sign Out All Sessions', result: 'Signed out', tone: 'bg-warning-bg text-warning' },
 };
 
 function titleCase(s: string) { return s.charAt(0).toUpperCase() + s.slice(1); }

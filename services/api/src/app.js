@@ -29,6 +29,7 @@ const aiRoutes = require('./modules/ai/ai.routes'); // Gemini: proof-photo field
 const ocrRoutes = require('./modules/ocr/ocr.routes'); // Google Cloud Vision: plain OCR text extraction
 const adminSecurityRoutes = require('./modules/adminSecurity/adminSecurity.routes');
 const recoveryRoutes = require('./modules/adminSecurity/recovery.routes');
+const adminAccountRoutes = require('./modules/adminAccount/adminAccount.routes'); // admin's own profile, password, sessions
 const auditLogRoutes = require('./modules/auditlog/auditlog.routes');
 const adminReportsRoutes = require('./modules/adminReports/adminReports.routes'); // Reports & Analytics (sysadmin, read-only)
 const problemReportsRoutes = require('./modules/problemReports/problemReports.routes'); // Problems / complaints workflow
@@ -71,6 +72,7 @@ app.use('/api', aiRoutes);
 app.use('/api', ocrRoutes);
 app.use('/api', adminSecurityRoutes);
 app.use('/api', recoveryRoutes);
+app.use('/api', adminAccountRoutes);
 app.use('/api', auditLogRoutes);
 app.use('/api', adminReportsRoutes);
 app.use('/api', problemReportsRoutes);

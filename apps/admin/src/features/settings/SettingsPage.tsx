@@ -1,49 +1,35 @@
 /**
  * apps/admin/src/features/settings/SettingsPage.tsx
- * Shows the signed-in admin's own account info (real, from AdminAuthContext),
- * a real recovery-questions form (wired to services/api), and honest
- * "coming soon" placeholders for the rest, rather than faking controls that
- * don't do anything.
+ * The signed-in admin's account: profile (ProfileSection), password
+ * (PasswordSection), sessions & sign-in history (SessionsSection) and the
+ * recovery-questions form.
  */
 import { useEffect, useState } from 'react';
-import { ShieldCheck, Bell, Lock, User, KeyRound, type LucideIcon } from 'lucide-react';
-import { useAdminAuth } from '../../context/AdminAuthContext';
+import { Lock, KeyRound, type LucideIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { TextField } from '../../components/ui/TextField';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
+import { ProfileSection } from './ProfileSection';
+import { PasswordSection } from './PasswordSection';
+import { SessionsSection } from './SessionsSection';
 
 type SecurityQuestions = { question_1: string | null; question_2: string | null; updated_at: string | null };
 
-function Row({ icon: Icon, title, body }: { icon: LucideIcon; title: string; body: string }) {
-  return (
-    <div className="flex items-center gap-3 px-5 py-4 border-b border-line last:border-0">
-      <div className="w-9 h-9 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
-        <Icon size={17} className="text-brand-dark" />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-ink">{title}</div>
-        <div className="text-xs text-muted">{body}</div>
-      </div>
-      <span className="text-[11px] text-muted">Coming soon</span>
-    </div>
-  );
-}
-
+// Same card shape as ProfileSection's Personal information card: heading
+// inside the card, text-lg title and text-xs subtitle.
 function Section({ icon: Icon, title, subtitle, children }: { icon: LucideIcon; title: string; subtitle: string; children: React.ReactNode }) {
   return (
-    <div className="mb-6">
-      <div className="flex items-center gap-2.5 mb-3">
-        <div className="w-8 h-8 rounded-lg bg-surface-alt flex items-center justify-center shrink-0">
-          <Icon size={16} className="text-brand-dark" />
+    <div className="rounded-2xl bg-surface border border-line px-7 py-7">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-xl bg-surface-alt flex items-center justify-center shrink-0">
+          <Icon size={18} className="text-brand-dark" />
         </div>
         <div>
-          <div className="text-[13.5px] font-semibold text-ink">{title}</div>
-          <div className="text-[11px] text-muted">{subtitle}</div>
+          <div className="text-lg font-semibold text-ink leading-tight">{title}</div>
+          <div className="text-xs text-muted">{subtitle}</div>
         </div>
       </div>
-      <div className="rounded-2xl bg-surface border border-line overflow-hidden">
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
@@ -94,24 +80,24 @@ function SecurityQuestionsForm() {
     }
   }
 
-  if (loading) return <div className="px-5 py-4 text-sm text-muted">Loading…</div>;
+  if (loading) return <div className="text-sm text-muted">Loading…</div>;
 
   const configured = !!current?.question_1 && !!current?.question_2;
 
   if (!editing) {
     return (
-      <div className="px-5 py-4">
+      <div>
         {saved && (
-          <div className="mb-3 rounded-lg bg-green-50 text-green-700 text-xs px-3 py-2">
+          <div className="mb-4 rounded-lg bg-success-bg text-success text-sm px-3 py-2">
             Recovery questions saved.
           </div>
         )}
         {configured ? (
           <>
-            <div className="text-xs text-muted mb-1">Question 1</div>
-            <div className="text-sm text-ink mb-3">{current!.question_1}</div>
-            <div className="text-xs text-muted mb-1">Question 2</div>
-            <div className="text-sm text-ink mb-4">{current!.question_2}</div>
+            <div className="text-[11px] font-semibold uppercase text-muted mb-1">Question 1</div>
+            <div className="text-[15px] font-medium text-ink mb-5">{current!.question_1}</div>
+            <div className="text-[11px] font-semibold uppercase text-muted mb-1">Question 2</div>
+            <div className="text-[15px] font-medium text-ink mb-6">{current!.question_2}</div>
           </>
         ) : (
           <p className="text-sm text-muted mb-4">
@@ -131,7 +117,7 @@ function SecurityQuestionsForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="px-5 py-4">
+    <form onSubmit={onSubmit} className="max-w-md">
       {err && <ErrorBanner>{err}</ErrorBanner>}
 
       <label className="block text-xs font-semibold text-secondary mb-1.5">Question 1</label>
@@ -182,28 +168,23 @@ function SecurityQuestionsForm() {
 }
 
 export function SettingsPage() {
-  const { admin } = useAdminAuth();
-
   return (
-    <div className="mx-auto max-w-6xl px-8 pt-6 pb-8">
-      <Section icon={User} title="Account" subtitle="This admin's identity">
-        <div className="px-5 py-4">
-          <div className="text-xs text-muted mb-1">Signed in as</div>
-          <div className="text-sm font-medium text-ink">{admin?.email ?? admin?.user_id}</div>
-        </div>
-      </Section>
+    <div className="w-full px-8 pt-6 pb-8">
+      <div className="mb-6">
+        <ProfileSection>
+          <SessionsSection />
+        </ProfileSection>
+      </div>
 
-      <Section icon={ShieldCheck} title="Security" subtitle="Access & sign-in policy">
-        <Row icon={ShieldCheck} title="Two-factor authentication" body="Add an extra layer of security to admin sign-in." />
-      </Section>
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+        <Section icon={Lock} title="Password" subtitle="Change the password you sign in with">
+          <PasswordSection />
+        </Section>
 
-      <Section icon={KeyRound} title="Account Recovery" subtitle="Security questions used to reset a forgotten password">
-        <SecurityQuestionsForm />
-      </Section>
-
-      <Section icon={Bell} title="Notifications" subtitle="Platform event alerts">
-        <Row icon={Bell} title="Notification preferences" body="Choose which platform events email or notify you." />
-      </Section>
+        <Section icon={KeyRound} title="Account Recovery" subtitle="Security questions used to reset a forgotten password">
+          <SecurityQuestionsForm />
+        </Section>
+      </div>
     </div>
   );
 }
