@@ -17,7 +17,7 @@ import { useAcceptedIdTypes, idTypeLabel } from '@/constants/idTypes';
 
 const DRAFT_KEY = 'identity_draft_v1';
 const CARD_ASPECT_RATIO = 1.586; // standard ID card ratio (CR80), width:height
-const FRAME_WIDTH_RATIO = 0.82; // frame's width as a fraction of the preview box
+const FRAME_WIDTH_RATIO = 0.88; // frame's width as a fraction of the preview box
 const DEFAULT_ID_TYPE = 'philsys'; // PhilSys National ID — recommended default, matches the prototype
 
 const GUIDES = [
@@ -223,7 +223,7 @@ export default function IdentityCapture() {
         ) : showCamera ? (
           <View style={{ marginBottom: 12 }}>
             <View
-              style={{ height: 420, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' }}
+              style={{ aspectRatio: CARD_ASPECT_RATIO, borderRadius: 20, overflow: 'hidden', backgroundColor: '#000' }}
               onLayout={(e) => setPreviewSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
             >
               <CameraView
@@ -249,23 +249,19 @@ export default function IdentityCapture() {
               <CornerBracket position="tr" />
               <CornerBracket position="bl" />
               <CornerBracket position="br" />
-              <View style={{
-                position: 'absolute', bottom: 16, alignSelf: 'center',
-                flexDirection: 'row', alignItems: 'center', gap: 6,
-                backgroundColor: 'rgba(20,24,26,0.55)',
-                borderRadius: 20, paddingVertical: 7, paddingHorizontal: 13,
-              }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.brand }} />
-                <Text variant="caption" color="inherit" style={{ color: '#fff', fontWeight: '600' }}>
-                  {cameraReady ? 'Fit the ID inside the frame' : 'Starting camera…'}
-                </Text>
-              </View>
               {scanning && (
                 <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' }}>
                   <ActivityIndicator color="#fff" />
                   <Text variant="caption" color="inherit" style={{ color: '#fff', marginTop: 8 }}>Checking photo quality…</Text>
                 </View>
               )}
+            </View>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12 }}>
+              <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: semantic.brand }} />
+              <Text variant="caption" color="secondary" style={{ fontWeight: '600' }}>
+                {cameraReady ? 'Fit the ID inside the frame' : 'Starting camera…'}
+              </Text>
             </View>
 
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16 }}>
@@ -284,7 +280,7 @@ export default function IdentityCapture() {
           </View>
         ) : (
           <View style={{ marginBottom: 12 }}>
-            <Image source={{ uri: uri! }} style={{ width: '100%', height: 220, borderRadius: 16 }} resizeMode="cover" />
+            <Image source={{ uri: uri! }} style={{ width: '100%', aspectRatio: CARD_ASPECT_RATIO, borderRadius: 16 }} resizeMode="cover" />
             <Pressable onPress={retake} style={{ alignSelf: 'center', marginTop: 12 }}>
               <Text variant="label" color="brand">Retake</Text>
             </Pressable>

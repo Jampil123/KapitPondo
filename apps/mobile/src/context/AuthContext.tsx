@@ -24,6 +24,13 @@ export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
 // member row so we know which version someone actually agreed to.
 export const CONSENT_VERSION = '2026-01-v1';
 
+export class PhoneAlreadyRegisteredError extends Error {
+  constructor() {
+    super('This number is already registered. Sign in instead.');
+    this.name = 'PhoneAlreadyRegisteredError';
+  }
+}
+
 export interface SignUpInput {
   phone: string;
   password: string;
@@ -220,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const e164 = toE164PH(phone);
     if (!e164) throw new Error('Enter a valid Philippine mobile number.');
     const fullName = [firstName, middleName, lastName].filter(Boolean).join(' ');
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       phone: e164,
       password,
       options: {
@@ -231,7 +238,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
       },
     });
+    if (error?.code === 'phone_exists' || error?.code === 'user_already_exists') throw new PhoneAlreadyRegisteredError();
     if (error) throw error;
+    // Supabase answers a signup for an already-confirmed number with a fake
+    // success (no identities, no SMS) instead of an error.
+    if (data.user && data.user.identities?.length === 0) throw new PhoneAlreadyRegisteredError();
   }, []);
 
   const confirmOtp = useCallback(async (phone: string, token: string) => {

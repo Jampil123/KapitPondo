@@ -4,7 +4,7 @@
  * PUT /admin/account/photo). Email is the sign-in identity, so it's read-only.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Pencil, Phone, Trash2, User } from 'lucide-react';
+import { Camera, Pencil, Phone, User } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { formatDate, formatDateTime } from '../../lib/format';
 import { useAdminAuth } from '../../context/AdminAuthContext';
@@ -52,8 +52,9 @@ function Detail({ label, value }: { label: string; value: string }) {
 }
 
 // `children` renders inside the Personal information card, under the details
-// (Settings puts the sessions list there).
-export function ProfileSection({ children }: { children?: React.ReactNode }) {
+// (Settings puts the sessions list there). `actions` renders at the bottom of
+// the photo card (Settings puts the password / recovery links there).
+export function ProfileSection({ children, actions }: { children?: React.ReactNode; actions?: React.ReactNode }) {
   const { updateAdmin } = useAdminAuth();
   const [account, setAccount] = useState<AdminAccount | null>(null);
   const [editing, setEditing] = useState(false);
@@ -127,6 +128,7 @@ export function ProfileSection({ children }: { children?: React.ReactNode }) {
                   className="ring-4 ring-surface-alt" />
           <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null}
                   aria-label={account.avatar_url ? 'Change photo' : 'Upload photo'}
+                  title={busy === 'photo' ? 'Uploading…' : 'PNG, JPG or WebP · up to 2 MB'}
                   className="absolute bottom-3 right-3 w-11 h-11 rounded-full bg-ink text-white flex items-center justify-center shadow-md hover:opacity-90 disabled:opacity-60">
             <Camera size={18} />
           </button>
@@ -140,19 +142,8 @@ export function ProfileSection({ children }: { children?: React.ReactNode }) {
           System administrator
         </span>
 
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button type="button" onClick={() => fileRef.current?.click()} disabled={busy !== null}
-                  className="flex items-center gap-1.5 rounded-lg border border-line-strong px-3 py-2 text-xs font-semibold text-ink hover:bg-surface-alt disabled:opacity-60">
-            <Camera size={14} /> {busy === 'photo' ? 'Uploading…' : account.avatar_url ? 'Change photo' : 'Upload photo'}
-          </button>
-          {account.avatar_url && (
-            <button type="button" onClick={() => setPhoto(null)} disabled={busy !== null}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-danger hover:bg-danger-bg disabled:opacity-60">
-              <Trash2 size={14} /> Remove
-            </button>
-          )}
-        </div>
-        <p className="mt-3 text-[11px] text-muted">PNG, JPG or WebP · up to 2 MB</p>
+
+        {actions && <div className="mt-7 w-full space-y-2.5">{actions}</div>}
       </div>
 
       {/* Right — details / edit form */}

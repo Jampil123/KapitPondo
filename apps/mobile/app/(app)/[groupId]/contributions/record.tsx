@@ -20,7 +20,7 @@ import { listMembers } from '@/api/groups';
 import type { PaymentMethod } from '@/api/contributions';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { buildTimeline, periodLabel } from '@/features/contributions/periods';
+import { availableCredit, buildTimeline, periodLabel } from '@/features/contributions/periods';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
@@ -70,7 +70,12 @@ export default function RecordPayment() {
   }, [cycle, target, memberContribs.data]);
 
   const isSelf = !!target && target.member_id === member?.id;
-  const expected = nextEntry?.amount ?? 0;
+  // A balance left from a heads increase is collected first; advance credit
+  // from a heads decrease comes off the next period — the API applies both (0068).
+  const credit = target ? availableCredit(target.contribution_credit, memberContribs.data ?? []) : 0;
+  const creditUse = nextEntry && !nextEntry.balance ? Math.min(credit, nextEntry.amount) : 0;
+  const expected = !nextEntry ? 0 : nextEntry.balance || Math.max(nextEntry.amount - creditUse, 0);
+  const coveredByCredit = !!nextEntry && creditUse > 0 && expected === 0;
 
   const [amount, setAmount] = useState('');
   // Walk-in payments are almost always cash, so there's no method picker.
@@ -135,8 +140,9 @@ export default function RecordPayment() {
     }
   }
 
-  const disabled = !amtNum || needsRef || !target || !cycle;
-  const barNote = !amtNum ? 'Enter the amount received'
+  const disabled = !amtNum || needsRef || !target || !cycle || coveredByCredit;
+  const barNote = coveredByCredit ? 'Nothing to collect — the member can apply their credit'
+    : !amtNum ? 'Enter the amount received'
     : needsRef ? `A ${methodCfg.refLabel.toLowerCase()} is required`
     : isSelf ? `Goes to ${confirmer} for confirmation` : 'Posts to the ledger right away';
 
@@ -164,7 +170,11 @@ export default function RecordPayment() {
               <View>
                 <Text variant="label" style={{ fontSize: 12.5, color: semantic.textSecondary }}>Expected</Text>
                 <Text variant="caption" color="muted" style={{ marginTop: 2 }}>
-                  {nextEntry ? `Recording against ${periodLabel(nextEntry.periodStart, cycle.frequency, true)}` : 'No open period for this cycle'}
+                  {!nextEntry ? 'No open period for this cycle'
+                    : coveredByCredit ? `${periodLabel(nextEntry.periodStart, cycle.frequency, true)} is covered by advance credit`
+                    : nextEntry.balance ? `Balance for ${periodLabel(nextEntry.periodStart, cycle.frequency, true)} (heads went up)`
+                    : creditUse ? `${periodLabel(nextEntry.periodStart, cycle.frequency, true)} · ${formatPeso(creditUse)} credit applied`
+                    : `Recording against ${periodLabel(nextEntry.periodStart, cycle.frequency, true)}`}
                 </Text>
               </View>
               <Text style={{ marginLeft: 'auto', fontSize: 19, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(expected)}</Text>

@@ -217,7 +217,9 @@ export default function ConfirmContributions() {
             <View style={{ gap: 12, marginTop: 16 }}>
               {pendingRows.map((c) => {
                 const heads = headsById.get(c.membership_id) ?? 1;
-                const expectedAmt = cycle ? Number(cycle.contribution_amount) * heads : null;
+                // A top-up pays a balance (any amount up to it); credit lowers what's sent (0068).
+                const creditApplied = Number(c.credit_applied ?? 0);
+                const expectedAmt = cycle && !c.top_up_of ? Number(cycle.contribution_amount) * heads - creditApplied : null;
                 const mismatch = expectedAmt != null && Math.abs(Number(c.amount) - expectedAmt) > 0.01;
                 // Same reference used by another live (non-rejected) row in this cycle —
                 // computed from already-loaded rows, not a fresh check per card.
@@ -238,6 +240,8 @@ export default function ConfirmContributions() {
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 14, paddingBottom: 0 }}>
                       {c.external_reference ? <Fact label="Ref" value={c.external_reference} /> : <Fact value="No reference number" tone="warn" />}
                       <Fact label="Sent" value={shortDate(c.created_at)} />
+                      {c.top_up_of ? <Fact value="Balance top-up (heads went up)" /> : null}
+                      {creditApplied > 0 ? <Fact label="Credit applied" value={formatPeso(creditApplied)} /> : null}
                       {mismatch ? <Fact label="Amount differs · expected" value={formatPeso(expectedAmt)} tone="warn" /> : null}
                       {isDuplicateRef ? <Fact value="Duplicate reference" tone="late" /> : null}
                       {noProof ? <Fact value="No proof attached" tone="late" /> : null}

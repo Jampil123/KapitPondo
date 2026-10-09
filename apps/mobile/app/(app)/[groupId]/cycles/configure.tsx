@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, ScrollView, TextInput, Pressable } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { toAmountString, formatPeso } from '@/lib/money';
 import { useQuery } from '@/hooks/useApi';
+import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { listDistributions } from '@/api/distribution';
 import { selectActiveCycle } from '@/api/cycles';
 import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
@@ -50,6 +51,7 @@ function Gate({ done, label }: { done: boolean; label: string }) {
 export default function ConfigureCycle() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
+  const keyboardVisible = useKeyboardVisible();
   const cycles = useCycles(groupId!);
   const create = useCreateCycle(groupId!);
   const activate = useActivateCycle(groupId!);
@@ -143,7 +145,15 @@ export default function ConfigureCycle() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Configure Cycle" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 130, gap: 8 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView
+        contentContainerStyle={{ padding: 16, paddingBottom: keyboardVisible ? 24 : 130, gap: 8 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
 
         {/* ---------------- Current cycle ---------------- */}
         {primaryCycle ? (
@@ -298,8 +308,10 @@ export default function ConfigureCycle() {
 
         </View>
       </ScrollView>
+      </KeyboardAvoidingView>
 
-      <LinearGradient
+      {/* Hidden while typing — pinned above the keyboard it would cover the field in use. */}
+      {keyboardVisible ? null : <LinearGradient
         colors={['transparent', semantic.background, semantic.background]}
         locations={[0, 0.35, 1]}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 26 }}
@@ -312,7 +324,7 @@ export default function ConfigureCycle() {
               ? `Ready — this cycle starts when ${primaryCycle.name} closes`
               : 'Ready to create'}
         </Text>
-      </LinearGradient>
+      </LinearGradient>}
     </SafeAreaView>
   );
 }

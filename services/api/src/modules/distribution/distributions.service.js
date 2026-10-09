@@ -168,13 +168,13 @@ async function setHeads({ groupId, membershipId, heads }) {
   const { data: before } = await supabase
     .from('memberships').select('heads').eq('id', membershipId).maybeSingle();
 
-  const { data, error } = await supabase
-    .from('memberships')
-    .update({ heads })
-    .eq('id', membershipId)
-    .select()
-    .single();
-  if (error) throw error;
+  // Also re-prices any period already paid at the old head count: a shortfall
+  // stays owed on that period, an overpayment becomes advance credit (0068).
+  const { data, error } = await supabase.rpc('set_membership_heads', {
+    p_membership_id: membershipId,
+    p_heads: Number(heads),
+  });
+  if (error) throw Object.assign(new Error(error.message), { status: 409 });
 
   // Names for heads that no longer exist would resurface if heads went back up.
   await supabase.from('membership_head_names').delete().eq('membership_id', membershipId).gt('head_no', Number(heads));

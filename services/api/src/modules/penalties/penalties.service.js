@@ -115,6 +115,7 @@ async function checkLatePenalties(groupId) {
         .eq('membership_id', membership.id)
         .eq('cycle_id', cycle.id)
         .in('status', ['submitted', 'approved'])
+        .is('top_up_of', null) // a top-up pays an earlier period's balance, not this one
         .gte('created_at', start)
         .lt('created_at', end)
         .limit(1);
@@ -231,7 +232,8 @@ async function listPenalties({ groupId, status, membershipId }) {
 // settlePenaltiesFor). A penalty already riding on another contribution
 // that's still under review isn't counted twice; one whose contribution was
 // rejected is free to be covered again.
-async function splitPenaltyShare({ groupId, membershipId, heads, cycleId, amount }) {
+// `due` overrides heads × contribution when part of the period is covered by advance credit.
+async function splitPenaltyShare({ groupId, membershipId, heads, cycleId, amount, due: dueOverride }) {
   await checkLatePenaltiesIfDue(groupId).catch((e) => console.error('[penalties] check failed:', e.message));
 
   const { data: cycle, error: cErr } = await supabase
@@ -248,7 +250,7 @@ async function splitPenaltyShare({ groupId, membershipId, heads, cycleId, amount
 
   const coverable = (pending ?? []).filter((p) => !p.paid_with || p.paid_with.status === 'rejected');
   const penaltyShare = Math.round(coverable.reduce((sum, p) => sum + Number(p.amount), 0) * 100) / 100;
-  const due = Number(cycle.contribution_amount) * (heads || 1);
+  const due = dueOverride ?? Number(cycle.contribution_amount) * (heads || 1);
   const paid = Number(amount);
 
   if (!penaltyShare || paid + 0.005 < due + penaltyShare) {

@@ -8,16 +8,18 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronUp, LogOut, UserRound } from 'lucide-react';
 import type { AdminMe } from '../../context/AdminAuthContext';
 import { Avatar } from '../ui/Avatar';
+import { Tooltip } from '../ui/Tooltip';
 
 type AccountMenuProps = {
   admin: AdminMe | null;
   onSignOut: () => void | Promise<void>;
   expanded: boolean;
+  showTooltip: boolean;
   // Lets the sidebar stay expanded while the menu is open.
   onOpenChange: (open: boolean) => void;
 };
 
-export function AccountMenu({ admin, onSignOut, expanded, onOpenChange }: AccountMenuProps) {
+export function AccountMenu({ admin, onSignOut, expanded, showTooltip, onOpenChange }: AccountMenuProps) {
   const [menuOpen, setMenuOpenState] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const nav = useNavigate();
@@ -60,24 +62,25 @@ export function AccountMenu({ admin, onSignOut, expanded, onOpenChange }: Accoun
         </div>
       ) : null}
 
-      <button
-        onClick={() => setMenuOpen(!menuOpen)}
-        className={`w-full flex items-center rounded-xl py-2.5 hover:bg-white/5 ${expanded ? 'gap-3 px-3.5' : 'justify-center px-0'}`}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        title={expanded ? undefined : admin?.email ?? 'Account'}
-      >
-        <Avatar name={admin?.full_name} email={admin?.email} url={admin?.avatar_url} size={36} />
-        {expanded ? (
-          <>
-            <div className="min-w-0 flex-1 text-left whitespace-nowrap">
-              <div className="text-[13px] font-semibold text-white truncate">{admin?.full_name || 'Admin User'}</div>
-              <div className="text-[11px] text-white/50 truncate">{admin?.email ?? admin?.user_id}</div>
-            </div>
-            <ChevronUp size={16} className={`text-white/50 shrink-0 transition-transform ${menuOpen ? '' : 'rotate-180'}`} />
-          </>
-        ) : null}
-      </button>
+      <Tooltip label={admin?.full_name || admin?.email || 'Account'} disabled={!showTooltip}>
+        <button
+          onClick={() => setMenuOpen(!menuOpen)}
+          className={`w-full flex items-center rounded-xl py-2.5 hover:bg-white/5 ${expanded ? 'gap-3 px-3.5' : 'justify-center px-0'}`}
+          aria-haspopup="menu"
+          aria-expanded={menuOpen}
+        >
+          <Avatar name={admin?.full_name} email={admin?.email} url={admin?.avatar_url} size={36} />
+          {expanded ? (
+            <>
+              <div className="min-w-0 flex-1 text-left whitespace-nowrap">
+                <div className="text-[13px] font-semibold text-white truncate">{admin?.full_name || 'Admin User'}</div>
+                <div className="text-[11px] text-white/50 truncate">{admin?.email ?? admin?.user_id}</div>
+              </div>
+              <ChevronUp size={16} className={`text-white/50 shrink-0 transition-transform ${menuOpen ? '' : 'rotate-180'}`} />
+            </>
+          ) : null}
+        </button>
+      </Tooltip>
     </div>
   );
 }

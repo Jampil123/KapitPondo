@@ -25,11 +25,15 @@ export default function Forgot() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: e164 });
+      const { error } = await supabase.auth.signInWithOtp({ phone: e164, options: { shouldCreateUser: false } });
       if (error) throw error;
-      router.push({ pathname: '/(auth)/otp', params: { phone } });
+      router.push({ pathname: '/(auth)/otp', params: { phone, purpose: 'reset' } });
     } catch (e) {
-      Alert.alert('Could not send code', (e as Error).message);
+      const message = (e as Error).message;
+      Alert.alert(
+        'Could not send code',
+        /signups not allowed|user not found/i.test(message) ? 'No account is registered with this number.' : message,
+      );
     } finally {
       setLoading(false);
     }

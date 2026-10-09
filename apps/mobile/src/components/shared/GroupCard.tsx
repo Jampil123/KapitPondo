@@ -23,15 +23,13 @@ export function GroupCard({ item, onPress }: { item: MyGroup; onPress: () => voi
       onPress={onPress}
       style={[
         {
-          backgroundColor: semantic.background,
-          borderWidth: 1,
-          borderColor: semantic.borderStrong,
+          backgroundColor: semantic.card,
           borderRadius: 18,
           paddingHorizontal: 16,
           paddingVertical: 18,
           gap: 12,
         },
-        shadowToken.card,
+        shadowToken.soft,
       ]}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

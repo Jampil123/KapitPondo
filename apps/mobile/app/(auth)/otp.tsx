@@ -9,14 +9,16 @@ import { Button } from '@/components/ui/Button';
 import { OtpInput } from '@/components/ui/OtpInput';
 import { ScreenHeader } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
-import { formatPH } from '@/lib/phone';
+import { formatPH, toE164PH } from '@/lib/phone';
+import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
 import { recordCurrentLogin } from '@/lib/loginActivity';
 
 const OTP_VALIDITY_SECONDS = 5 * 60;
 
 export default function Otp() {
-  const { phone } = useLocalSearchParams<{ phone?: string }>();
+  const { phone, purpose } = useLocalSearchParams<{ phone?: string; purpose?: 'reset' }>();
+  const isReset = purpose === 'reset';
   const { confirmOtp, resendOtp, setPendingRedirect } = useAuth();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,7 @@ export default function Otp() {
     if (code.length < 6 || !phone || expired) return;
     setLoading(true);
     try {
-      setPendingRedirect('/(app)/verify-landing');
+      setPendingRedirect(isReset ? '/(app)/reset-password' : '/(app)/verify-landing');
       await confirmOtp(phone, code);
       recordCurrentLogin();
     } catch (e) {
@@ -49,7 +51,15 @@ export default function Otp() {
   async function onResend() {
     if (!phone) return;
     try {
-      await resendOtp(phone);
+      if (isReset) {
+        // A reset code is a login OTP, not a signup confirmation — resend() can't reissue it.
+        const e164 = toE164PH(phone);
+        if (!e164) throw new Error('Enter a valid Philippine mobile number.');
+        const { error } = await supabase.auth.signInWithOtp({ phone: e164, options: { shouldCreateUser: false } });
+        if (error) throw error;
+      } else {
+        await resendOtp(phone);
+      }
       setCode('');
       setResendIn(OTP_VALIDITY_SECONDS);
     } catch (e) {

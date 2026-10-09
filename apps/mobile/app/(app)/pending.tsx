@@ -42,7 +42,7 @@ export default function Pending() {
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center' }}>Verification in Progress</Text>
         </View>
 
-        <View style={[{ flexDirection: 'row', gap: 12, backgroundColor: semantic.surface, borderRadius: 18, padding: 15, marginTop: 24 }, shadowToken.card]}>
+        <View style={[{ flexDirection: 'row', gap: 12, backgroundColor: semantic.card, borderRadius: 18, padding: 14, marginTop: 24 }, shadowToken.soft]}>
           <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
             <Mail size={22} color={semantic.brandDark} />
           </View>

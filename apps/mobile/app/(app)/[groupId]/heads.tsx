@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, ActivityIndicator } from 'react-native';
+import { View, ScrollView, TextInput, Pressable, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,10 +10,11 @@ import { Button } from '@/components/ui/Button';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { useActiveGroup } from '@/context/GroupContext';
+import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useSetHeads, useHeadNames, useSetHeadNames } from '@/features/distribution/distribution.hooks';
-import { isHeadsEditable } from '@/features/contributions/periods';
+import { useContributions } from '@/features/contributions/contributions.hooks';
+import { buildTimeline, isHeadsEditable } from '@/features/contributions/periods';
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -27,6 +28,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 export default function Heads() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { membership } = useActiveGroup();
+  const { refresh: refreshGroups } = useGroups();
   const { cycle } = useActiveCycle(groupId!);
   const setHeads = useSetHeads(groupId!);
 
@@ -60,11 +62,27 @@ export default function Heads() {
   const expected = cycle ? Number(cycle.contribution_amount) * heads : null;
   const editable = isHeadsEditable(cycle);
 
+  // Periods already paid at the current head count get re-priced on save (0068):
+  // a shortfall stays owed on that month, an overpayment becomes advance credit.
+  const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
+  const myRows = (contribs.data ?? []).filter((c) => c.membership_id === membership?.id);
+  const paidPeriods = cycle ? buildTimeline(cycle, myRows, heads).filter((p) => p.row?.status === 'approved') : [];
+  const inReview = myRows.some((r) => r.status === 'submitted' || r.status === 'confirmed');
+  // Gross paid toward each period (incl. credit used and approved top-ups) against the new requirement.
+  const newDue = cycle ? Number(cycle.contribution_amount) * draft : 0;
+  const paidGross = paidPeriods.map((p) => Number(p.row!.amount) + Number(p.row!.credit_applied ?? 0)
+    + myRows.filter((t) => t.top_up_of === p.row!.id && t.status === 'approved').reduce((s, t) => s + Number(t.amount), 0));
+  const owedAfter = paidGross.reduce((s, paid) => s + Math.max(newDue - paid, 0), 0);
+  const creditAfter = paidGross.reduce((s, paid) => s + Math.max(paid - newDue, 0), 0);
+  const credit = Number(membership?.contribution_credit ?? 0);
+
   async function onSave() {
     if (!membership || !editable) return;
     const ok = await setHeads.run(membership.id, draft);
     if (ok !== undefined) {
       setLocalHeads(draft);
+      refreshGroups();
+      contribs.refetch();
       toast(`Heads updated to ${draft}`);
     } else if (setHeads.error) {
       Alert.alert('Could not update heads', setHeads.error.message);
@@ -74,7 +92,15 @@ export default function Heads() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <AppBar title="Heads" subtitle="Member" />
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+      <ScrollView
+        contentContainerStyle={{ padding: 16, gap: 14, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <View style={[{ backgroundColor: semantic.dashCard, borderRadius: 20, padding: 18, gap: 4 }]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <Layers size={18} color="#fff" />
@@ -87,6 +113,7 @@ export default function Heads() {
           <Text variant="h3" style={{ fontSize: 15, marginBottom: 4 }}>What this affects</Text>
           <InfoRow label="Per-head contribution" value={cycle ? formatPeso(cycle.contribution_amount) : '—'} />
           <InfoRow label="Your expected contribution" value={expected !== null ? formatPeso(expected) : '—'} />
+          {credit > 0 ? <InfoRow label="Advance credit" value={formatPeso(credit)} /> : null}
         </View>
 
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 12 }, shadowToken.card]}>
@@ -128,10 +155,21 @@ export default function Heads() {
               <Plus size={18} color={semantic.textPrimary} />
             </Pressable>
           </View>
+          {editable && dirty && inReview ? (
+            <Text variant="caption" style={{ color: intent.warning.text, lineHeight: 16 }}>
+              A contribution of yours is still under review. You can change your heads once it's verified.
+            </Text>
+          ) : editable && dirty && (owedAfter >= 0.01 || creditAfter >= 0.01) ? (
+            <Text variant="caption" color="secondary" style={{ lineHeight: 16 }}>
+              {owedAfter >= 0.01
+                ? `You've already paid for ${paidPeriods.length === 1 ? 'a month' : `${paidPeriods.length} months`}. At ${draft} head${draft === 1 ? '' : 's'}, ${formatPeso(owedAfter)} more is due for ${paidPeriods.length === 1 ? 'it' : 'them'}.`
+                : `You've already paid for ${paidPeriods.length === 1 ? 'a month' : `${paidPeriods.length} months`}. At ${draft} head${draft === 1 ? '' : 's'}, the extra ${formatPeso(creditAfter)} becomes advance credit for your next contribution.`}
+            </Text>
+          ) : null}
           <Button
             label={setHeads.loading ? 'Saving…' : 'Save'}
             onPress={onSave}
-            disabled={!editable || !dirty || setHeads.loading}
+            disabled={!editable || !dirty || setHeads.loading || inReview}
           />
           {setHeads.loading ? <ActivityIndicator color={semantic.brand} /> : null}
         </View>
@@ -170,6 +208,7 @@ export default function Heads() {
           </View>
         ) : null}
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

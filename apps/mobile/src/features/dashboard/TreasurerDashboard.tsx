@@ -92,7 +92,7 @@ function CashCard({ groupId }: { groupId: string }) {
 
       <View style={[glassPanel, { marginTop: 10, padding: 12, gap: 4 }]}>
         <CashRow label="Contributions received" amount={contributions} tone="pos" />
-        <CashRow label="Repayments received" amount={repayments} tone="pos" />
+        <CashRow label="Loan repayments received" amount={repayments} tone="pos" />
         <CashRow label="Loans released" amount={disbursed} tone="neg" />
         {distributed > 0 ? <CashRow label="Distributions paid" amount={distributed} tone="neg" /> : null}
 
@@ -420,7 +420,8 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
   const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
   const balances = useMemberBalances(groupId);
 
-  const rows = contribs.data ?? [];
+  // Top-ups pay an earlier period's balance, so they never stand for "this period".
+  const rows = (contribs.data ?? []).filter((r) => !r.top_up_of);
   // "This period" = each member's most recent contribution row for this cycle — see
   // OwnerDashboard's identical CollectionBlock for why due_date grouping isn't safe.
   const currentRows = useMemo(() => {
@@ -517,7 +518,7 @@ function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?:
 /* ---------------- Record grid ---------------- */
 const ACTIONS: TileAction[] = [
   { label: 'Contribution', icon: ArrowUpCircle, route: 'contributions/confirm', params: { tab: 'record' } },
-  { label: 'Repayment', icon: HandCoins, route: 'loans/record-repayment' },
+  { label: 'Loan Repayment', icon: HandCoins, route: 'loans/record-repayment' },
   { label: 'Transactions', icon: ScrollText, route: 'reports/my-transactions' },
   { label: 'Group Ledger', icon: PiggyBank, route: 'reports/group-ledger' },
   { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },

@@ -10,54 +10,39 @@ import { PasswordRules, passwordMeetsRules } from '@/components/ui/PasswordRules
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic } from '@/theme/colors';
 import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/context/AuthContext';
 
 const BAND_TOP = '#4C7C90';
 
-export default function ChangePassword() {
+// Reached from Forgot Password once the SMS code is verified — the OTP has
+// already signed the user in, so this only sets the new password.
+export default function ResetPassword() {
   const router = useRouter();
-  const { member, signInWithPassword } = useAuth();
-
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [newFocused, setNewFocused] = useState(false);
-  const [touched, setTouched] = useState({ current: false, new: false, confirm: false });
-  const [currentError, setCurrentError] = useState<string | undefined>(undefined);
+  const [passwordFocused, setPasswordFocused] = useState(false);
+  const [confirmTouched, setConfirmTouched] = useState(false);
+  const [error, setError] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
 
-  const newPasswordValid = passwordMeetsRules(newPassword);
-  const passwordsMatch = confirmPassword.length > 0 && confirmPassword === newPassword;
-  const isDifferent = !currentPassword || newPassword !== currentPassword;
-
-  const confirmError = touched.confirm && confirmPassword.length > 0 && !passwordsMatch
-    ? 'Passwords do not match.'
-    : undefined;
-  const sameAsCurrentError = touched.new && newPasswordValid && !isDifferent
-    ? 'New password must be different from your current password.'
-    : undefined;
-
-  const canSubmit =
-    currentPassword.length > 0 && newPasswordValid && passwordsMatch && isDifferent && !loading;
+  const passwordValid = passwordMeetsRules(password);
+  const passwordsMatch = confirmPassword.length > 0 && confirmPassword === password;
+  const confirmError = confirmTouched && confirmPassword.length > 0 && !passwordsMatch ? 'Passwords do not match.' : undefined;
+  const canSubmit = passwordValid && passwordsMatch && !loading;
 
   async function onSubmit() {
-    if (!canSubmit || !member?.phone) return;
-    setCurrentError(undefined);
+    if (!canSubmit) return;
+    setError(undefined);
     setLoading(true);
     try {
-      await signInWithPassword(member.phone, currentPassword);
-    } catch {
-      setCurrentError('Current password is incorrect.');
-      setLoading(false);
-      return;
-    }
-    try {
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) throw error;
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
       setDone(true);
     } catch (e) {
-      setCurrentError((e as Error).message || 'Could not update your password. Please try again.');
+      const message = (e as Error).message || '';
+      setError(/different from the old/i.test(message)
+        ? 'New password must be different from your old password.'
+        : message || 'Could not update your password. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -72,7 +57,7 @@ export default function ChangePassword() {
           </View>
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 32 }}>Password Updated</Text>
           <View style={{ alignSelf: 'stretch' }}>
-            <Button label="Done" onPress={() => router.back()} />
+            <Button label="Continue" onPress={() => router.replace('/(app)/groups')} />
           </View>
         </View>
       </SafeAreaView>
@@ -86,32 +71,24 @@ export default function ChangePassword() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
     >
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
-        <AppBar title="Change Password" backgroundColor={BAND_TOP} tintColor="#fff" />
+        <AppBar title="Set New Password" back={false} backgroundColor={BAND_TOP} tintColor="#fff" />
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 22, paddingTop: 20, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-          <PasswordField
-            label="Current Password"
-            placeholder="Your current password"
-            value={currentPassword}
-            onChangeText={(t) => { setCurrentPassword(t); setCurrentError(undefined); }}
-            onBlur={() => setTouched((t) => ({ ...t, current: true }))}
-            error={currentError}
-          />
           <PasswordField
             label="New Password"
             placeholder="Create a new password"
-            value={newPassword}
-            onChangeText={setNewPassword}
-            onFocus={() => setNewFocused(true)}
-            onBlur={() => { setNewFocused(false); setTouched((t) => ({ ...t, new: true })); }}
-            error={sameAsCurrentError}
+            value={password}
+            onChangeText={(t) => { setPassword(t); setError(undefined); }}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
+            error={error}
           />
-          <PasswordRules password={newPassword} visible={newFocused || newPassword.length > 0} />
+          <PasswordRules password={password} visible={passwordFocused || password.length > 0} />
           <PasswordField
             label="Confirm New Password"
             placeholder="Re-enter your new password"
             value={confirmPassword}
             onChangeText={setConfirmPassword}
-            onBlur={() => setTouched((t) => ({ ...t, confirm: true }))}
+            onBlur={() => setConfirmTouched(true)}
             error={confirmError}
           />
 

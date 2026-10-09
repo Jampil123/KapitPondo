@@ -10,9 +10,10 @@ import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
+import { PasswordRules, passwordMeetsRules } from '@/components/ui/PasswordRules';
 import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
 import { semantic, intent } from '@/theme/colors';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth, PhoneAlreadyRegisteredError } from '@/context/AuthContext';
 
 const PREFIX = '+63 ';
 
@@ -161,7 +162,9 @@ export default function SignUp() {
   const [birthday, setBirthday] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(PREFIX);
+  const [phoneTaken, setPhoneTaken] = useState(false);
   const [password, setPassword] = useState('');
+  const [passwordFocused, setPasswordFocused] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [touched, setTouched] = useState({ firstName: false, lastName: false, birthday: false });
@@ -176,7 +179,7 @@ export default function SignUp() {
   const birthdayValid = !!parsedBirthday && calculateAge(parsedBirthday) >= MIN_SIGNUP_AGE;
   const phoneValid = phoneDigits.length === 10;
   const emailValid = isBlank(email) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const passwordValid = password.length >= 8;
+  const passwordValid = passwordMeetsRules(password);
 
   const firstNameError = touched.firstName && !firstNameValid ? 'First name is required.' : undefined;
   const lastNameError = touched.lastName && !lastNameValid ? 'Last name is required.' : undefined;
@@ -187,12 +190,14 @@ export default function SignUp() {
         ? `You must be at least ${MIN_SIGNUP_AGE} years old to sign up.`
         : undefined
     : undefined;
+  const phoneError = phoneTaken ? 'This number is already registered. Sign in instead.' : undefined;
 
   const canSubmit =
     firstNameValid &&
     lastNameValid &&
     birthdayValid &&
     phoneValid &&
+    !phoneTaken &&
     emailValid &&
     passwordValid &&
     agreed;
@@ -212,7 +217,8 @@ export default function SignUp() {
       });
       router.push({ pathname: '/(auth)/otp', params: { phone } });
     } catch (e) {
-      Alert.alert('Sign up failed', (e as Error).message);
+      if (e instanceof PhoneAlreadyRegisteredError) setPhoneTaken(true);
+      else Alert.alert('Sign up failed', (e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -279,16 +285,20 @@ export default function SignUp() {
             placeholder="+63 900 000 0000"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={(t) => setPhone(formatPhone(t))}
+            onChangeText={(t) => { setPhone(formatPhone(t)); setPhoneTaken(false); }}
+            error={phoneError}
             leading={<Phone size={18} color={semantic.textMuted} />}
           />
           <PasswordField
             label="Password"
-            placeholder="At least 8 characters"
+            placeholder="Create a password"
             value={password}
             onChangeText={setPassword}
+            onFocus={() => setPasswordFocused(true)}
+            onBlur={() => setPasswordFocused(false)}
             leading={<Lock size={18} color={semantic.textMuted} />}
           />
+          <PasswordRules password={password} visible={passwordFocused || password.length > 0} />
 
           <View style={{ marginBottom: 18 }}>
             <Checkbox

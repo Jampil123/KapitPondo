@@ -130,7 +130,7 @@ export default function CreateGroup() {
                 style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }]}
               />
 
-              <Label>Fund Code (optional)</Label>
+              <Label>Fund Code</Label>
               <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
                 <TextInput
                   value={fundCode}

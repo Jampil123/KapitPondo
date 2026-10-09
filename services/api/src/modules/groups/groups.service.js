@@ -35,7 +35,7 @@ async function createGroup({ name, fundCode, description, ownerMemberId }) {
 async function listMyGroups(memberId) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, role, status, status_reason, heads, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name, avatar_url))')
+    .select('id, role, status, status_reason, heads, contribution_credit, joined_at, groups(*, owner:members!groups_owner_id_fkey(full_name, avatar_url))')
     .eq('member_id', memberId)
     // Suspended members keep view access to their group.
     .in('status', ['active', 'pending', 'suspended']);
@@ -291,7 +291,7 @@ async function rejectMember(groupId, memberId, reason) {
 async function listGroupMembers(groupId, { includeSuspended = false } = {}) {
   const { data, error } = await supabase
     .from('memberships')
-    .select('id, member_id, role, status, heads, joined_at, status_reason, status_changed_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
+    .select('id, member_id, role, status, heads, contribution_credit, joined_at, status_reason, status_changed_at, members!memberships_member_id_fkey(id, full_name, email, verification_status, avatar_url)')
     .eq('group_id', groupId)
     .in('status', includeSuspended ? ['active', 'suspended'] : ['active'])
     .order('joined_at', { ascending: true, nullsFirst: true });

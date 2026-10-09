@@ -12,6 +12,10 @@ const officers = require('../../lib/officers');
 const flags = require('../flags/flags.service');
 const { readProofInBackground, readAndSaveProof } = require('../../lib/proofReading');
 
+function pesoText(n) {
+  return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 // Submit a contribution. Nothing posts here — every contribution goes
 // confirm (fund holder) → verify (independent check) before the ledger
 // (migration 0075). A walk-in recorded by the person who'd confirm it is
@@ -64,16 +68,64 @@ router.post('/groups/:groupId/contributions',
         isWalkIn = true;
       }
 
+      // A balance left on a period paid before heads went up is paid first;
+      // otherwise advance credit covers part or all of the next period (0068).
+      const plan = await service.planPayment({ membershipId: targetMembershipId, cycleId: cycle_id });
+      const paid = Number(amount);
+      if (!(paid >= 0)) return res.status(400).json({ error: 'Enter a valid amount.' });
+      if (plan.topUpOf) {
+        if (plan.topUpInReview) {
+          return res.status(409).json({ error: 'The payment for the remaining balance is still under review.' });
+        }
+        // A member pays the balance exactly; an officer recording cash may take part of it.
+        const wrongAmount = isWalkIn
+          ? paid <= 0 || paid > plan.balance + 0.005
+          : Math.abs(paid - plan.balance) > 0.005;
+        if (wrongAmount) {
+          return res.status(400).json({ error: `This payment is for the ${pesoText(plan.balance)} balance still owed on an earlier contribution. Enter ${isWalkIn ? 'up to ' : ''}${pesoText(plan.balance)}.` });
+        }
+      } else if (plan.creditApplied + 0.005 >= plan.expected) {
+        if (paid > 0) {
+          return res.status(400).json({ error: 'Your advance credit already covers this contribution, so there is nothing to pay.' });
+        }
+        const covered = await service.applyCredit({
+          membershipId: targetMembershipId, cycleId: cycle_id, amount: plan.expected, actorId: req.member.id,
+        });
+        await logAudit({
+          groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+          action: 'recorded', entityType: 'contribution', entityId: covered.id,
+          before: null, after: { status: 'approved', amount: 0, credit_applied: covered.credit_applied },
+        });
+        return res.status(201).json({ contribution: covered });
+      } else if (paid === 0) {
+        return res.status(400).json({ error: 'Enter the amount you paid.' });
+      }
+
       // A member paying late covers their pending late penalty in the same
       // transfer; only the contribution share is kept as `amount`.
-      const split = isWalkIn
+      const split = isWalkIn || plan.topUpOf
         ? { contributionAmount: amount, penaltyShare: 0, penaltyIds: [] }
         : await splitPenaltyShare({
           groupId: req.params.groupId, membershipId: targetMembershipId,
           heads: req.membership.heads, cycleId: cycle_id, amount,
+          due: plan.expected - plan.creditApplied,
         });
 
+      // A member's own payment must be exactly what's due: contribution × heads,
+      // less any advance credit (plus the late penalty, split off above).
+      // Officer-recorded cash isn't held to this — the app warns them instead.
+      const due = Math.round((plan.expected - plan.creditApplied) * 100) / 100;
+      if (!isWalkIn && !plan.topUpOf && Math.abs(Number(split.contributionAmount) - due) > 0.005) {
+        const heads = req.membership.heads || 1;
+        const credit = plan.creditApplied > 0 ? `, less ${pesoText(plan.creditApplied)} advance credit` : '';
+        return res.status(400).json({
+          error: `The amount must be ${pesoText(due)} (${heads} head${heads === 1 ? '' : 's'} × ${pesoText(plan.expected / heads)}${credit}), plus any late penalty.`,
+        });
+      }
+
       const contribution = await service.createContribution({
+        topUpOf: plan.topUpOf,
+        creditApplied: plan.topUpOf ? 0 : plan.creditApplied,
         membershipId: targetMembershipId,
         cycleId: cycle_id,
         groupId: req.params.groupId,

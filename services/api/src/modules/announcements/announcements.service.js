@@ -47,6 +47,7 @@ async function resolveUnpaidMembers(groupId) {
     .select('membership_id')
     .eq('cycle_id', cycle.id)
     .in('status', ['submitted', 'approved'])
+    .is('top_up_of', null)
     .gte('created_at', start)
     .lt('created_at', end);
   if (pErr) throw pErr;

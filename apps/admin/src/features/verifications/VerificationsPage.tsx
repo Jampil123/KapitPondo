@@ -91,6 +91,52 @@ function kv(label: string, value?: string) {
   );
 }
 
+type Photo = { src: string; alt: string };
+
+function PhotoTile({ label, src, alt, missing, onOpen }: {
+  label: string; src?: string; alt: string; missing: string; onOpen: (p: Photo) => void;
+}) {
+  return (
+    <div>
+      <div className="text-[11px] text-muted mb-1.5">{label}</div>
+      <div className="bg-surface-alt rounded-2xl p-2.5">
+        {src ? (
+          <button type="button" onClick={() => onOpen({ src, alt })} title="Click to enlarge"
+                  className="group relative block w-full rounded-lg overflow-hidden cursor-zoom-in focus:outline-none focus:ring-2 focus:ring-brand">
+            <img src={src} alt={alt} className="w-full h-40 object-contain bg-surface" />
+            <span className="absolute inset-0 flex items-center justify-center bg-black/0 group-hover:bg-black/30 transition-colors">
+              <Eye size={22} className="text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+            </span>
+          </button>
+        ) : (
+          <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
+               style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
+            <span className="text-xs font-medium text-center px-2">{missing}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoPreview({ photo, onClose }: { photo: Photo; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-6" onClick={onClose}>
+      <button type="button" onClick={onClose} aria-label="Close preview"
+              className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20">
+        <X size={22} />
+      </button>
+      <img src={photo.src} alt={photo.alt} onClick={(e) => e.stopPropagation()}
+           className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+    </div>
+  );
+}
+
 type View = 'verification' | 'suspended' | 'all';
 
 // Tiles vs table — a per-admin preference, remembered in this browser.
@@ -373,10 +419,12 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
   const [detail, setDetail] = useState<Detail | null>(null);
   // Which "not verified" outcome the admin is writing a reason for.
   const [decision, setDecision] = useState<'resubmit' | 'reject' | null>(null);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
   const [suspending, setSuspending] = useState(false);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [preview, setPreview] = useState<Photo | null>(null);
 
   useEffect(() => {
     api.get<Detail>(`/admin/verifications/${id}`).then(setDetail).catch((e) => setErr((e as Error).message));
@@ -418,7 +466,7 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
         <div className="flex items-center justify-between px-6 py-5 border-b border-line">
           <h2 className="text-base font-semibold text-ink">Account details</h2>
           <div className="flex items-center gap-3">
-            {a && !a.suspended_at && !suspending && !decision && (
+            {a && !a.suspended_at && !suspending && !decision && !confirmingApprove && (
               <button onClick={() => { setSuspending(true); setReason(''); setErr(null); }}
                       className="flex items-center gap-1.5 rounded-lg border border-danger px-3 py-1.5 text-[13px] font-semibold text-danger hover:bg-danger-bg">
                 <Ban size={14} /> Suspend
@@ -469,82 +517,11 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
               </div>
 
               <div className="text-[13px] font-semibold text-ink mb-2.5">Submitted photos</div>
-              <div className="grid grid-cols-3 gap-3.5 mb-5">
-                <div>
-                  <div className="text-[11px] text-muted mb-1.5">ID Front</div>
-                  <div className="bg-surface-alt rounded-2xl p-2.5">
-                    {a?.id_document_signed_url ? (
-                      <img
-                        src={a.id_document_signed_url}
-                        alt="Submitted ID document (front)"
-                        className="w-full h-40 object-contain rounded-lg bg-surface"
-                      />
-                    ) : (
-                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                        <span className="text-xs font-medium text-center px-2">
-                          {a?.id_document_url ? 'Preview unavailable' : 'No document on file'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-muted mb-1.5">ID Back</div>
-                  <div className="bg-surface-alt rounded-2xl p-2.5">
-                    {a?.id_document_back_signed_url ? (
-                      <img
-                        src={a.id_document_back_signed_url}
-                        alt="Submitted ID document (back)"
-                        className="w-full h-40 object-contain rounded-lg bg-surface"
-                      />
-                    ) : (
-                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                        <span className="text-xs font-medium text-center px-2">
-                          {a?.id_document_back_url ? 'Preview unavailable' : 'No back photo on file'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-muted mb-1.5">Selfie</div>
-                  <div className="bg-surface-alt rounded-2xl p-2.5">
-                    {a?.selfie_signed_url ? (
-                      <img
-                        src={a.selfie_signed_url}
-                        alt="Submitted selfie"
-                        className="w-full h-40 object-contain rounded-lg bg-surface"
-                      />
-                    ) : (
-                      <div className="h-40 rounded-lg flex flex-col items-center justify-center gap-2 text-muted"
-                           style={{ background: 'repeating-linear-gradient(45deg,#E3EDF2,#E3EDF2 12px,#D9E6ED 12px,#D9E6ED 24px)' }}>
-                        <span className="text-xs font-medium text-center px-2">
-                          {a?.selfie_url ? 'Preview unavailable' : 'No selfie on file'}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="text-[13px] font-semibold text-ink mb-2.5">Back QR code</div>
-              <div className="bg-surface-alt rounded-2xl p-3.5 mb-5">
-                {a?.id_document_qr_data ? (
-                  <>
-                    <div className="text-[11px] font-mono text-ink break-all">{a.id_document_qr_data}</div>
-                    <div className="text-[11px] text-muted mt-2">
-                      Decoded on-device from the ID's QR code. This is the raw payload only — not a cryptographic
-                      signature check against PSA, so verify authenticity by inspection, not by this text alone.
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-[13px] text-muted">
-                    No QR code was detected on the submitted back photo. A genuine PhilSys National ID has one —
-                    treat this as a prompt for closer manual review, not proof the ID is fake.
-                  </div>
-                )}
+              <div className="grid grid-cols-2 gap-3.5 mb-5">
+                <PhotoTile label="ID" src={a?.id_document_signed_url} alt="Submitted ID document"
+                           missing={a?.id_document_url ? 'Preview unavailable' : 'No document on file'} onOpen={setPreview} />
+                <PhotoTile label="Selfie" src={a?.selfie_signed_url} alt="Submitted selfie"
+                           missing={a?.selfie_url ? 'Preview unavailable' : 'No selfie on file'} onOpen={setPreview} />
               </div>
 
               {err && <div className="mt-4 rounded-lg bg-danger-bg text-danger text-sm px-3 py-2">{err}</div>}
@@ -587,7 +564,21 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
             ) : null}
 
             {mode === 'pending' && !a?.suspended_at && !suspending && (
-              decision ? (
+              confirmingApprove ? (
+                <div className="p-6 border-t border-line space-y-3">
+                  <div className="text-[13px] font-semibold text-ink">Verify {a?.full_name ?? 'this account'}?</div>
+                  <div className="text-[12.5px] text-muted">
+                    Confirm the ID and selfie match the details above. They'll be notified and can create groups, request loans, and be appointed an officer.
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => setConfirmingApprove(false)} disabled={busy} className="flex-1 rounded-lg border border-line py-2.5 text-sm font-semibold text-secondary">Cancel</button>
+                    <button onClick={approve} disabled={busy}
+                            className="flex-1 flex items-center justify-center gap-2 rounded-lg bg-success py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                      <Check size={16} /> {busy ? 'Verifying…' : 'Yes, verify'}
+                    </button>
+                  </div>
+                </div>
+              ) : decision ? (
                 <div className="p-6 border-t border-line space-y-3">
                   <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
                             placeholder={decision === 'resubmit' ? 'What should the member fix? (e.g. photo is blurry)' : 'Reason for rejection…'}
@@ -602,7 +593,7 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
                 </div>
               ) : (
                 <div className="flex gap-3 p-6 border-t border-line">
-                  <button onClick={approve} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-3 text-sm font-semibold text-white disabled:opacity-60">
+                  <button onClick={() => { setConfirmingApprove(true); setErr(null); }} disabled={busy} className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-success py-3 text-sm font-semibold text-white disabled:opacity-60">
                     <Check size={16} /> Verify account
                   </button>
                   <button onClick={() => setDecision('resubmit')} className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-line py-3 text-sm font-semibold text-brand-dark">
@@ -617,6 +608,7 @@ function VerificationDrawer({ id, onClose, onDone }: { id: string; onClose: () =
           </>
         )}
       </div>
+      {preview && <PhotoPreview photo={preview} onClose={() => setPreview(null)} />}
     </div>
   );
 }

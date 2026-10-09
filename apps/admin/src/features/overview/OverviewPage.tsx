@@ -43,7 +43,7 @@ type SearchResults = { members: SearchMember[]; groups: SearchGroupHit[]; audit:
 // Chart series — validated for lightness, chroma, CVD separation and 3:1
 // contrast on the card surface (dataviz validate_palette.js).
 const SERIES = { registrations: '#0B5F8A', groups: '#2E9BD6' } as const;
-const GROUP_COLORS = { active: '#2F7D5A', closed: '#8DB5A2', archived: '#FFFFFF' } as const;
+const GROUP_COLORS = { active: '#2F7D5A', closed: '#8DB5A2', archived: '#C9D6DE' } as const;
 const FEED_ROWS = 6;
 
 const FILTERS: { key: 'all' | FeedKind; label: string }[] = [
@@ -133,8 +133,8 @@ function Donut({ parts, total }: { parts: { value: number; color: string }[]; to
   const gap = shown.length > 1 ? 2 : 0;
   let offset = 0;
   return (
-    <svg width="104" height="104" viewBox="0 0 104 104" className="shrink-0" role="img" aria-label={`${total} fund groups`}>
-      <circle cx="52" cy="52" r={r} fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="12" />
+    <svg width="168" height="168" viewBox="0 0 104 104" className="shrink-0" role="img" aria-label={`${total} fund groups`}>
+      <circle cx="52" cy="52" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="12" />
       {total > 0 && shown.map((p, i) => {
         const len = (p.value / total) * c;
         const el = (
@@ -145,7 +145,7 @@ function Donut({ parts, total }: { parts: { value: number; color: string }[]; to
         return el;
       })}
       <text x="52" y="55" textAnchor="middle" style={{ fontSize: 24, fontWeight: 700, fill: 'var(--color-ink)' }}>{total}</text>
-      <text x="52" y="69" textAnchor="middle" style={{ fontSize: 9, fill: 'var(--color-secondary)' }}>total groups</text>
+      <text x="52" y="67" textAnchor="middle" style={{ fontSize: 7, fill: 'var(--color-secondary)' }}>total groups</text>
     </svg>
   );
 }
@@ -384,19 +384,21 @@ export function OverviewPage() {
             {a ? <WeekChart days={a.daily} /> : <div className="h-28" />}
           </section>
 
-          {/* Fund group statistics */}
-          <section className="rounded-2xl bg-success-bg px-6 py-5">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-[15px] font-semibold text-ink">Fund group statistics</h2>
-              <Link to="/groups" className="flex items-center gap-1 text-xs font-semibold text-ink hover:text-brand-dark">View all <ArrowRight size={13} /></Link>
-            </div>
-            <div className="flex items-center gap-7">
+          {/* Fund group statistics — donut sits outside, beside the green breakdown card */}
+          <div className="flex items-stretch gap-3">
+            <div className="shrink-0 flex items-center justify-center px-2">
               <Donut total={g?.total ?? 0} parts={[
                 { value: g?.active ?? 0, color: GROUP_COLORS.active },
                 { value: g?.closed ?? 0, color: GROUP_COLORS.closed },
                 { value: g?.archived ?? 0, color: GROUP_COLORS.archived },
               ]} />
-              <div className="flex-1 divide-y divide-black/5">
+            </div>
+            <section className="flex-1 min-w-0 rounded-2xl bg-success-bg px-6 py-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-[15px] font-semibold text-ink">Fund group statistics</h2>
+                <Link to="/groups" className="flex items-center gap-1 text-xs font-semibold text-ink hover:text-brand-dark">View all <ArrowRight size={13} /></Link>
+              </div>
+              <div className="divide-y divide-black/5">
                 {([
                   ['Active fund groups', g?.active, GROUP_COLORS.active, '/groups?status=active'],
                   ['Closed fund groups', g?.closed, GROUP_COLORS.closed, '/groups?status=closed'],
@@ -413,8 +415,8 @@ export function OverviewPage() {
                   </Link>
                 ) : null}
               </div>
-            </div>
-          </section>
+            </section>
+          </div>
         </div>
 
         {/* Recent activity */}

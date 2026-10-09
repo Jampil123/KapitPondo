@@ -15,11 +15,11 @@ import { formatPeso, toAmountString } from '@/lib/money';
 import { uploadImage } from '@/lib/upload';
 import { parseApiDate } from '@/lib/cycle';
 import { buildContributionReference } from '@/lib/qrPh';
-import { useActiveGroup } from '@/context/GroupContext';
+import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { signoffRoles, progressSteps } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions, useSubmitContribution } from '@/features/contributions/contributions.hooks';
-import { buildTimeline } from '@/features/contributions/periods';
+import { availableCredit, buildTimeline } from '@/features/contributions/periods';
 import { usePenaltyDue } from '@/features/contributions/penalty';
 import { useQuery } from '@/hooks/useApi';
 import { listOfficers } from '@/api/groups';
@@ -90,6 +90,7 @@ export default function Contribute() {
   const showViewAll = from !== 'contributions';
   const router = useRouter();
   const { membership, group } = useActiveGroup();
+  const { refresh: refreshGroups } = useGroups();
   const { cycle, loading: cycleLoading } = useActiveCycle(groupId!);
   const contribs = useContributions(groupId!, cycle?.id ? { cycle_id: cycle.id } : {});
   const submit = useSubmitContribution(groupId!);
@@ -110,13 +111,28 @@ export default function Contribute() {
   // by raw recency kept surfacing the superseded rejected row even after the
   // resubmission was approved (buildTimeline already collapses that).
   const timeline = cycle ? buildTimeline(cycle, rows, heads) : [];
-  const current = rowId
-    ? (rows.find((r) => r.id === rowId) ?? null)
-    : (timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null)?.row ?? null;
+  const picked = rowId ? (rows.find((r) => r.id === rowId) ?? null) : null;
+  const entry = picked
+    ? (timeline.find((p) => p.row?.id === picked.id || p.topUp?.id === picked.id) ?? null)
+    : (timeline.find((p) => p.kind !== 'paid') ?? timeline[timeline.length - 1] ?? null);
+  // A period paid before heads went up still owes the difference — paying it
+  // is a top-up, and the screen follows that top-up's own row (0068).
+  const balanceDue = entry?.balance ?? 0;
+  const current = balanceDue
+    ? (picked && picked.id !== entry!.row?.id ? picked : entry!.topUp)
+    : (picked ?? entry?.row ?? null);
   const loading = cycleLoading || contribs.loading;
   const expected = cycle ? Number(cycle.contribution_amount) * heads : 0;
-  const baseAmount = Number(current?.amount ?? expected);
-  const due = current?.due_date ? parseApiDate(current.due_date) : dueParam ? new Date(dueParam) : null;
+  // Advance credit from paying before heads went down covers part or all of the next period.
+  const credit = availableCredit(membership?.contribution_credit, rows);
+  const periodDue = Number(current?.amount ?? expected);
+  const creditUse = balanceDue ? 0
+    : current?.status === 'rejected' ? Number(current.credit_applied ?? 0)
+    : Math.min(credit, periodDue);
+  const baseAmount = balanceDue
+    ? (current?.status === 'rejected' ? Number(current.amount) : balanceDue)
+    : current?.status === 'rejected' ? periodDue : Math.max(periodDue - creditUse, 0);
+  const due = current?.due_date ? parseApiDate(current.due_date) : dueParam ? new Date(dueParam) : balanceDue ? entry!.dueDate : null;
   const now = new Date();
 
   const state: PageState =
@@ -127,13 +143,28 @@ export default function Contribute() {
     'submit';
 
   // Late: the transfer covers the contribution plus the late penalty; the API splits the two back apart.
-  const penaltyDue = usePenaltyDue(groupId!, cycle, baseAmount, state === 'overdue', rows);
+  // A top-up only pays the balance — any late penalty goes with the next regular contribution.
+  const penaltyDue = usePenaltyDue(groupId!, cycle, baseAmount, state === 'overdue' && !balanceDue, rows);
   const payAmount = baseAmount + penaltyDue;
+  // Nothing to send: the server marks the period paid from credit on the spot.
+  const coveredByCredit = !balanceDue && (state === 'submit' || state === 'overdue') && creditUse > 0 && baseAmount <= 0;
 
   // Paying needs the group's Owner to have set a treasurer GCash number
   // (see group/settings.tsx) — without it the screen below is blocked outright.
   const hasTreasurerGcash = !!group?.treasurer_gcash_number;
   const [amount, setAmount] = useState('');
+
+  // The amount sent must be exactly what's due — contribution × heads (less credit),
+  // with or without the late penalty, or the exact balance for a top-up. The API enforces the same.
+  const requiredAmount = state === 'rejected' && current
+    ? Number(current.amount) + Number(current.penalty_applied ?? 0)
+    : payAmount;
+  const enteredAmount = toAmountString(amount) ? Number(toAmountString(amount)) : null;
+  const amountMatches = enteredAmount !== null
+    && (Math.abs(enteredAmount - requiredAmount) < 0.005 || (!balanceDue && Math.abs(enteredAmount - baseAmount) < 0.005));
+  const amountError = !amount.trim() || amountMatches ? undefined
+    : balanceDue ? `Enter exactly ${formatPeso(requiredAmount)} — the balance still due for this month.`
+    : `Enter exactly ${formatPeso(requiredAmount)} — ${heads} head${heads === 1 ? '' : 's'} × ${formatPeso(cycle?.contribution_amount ?? 0)}${creditUse ? `, less ${formatPeso(creditUse)} credit` : ''}${requiredAmount > baseAmount ? ', plus the late penalty' : ''}.`;
   const [reference, setReference] = useState('');
   const [proofUri, setProofUri] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -189,12 +220,24 @@ export default function Contribute() {
     scanProof(uri);
   }
 
+  async function onUseCredit() {
+    if (!cycle) return;
+    const ok = await submit.run({ cycle_id: cycle.id, amount: '0' });
+    if (ok !== undefined) {
+      await refreshGroups();
+      router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } });
+    } else if (submit.error) {
+      Alert.alert('Could not apply credit', submit.error.message);
+    }
+  }
+
   async function onSubmit() {
     if (!cycle) return Alert.alert('No active cycle', 'There is no active cycle to contribute to yet.');
     if (noOfficers) return Alert.alert('Officers not appointed', noOfficersText);
     if (!hasTreasurerGcash) return Alert.alert('No GCash number set up', "The treasurer hasn't set up a verified GCash number yet. Check back once one has been approved before submitting.");
     const amt = toAmountString(amount);
     if (!amt) return Alert.alert('Invalid amount', 'Enter a valid contribution amount.');
+    if (amountError) return Alert.alert('Amount doesn\'t match', amountError);
     if (!proofUri) return Alert.alert('Proof required', 'Attach a photo or screenshot of your payment before submitting.');
 
     if (groupId) {
@@ -326,6 +369,10 @@ export default function Contribute() {
   const diff = due ? daysBetween(due, now) : null;
   const lateDays = due ? Math.abs(daysBetween(due, now)) : 0;
   const breakdown = `${heads} head${heads === 1 ? '' : 's'} × ${formatPeso(cycle.contribution_amount)}`;
+  const amountLabel = balanceDue ? 'Balance due' : 'Amount due';
+  const amountNote = balanceDue
+    ? `Heads went up after you paid · ${formatPeso(entry!.amount)} due, ${formatPeso(entry!.amount - balanceDue)} paid`
+    : creditUse > 0 ? `${breakdown} − ${formatPeso(creditUse)} advance credit` : breakdown;
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
@@ -333,25 +380,35 @@ export default function Contribute() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
 
-          {state === 'submit' && (
+          {coveredByCredit ? (
             <AmountBlock
               label="Amount due"
-              amount={current?.amount ?? expected}
+              amount={periodDue}
+              badge={<Badge tone="success" label="Covered by credit" Icon={Check} />}
+              meta={<>{cycle.name}{due ? <> · due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(due)}</Text></> : ''}</>}
+              note={`Paid from your ${formatPeso(credit)} advance credit · nothing to send`}
+            />
+          ) : null}
+
+          {state === 'submit' && !coveredByCredit && (
+            <AmountBlock
+              label={amountLabel}
+              amount={payAmount}
               badge={<Badge tone="success" label="On time" Icon={Check} />}
               meta={<>{cycle.name}{due ? <> · due <Text style={{ fontWeight: '700', color: semantic.textPrimary }}>{shortDate(due)}</Text>{diff !== null && diff >= 0 ? ` · ${diff} day${diff === 1 ? '' : 's'} left` : ''}</> : ' · no due date set'}</>}
-              note={breakdown}
+              note={amountNote}
               copied={copiedField === 'amount'}
               onCopy={() => copyValue('amount', payAmount.toFixed(2))}
             />
           )}
 
-          {state === 'overdue' && (
+          {state === 'overdue' && !coveredByCredit && (
             <AmountBlock
-              label="Amount due"
+              label={amountLabel}
               amount={payAmount}
               badge={<Badge tone="danger" label={`${lateDays} day${lateDays === 1 ? '' : 's'} late`} Icon={AlertTriangle} />}
               meta={<>{cycle.name} · was due <Text style={{ fontWeight: '700', color: intent.danger.text }}>{shortDate(due)}</Text></>}
-              note={penaltyDue ? `${breakdown} + ${formatPeso(penaltyDue)} late penalty` : breakdown}
+              note={penaltyDue ? `${amountNote} + ${formatPeso(penaltyDue)} late penalty` : amountNote}
               copied={copiedField === 'amount'}
               onCopy={() => copyValue('amount', payAmount.toFixed(2))}
             />
@@ -377,7 +434,7 @@ export default function Contribute() {
             />
           )}
 
-          {canPay && (
+          {canPay && !coveredByCredit && (
             <>
               <GcashDetails
                 qrPath={group?.treasurer_gcash_qr_url}
@@ -391,7 +448,7 @@ export default function Contribute() {
                 amount={amount} setAmount={setAmount}
                 reference={reference} setReference={setReference}
                 proofUri={proofUri} pickProof={pickProof} scanning={scanning}
-                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
+                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)} amountError={amountError}
               />
             </>
           )}
@@ -450,7 +507,7 @@ export default function Contribute() {
                 amount={amount} setAmount={setAmount}
                 reference={reference} setReference={setReference}
                 proofUri={proofUri} pickProof={pickProof} scanning={scanning}
-                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)}
+                flags={flags} scanMeta={scanMeta} dueAmountLabel={formatPeso(payAmount)} amountError={amountError}
               />
             </>
           )}
@@ -464,13 +521,15 @@ export default function Contribute() {
                 variant="ghost"
                 onPress={() => router.replace({ pathname: '/(app)/[groupId]/contributions' as any, params: { groupId } })}
               />
+            ) : coveredByCredit ? (
+              <Button label="Use credit" leading={<Check size={16} color="#fff" />} onPress={onUseCredit} loading={submit.loading} />
             ) : (
               <Button
                 label={state === 'rejected' ? 'Resubmit for review' : 'Submit contribution'}
                 leading={state === 'rejected' ? <RotateCcw size={16} color="#fff" /> : undefined}
                 onPress={onSubmit}
                 loading={busy}
-                disabled={!proofUri}
+                disabled={!proofUri || !!amountError}
               />
             )}
           </View>

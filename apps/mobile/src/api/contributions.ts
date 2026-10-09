@@ -48,6 +48,14 @@ export interface Contribution {
   /** Step 1 of 2 (migration 0075): who confirmed the money arrived, and when. */
   confirmed_by?: string | null;
   confirmed_at?: string | null;
+  /** Set on a payment for the balance of an earlier period (its row id) — not a period of its own (0068). */
+  top_up_of?: string | null;
+  /** What the period requires when heads changed after it was paid; null = amount + credit_applied. */
+  amount_due?: Money | null;
+  /** Advance credit used toward this period. */
+  credit_applied?: Money;
+  /** Part of this payment moved to advance credit because heads went down after it was paid. */
+  credit_granted?: Money;
   /** What the server read off the proof (0076); null until read. */
   proof_reading?: ProofReading | null;
   /** The payer's membership + name, joined server-side (listContributions only). */

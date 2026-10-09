@@ -143,9 +143,11 @@ export function GcashDetails({ qrPath, recipientName, number, reference, copiedF
 }
 
 export function PaymentForm({
-  amount, setAmount, reference, setReference, proofUri, pickProof, scanning, flags, scanMeta, dueAmountLabel,
+  amount, setAmount, reference, setReference, proofUri, pickProof, scanning, flags, scanMeta, dueAmountLabel, amountError,
 }: {
   amount: string; setAmount: (v: string) => void;
+  /** Shown under "Amount sent" — e.g. a contribution that must match exactly what's due. */
+  amountError?: string;
   reference: string; setReference: (v: string) => void;
   proofUri: string | null; pickProof: () => void;
   scanning?: boolean;
@@ -189,7 +191,7 @@ export function PaymentForm({
       ) : null}
 
       <View style={{ gap: 14, marginTop: 16 }}>
-        <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" />
+        <Field label="Amount sent" prefix="₱" value={amount} onChangeText={setAmount} keyboardType="numeric" error={amountError} />
         <Field label="Reference number" placeholder="e.g. 9921 4456 7780" value={reference} onChangeText={setReference} leading={<Hash size={18} color={semantic.textMuted} />} />
       </View>
     </>

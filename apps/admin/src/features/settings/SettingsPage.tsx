@@ -1,38 +1,20 @@
 /**
  * apps/admin/src/features/settings/SettingsPage.tsx
- * The signed-in admin's account: profile (ProfileSection), password
- * (PasswordSection), sessions & sign-in history (SessionsSection) and the
- * recovery-questions form.
+ * The signed-in admin's account: profile (ProfileSection) and sessions &
+ * sign-in history (SessionsSection). Password (PasswordSection) and the
+ * recovery-questions form open as dialogs from links on the photo card.
  */
-import { useEffect, useState } from 'react';
-import { Lock, KeyRound, type LucideIcon } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ArrowRight, Lock, KeyRound, type LucideIcon } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { TextField } from '../../components/ui/TextField';
 import { ErrorBanner } from '../../components/ui/ErrorBanner';
+import { Dialog } from '../../components/ui/Dialog';
 import { ProfileSection } from './ProfileSection';
 import { PasswordSection } from './PasswordSection';
 import { SessionsSection } from './SessionsSection';
 
 type SecurityQuestions = { question_1: string | null; question_2: string | null; updated_at: string | null };
-
-// Same card shape as ProfileSection's Personal information card: heading
-// inside the card, text-lg title and text-xs subtitle.
-function Section({ icon: Icon, title, subtitle, children }: { icon: LucideIcon; title: string; subtitle: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl bg-surface border border-line px-7 py-7">
-      <div className="flex items-center gap-3 mb-5">
-        <div className="w-10 h-10 rounded-xl bg-surface-alt flex items-center justify-center shrink-0">
-          <Icon size={18} className="text-brand-dark" />
-        </div>
-        <div>
-          <div className="text-lg font-semibold text-ink leading-tight">{title}</div>
-          <div className="text-xs text-muted">{subtitle}</div>
-        </div>
-      </div>
-      {children}
-    </div>
-  );
-}
 
 function SecurityQuestionsForm() {
   const [current, setCurrent] = useState<SecurityQuestions | null>(null);
@@ -117,7 +99,7 @@ function SecurityQuestionsForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-md">
+    <form onSubmit={onSubmit}>
       {err && <ErrorBanner>{err}</ErrorBanner>}
 
       <label className="block text-xs font-semibold text-secondary mb-1.5">Question 1</label>
@@ -167,24 +149,44 @@ function SecurityQuestionsForm() {
   );
 }
 
+// Row link for the photo card: icon, label beside it, arrow at the end.
+function ActionRow({ icon: Icon, onClick, children }: { icon: LucideIcon; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick}
+            className="group w-full flex items-center gap-3 rounded-xl border border-line px-4 py-3 text-left hover:bg-surface-alt">
+      <span className="w-9 h-9 rounded-lg bg-surface-alt flex items-center justify-center shrink-0 group-hover:bg-surface">
+        <Icon size={17} className="text-brand-dark" />
+      </span>
+      <span className="flex-1 text-sm font-semibold text-ink">{children}</span>
+      <span className="w-8 h-8 rounded-full bg-ink text-white flex items-center justify-center shrink-0 transition-transform group-hover:translate-x-0.5">
+        <ArrowRight size={15} />
+      </span>
+    </button>
+  );
+}
+
 export function SettingsPage() {
+  const [dialog, setDialog] = useState<'password' | 'recovery' | null>(null);
+  const close = useCallback(() => setDialog(null), []);
+
   return (
     <div className="w-full px-8 pt-6 pb-8">
-      <div className="mb-6">
-        <ProfileSection>
-          <SessionsSection />
-        </ProfileSection>
-      </div>
+      <ProfileSection actions={
+        <>
+          <ActionRow icon={Lock} onClick={() => setDialog('password')}>Change password</ActionRow>
+          <ActionRow icon={KeyRound} onClick={() => setDialog('recovery')}>Account recovery</ActionRow>
+        </>
+      }>
+        <SessionsSection />
+      </ProfileSection>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
-        <Section icon={Lock} title="Password" subtitle="Change the password you sign in with">
-          <PasswordSection />
-        </Section>
+      <Dialog open={dialog === 'password'} onClose={close} icon={Lock} title="Password" subtitle="Change the password you sign in with">
+        <PasswordSection />
+      </Dialog>
 
-        <Section icon={KeyRound} title="Account Recovery" subtitle="Security questions used to reset a forgotten password">
-          <SecurityQuestionsForm />
-        </Section>
-      </div>
+      <Dialog open={dialog === 'recovery'} onClose={close} icon={KeyRound} title="Account Recovery" subtitle="Security questions used to reset a forgotten password">
+        <SecurityQuestionsForm />
+      </Dialog>
     </div>
   );
 }

@@ -10,8 +10,34 @@ export interface PeriodEntry {
   dueDate: Date;
   row: Contribution | null;
   kind: PeriodKind;
-  /** row.amount when there's a row; cycle.contribution_amount × heads when there isn't. */
+  /** What the period requires: row.amount_due (heads changed after paying), else what was paid incl. credit; cycle.contribution_amount × heads with no row. */
   amount: number;
+  /** Still owed on a paid period whose heads went up afterwards (0068); 0 otherwise. */
+  balance: number;
+  /** The latest payment toward `balance` while it's in review or was rejected — what the period's status follows then. */
+  topUp: Contribution | null;
+}
+
+const IN_REVIEW: Contribution['status'][] = ['submitted', 'confirmed'];
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Advance credit a new payment can still use — the balance less what payments in review already earmarked. */
+export function availableCredit(contributionCredit: number | string | null | undefined, rows: Contribution[]): number {
+  const reserved = rows
+    .filter((r) => IN_REVIEW.includes(r.status))
+    .reduce((s, r) => s + Number(r.credit_applied ?? 0), 0);
+  return Math.max(round2(Number(contributionCredit ?? 0) - reserved), 0);
+}
+
+/** A period row's requirement and what's still owed on it, counting approved top-ups. */
+function settle(row: Contribution, topUps: Contribution[]) {
+  const due = row.amount_due != null ? Number(row.amount_due) : Number(row.amount) + Number(row.credit_applied ?? 0);
+  if (row.status !== 'approved') return { due, balance: 0, topUp: null };
+  const toppedUp = topUps.filter((t) => t.status === 'approved').reduce((s, t) => s + Number(t.amount), 0);
+  const covered = Number(row.amount) + Number(row.credit_applied ?? 0) - Number(row.credit_granted ?? 0) + toppedUp;
+  const balance = Math.max(round2(due - covered), 0);
+  const last = topUps[topUps.length - 1] ?? null;
+  return { due, balance, topUp: balance > 0 && last && last.status !== 'approved' ? last : null };
 }
 
 /** Every period's start date between a cycle's start and end, stepped by its frequency. Empty if the cycle is open-ended (no end_date to count periods against). */
@@ -144,10 +170,24 @@ export function buildTimeline(
   rows: Contribution[],
   heads: number,
 ): PeriodEntry[] {
-  const sorted = sortRows(rows);
+  // Top-ups pay an earlier period's balance — they hang off that period's row
+  // instead of taking a period of their own in the positional mapping below.
+  const topUpsOf = new Map<string, Contribution[]>();
+  for (const t of sortRows(rows.filter((r) => r.top_up_of))) {
+    topUpsOf.set(t.top_up_of!, [...(topUpsOf.get(t.top_up_of!) ?? []), t]);
+  }
+  const sorted = sortRows(rows.filter((r) => !r.top_up_of));
   const periods = cyclePeriods(cycle);
   const now = new Date();
   const expected = Number(cycle.contribution_amount) * heads;
+
+  const rowEntry = (index: number, periodStart: Date, dueDate: Date, row: Contribution): PeriodEntry => {
+    const { due, balance, topUp } = settle(row, topUpsOf.get(row.id) ?? []);
+    const kind: PeriodKind = !balance ? rowKind(row)
+      : topUp ? rowKind(topUp)
+      : now > dueDate ? 'late' : 'due';
+    return { index, periodStart, dueDate, row, kind, amount: due, balance, topUp };
+  };
 
   if (!periods.length) {
     // Open-ended cycle — no fixed roster to fill in; just the real rows, in
@@ -155,34 +195,31 @@ export function buildTimeline(
     // a NEW row rather than editing the rejected one, so without this an
     // approved resubmission would leave its now-stale rejected row still
     // showing as the "current" entry.
-    return collapseSupersededRejections(sorted).map((row, index) => ({
-      index,
-      periodStart: row.due_date ? parseApiDate(row.due_date) : new Date(row.created_at),
-      dueDate: row.due_date ? parseApiDate(row.due_date) : new Date(row.created_at),
-      row,
-      kind: rowKind(row),
-      amount: Number(row.amount),
-    }));
+    return collapseSupersededRejections(sorted).map((row, index) => {
+      const date = row.due_date ? parseApiDate(row.due_date) : new Date(row.created_at);
+      return rowEntry(index, date, date, row);
+    });
   }
 
   const collapsed = collapseSupersededRejections(sorted);
-  // A period only counts as "settled" once its row is actually approved — while
-  // it's still under review, or was rejected and hasn't been resubmitted yet,
+  // A period only counts as "settled" once its row is actually approved and
+  // nothing is still owed on it — while it's under review, was rejected and
+  // hasn't been resubmitted, or still has a balance from a heads increase,
   // the NEXT period must not light up as due/late. Otherwise submitting proof
   // (or resubmitting after a rejection) immediately advances a second dot
   // before the current one is even resolved, instead of looping on the same
   // one until an officer approves it.
   const lastRow = collapsed[collapsed.length - 1] ?? null;
-  const lastRowSettled = !lastRow || lastRow.status === 'approved';
+  const lastRowSettled = !lastRow || (lastRow.status === 'approved' && !settle(lastRow, topUpsOf.get(lastRow.id) ?? []).balance);
 
   return periods.map((periodStart, index) => {
     const row = collapsed[index] ?? null;
     const dueDate = periodDueDate(periodStart, cycle);
-    if (row) return { index, periodStart, dueDate, row, kind: rowKind(row), amount: Number(row.amount) };
+    if (row) return rowEntry(index, periodStart, dueDate, row);
     // Only the period right after the member's last SETTLED row can already be
     // due/late — everything further out hasn't opened yet.
     const isNextUnpaid = index === collapsed.length && lastRowSettled;
     const kind: PeriodKind = isNextUnpaid ? (now > dueDate ? 'late' : 'due') : 'upcoming';
-    return { index, periodStart, dueDate, row: null, kind, amount: expected };
+    return { index, periodStart, dueDate, row: null, kind, amount: expected, balance: 0, topUp: null };
   });
 }

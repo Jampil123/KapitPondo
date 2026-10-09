@@ -15,6 +15,58 @@ async function getActiveMembership(membershipId) {
   return data;
 }
 
+const round2 = (n) => Math.round(n * 100) / 100;
+const IN_REVIEW = ['submitted', 'confirmed'];
+
+// What a new payment from this member is for (0068). A period paid before
+// their heads went up still owes the difference, and that balance is paid
+// first, as a top-up of that period. Otherwise it's the next period, less
+// any advance credit left from paying before their heads went down.
+async function planPayment({ membershipId, cycleId }) {
+  const [membership, cycle, rows] = await Promise.all([
+    supabase.from('memberships').select('heads, contribution_credit').eq('id', membershipId).single(),
+    supabase.from('cycles').select('contribution_amount').eq('id', cycleId).single(),
+    supabase.from('contributions')
+      .select('id, cycle_id, amount, amount_due, credit_applied, credit_granted, status, top_up_of, created_at')
+      .eq('membership_id', membershipId),
+  ]);
+  for (const r of [membership, cycle, rows]) if (r.error) throw r.error;
+
+  const cycleRows = rows.data.filter((r) => r.cycle_id === cycleId);
+  const repriced = cycleRows
+    .filter((r) => !r.top_up_of && r.status === 'approved' && r.amount_due != null)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  for (const period of repriced) {
+    const topUps = cycleRows.filter((t) => t.top_up_of === period.id);
+    const toppedUp = topUps.filter((t) => t.status === 'approved').reduce((s, t) => s + Number(t.amount), 0);
+    const covered = Number(period.amount) + Number(period.credit_applied) - Number(period.credit_granted) + toppedUp;
+    const balance = round2(Number(period.amount_due) - covered);
+    if (balance > 0) {
+      return { topUpOf: period.id, balance, topUpInReview: topUps.some((t) => IN_REVIEW.includes(t.status)) };
+    }
+  }
+
+  // Credit already earmarked by payments still in review isn't available twice.
+  const reserved = rows.data
+    .filter((r) => IN_REVIEW.includes(r.status))
+    .reduce((s, r) => s + Number(r.credit_applied), 0);
+  const available = Math.max(round2(Number(membership.data.contribution_credit) - reserved), 0);
+  const expected = round2(Number(cycle.data.contribution_amount) * (membership.data.heads || 1));
+  return { topUpOf: null, expected, creditApplied: Math.min(available, expected) };
+}
+
+// A period fully covered by advance credit — approved on the spot, since no money moves.
+async function applyCredit({ membershipId, cycleId, amount, actorId }) {
+  const { data, error } = await supabase.rpc('apply_contribution_credit', {
+    p_membership_id: membershipId,
+    p_cycle_id: cycleId,
+    p_amount: amount,
+    p_actor_id: actorId,
+  });
+  if (error) throw Object.assign(new Error(error.message), { status: 409 });
+  return data;
+}
+
 async function createContribution(input) {
   const { data, error } = await supabase
     .from('contributions')
@@ -34,6 +86,8 @@ async function createContribution(input) {
       // wording differs ("Auditor verifies" vs "officer confirms").
       is_walk_in: input.isWalkIn ?? false,
       penalty_applied: input.penaltyApplied ?? 0,
+      top_up_of: input.topUpOf ?? null,
+      credit_applied: input.creditApplied ?? 0,
       status: 'submitted',
     })
     .select()
@@ -143,7 +197,7 @@ async function rejectContribution({ contributionId, reason }) {
 }
 
 module.exports = {
-  createContribution, listContributions, getContribution, getActiveMembership,
+  createContribution, listContributions, getContribution, getActiveMembership, planPayment, applyCredit,
   confirmContribution, verifyContribution, rejectContribution, hasDuplicateReference,
   recordWalkIn,
 };

@@ -19,7 +19,7 @@ const DEFAULTS = {
       { value: 'philsys', label: 'PhilSys National ID', active: true },
       { value: 'sss', label: 'SSS ID', active: true },
     ],
-    require_id_back: true,
+    require_id_back: false,
     require_selfie: true,
     minimum_age: 18,
   },

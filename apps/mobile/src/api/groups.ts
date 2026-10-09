@@ -7,6 +7,7 @@
  */
 import { api } from './client';
 import type { GroupRole } from '../constants/roles';
+import type { Money } from '../lib/money';
 
 export type GroupStatus = 'active' | 'archived';
 export type MembershipStatus = 'pending' | 'active' | 'suspended' | 'exited';
@@ -49,6 +50,8 @@ export interface MyGroup {
   /** Why the membership is suspended — "Withdrawal in progress" while withdrawing. */
   status_reason?: string | null;
   heads: number;
+  /** Advance credit from paying before heads went down — used toward the next contribution (0068). */
+  contribution_credit?: Money;
   /** Null while status is still 'pending' — set the moment an owner approves. */
   joined_at: string | null;
   groups: Group;
@@ -168,6 +171,8 @@ export interface GroupMember {
   role: GroupRole;
   status: MembershipStatus;
   heads: number;
+  /** Advance credit toward this member's next contribution (0068). */
+  contribution_credit?: Money;
   joined_at: string | null;
   /** Why the member is suspended (set by the Organizer), or "Withdrawal in progress". */
   status_reason?: string | null;

@@ -48,7 +48,7 @@ export function PasswordSection() {
   );
 
   return (
-    <form onSubmit={onSubmit} className="max-w-md">
+    <form onSubmit={onSubmit} className="w-full">
       {err && <ErrorBanner>{err}</ErrorBanner>}
       {saved && <div className="mb-4 rounded-lg bg-success-bg text-success text-sm px-3 py-2">Password changed.</div>}
 
