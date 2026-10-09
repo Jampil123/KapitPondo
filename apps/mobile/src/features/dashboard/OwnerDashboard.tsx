@@ -6,6 +6,7 @@ import { useQuery, useAction } from '@/hooks/useApi';
 import {
   Users, AlertTriangle, SlidersHorizontal, CalendarClock,
   Wallet, ScrollText, CheckCircle2, Check, X, Clock3, Download,
+  Eye,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
@@ -19,7 +20,8 @@ import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
 import { useSummary } from '@/features/reporting/reporting.hooks';
-import { useLoans, useLoanEligibility, useApproveLoan, useRejectLoan } from '@/features/lending/lending.hooks';
+import { useLoans, useLoanEligibility } from '@/features/lending/lending.hooks';
+import { LoanDecisionSheet } from '@/features/lending/LoanDecisionSheet';
 import { useSignoffQueue } from '@/features/signoff/signoff';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { usePenalties, useWaivePenalty } from '@/features/penalties/penalties.hooks';
@@ -27,9 +29,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
-import { useContributions } from '@/features/contributions/contributions.hooks';
-import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
-import { listPendingMembers, listMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
+import { CollectionBlock } from './CollectionBlock';
+import { listPendingMembers, approveMember, rejectMember, listOfficers, approveGcashProposal, rejectGcashProposal } from '@/api/groups';
 import type { Loan } from '@/api/lending';
 import type { Penalty } from '@/api/penalties';
 
@@ -151,50 +152,13 @@ function DecisionHead({ type, name, sub, amount }: { type: string; name: string;
   );
 }
 
-function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { groupId: string; loan: Loan; onPress: () => void; onChanged: () => void; moreCount?: number }) {
+function LoanDecisionCard({ groupId, loan, onView, onSeeAll, moreCount }: { groupId: string; loan: Loan; onView: () => void; onSeeAll: () => void; moreCount?: number }) {
   const { data: elig, loading } = useLoanEligibility(groupId, loan.id);
-  const { cycle } = useActiveCycle(groupId);
-  const approveLoan = useApproveLoan(groupId);
-  const reject = useRejectLoan(groupId);
-  const [rejecting, setRejecting] = useState(false);
   const name = loan.membership?.members?.full_name ?? 'Member';
-  // This cycle has a configured default rate (cycles/configure.tsx), so
-  // there's nothing left to type in — approving here directly, instead of
-  // sending the Owner to the full Loan Decisions page just to re-enter a
-  // rate that's already known, removes a redundant extra screen.
-  const hasCycleRate = cycle?.default_interest_rate != null;
 
-  async function doApprove(rate: number, amount: number) {
-    const ok = await approveLoan.run(loan.id, rate, String(amount));
-    if (ok !== undefined) onChanged();
-    else if (approveLoan.error) Alert.alert('Could not approve', approveLoan.error.message);
-  }
-
-  function onApprove() {
-    if (!hasCycleRate) return onPress(); // no default rate to approve with — needs the full review screen
-    const rate = Number(cycle!.default_interest_rate);
-    const available = Number(elig?.available_cash ?? 0);
-    const amount = available > 0 && available < Number(loan.principal) ? available : Number(loan.principal);
-    const partial = amount < Number(loan.principal);
-    Alert.alert(
-      'Approve this loan?',
-      `${formatPeso(amount)}${partial ? ` of the ${formatPeso(loan.principal)} requested (fund cash is short)` : ''} at ${(rate * 100).toFixed(2)}% monthly, ${loan.term_months} month${loan.term_months === 1 ? '' : 's'}, for ${name}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Approve', onPress: () => doApprove(rate, amount) },
-      ],
-    );
-  }
-
-  async function onRejectConfirm(reason: string) {
-    setRejecting(false);
-    const ok = await reject.run(loan.id, reason || undefined);
-    if (ok !== undefined) onChanged();
-    else if (reject.error) Alert.alert('Could not reject', reject.error.message);
-  }
-
+  // Tap anywhere (or View) for the pull-up details, where Approve / Reject live.
   return (
-    <DecisionCard onPress={onPress}>
+    <DecisionCard onPress={onView}>
       <DecisionHead
         type="Loan request"
         name={name}
@@ -212,30 +176,18 @@ function LoanDecisionCard({ groupId, loan, onPress, onChanged, moreCount }: { gr
             </>
           ) : null}
         </View>
-        {/* Lower-right of the card, flexed alongside the eligibility chips above.
-            Approves directly using this cycle's default rate when one is
-            configured; only falls back to the full review screen when there's
-            no rate to approve with (nothing to default to). */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <QuickAction label="Reject" tone="danger" Icon={X} onPress={() => setRejecting(true)} disabled={reject.loading} />
-          <QuickAction label="Approve" tone="ok" Icon={Check} onPress={onApprove} disabled={approveLoan.loading} />
-        </View>
+        <Pressable onPress={onView} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: semantic.brandDark, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 12 }}>
+          <Eye size={12} color="#fff" strokeWidth={2.6} />
+          <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>View</Text>
+        </Pressable>
       </View>
       {moreCount ? (
-        <Pressable onPress={onPress} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
+        <Pressable onPress={onSeeAll} style={{ paddingTop: 11, borderTopWidth: 1, borderColor: semantic.border }}>
           <Text variant="caption" style={{ color: semantic.brandDark, fontFamily: 'Poppins_700Bold', textAlign: 'center' }}>
             View all {moreCount} loan request{moreCount === 1 ? '' : 's'}
           </Text>
         </Pressable>
       ) : null}
-      <ReasonPrompt
-        visible={rejecting}
-        title={`Reject ${name}'s loan request?`}
-        confirmLabel="Reject"
-        destructive
-        onCancel={() => setRejecting(false)}
-        onConfirm={onRejectConfirm}
-      />
     </DecisionCard>
   );
 }
@@ -465,7 +417,10 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
     return list.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [loans, members, penalties, gcashPending, group?.treasurer_gcash_submitted_at, signoffMine]);
 
-  const visible = items.slice(0, 2);
+  // One card per kind of action (the oldest of each), so nothing waiting gets
+  // pushed off the dashboard; each card links to its full list for the rest.
+  const visible = items.filter((it, i) => items.findIndex((x) => x.kind === it.kind) === i);
+  const [viewLoan, setViewLoan] = useState<Loan | null>(null);
 
   return (
     <>
@@ -479,16 +434,13 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
         <EmptyQueue decidedCount={decidedPenalties.data?.length ?? 0} />
       ) : (
         <View>
-          {visible.map((item, i) => {
-            const isLast = i === visible.length - 1;
+          {visible.map((item) => {
             if (item.kind === 'loan') {
-              const visibleOfKind = visible.filter((v) => v.kind === 'loan').length;
-              const moreCount = isLast && loans.length > visibleOfKind ? loans.length : undefined;
-              return <LoanDecisionCard key={`loan-${item.loan.id}`} groupId={groupId} loan={item.loan} onPress={() => go('loans/decisions')} onChanged={onChanged} moreCount={moreCount} />;
+              const moreCount = loans.length > 1 ? loans.length : undefined;
+              return <LoanDecisionCard key={`loan-${item.loan.id}`} groupId={groupId} loan={item.loan} onView={() => setViewLoan(item.loan)} onSeeAll={() => go('loans/decisions')} moreCount={moreCount} />;
             }
             if (item.kind === 'member') {
-              const visibleOfKind = visible.filter((v) => v.kind === 'member').length;
-              const moreCount = isLast && members.length > visibleOfKind ? members.length : undefined;
+              const moreCount = members.length > 1 ? members.length : undefined;
               return <MembershipDecisionCard key={`member-${item.row.id}`} groupId={groupId} row={item.row} onPress={() => go('members/approvals')} onChanged={onChanged} moreCount={moreCount} />;
             }
             if (item.kind === 'gcash') {
@@ -497,106 +449,13 @@ function DecisionQueue({ groupId, go }: { groupId: string; go: (r: string) => vo
             if (item.kind === 'signoff') {
               return <SignoffCard key="signoff" groupId={groupId} count={signoffMine.length} first={signoffMine[0]} />;
             }
-            const visibleOfKind = visible.filter((v) => v.kind === 'penalty').length;
-            const moreCount = isLast && penalties.length > visibleOfKind ? penalties.length : undefined;
+            const moreCount = penalties.length > 1 ? penalties.length : undefined;
             return <PenaltyDecisionCard key={`penalty-${item.penalty.id}`} groupId={groupId} penalty={item.penalty} onPress={() => go('penalties')} onChanged={onChanged} moreCount={moreCount} />;
           })}
         </View>
       )}
-    </>
-  );
-}
 
-/* ---------------- This period's collection — the fact the old screen was missing ---------------- */
-// The denominator here used to be "members with a contribution row for this
-// cycle" — but a member who hasn't paid a single period yet has NO row at
-// all (nothing auto-creates one; see periods.ts), so they were silently
-// dropped from both the count and the peso total instead of showing up as
-// outstanding. Pulled from the full active roster (listMembers) instead.
-// Each member's status comes from buildTimeline() at THE SAME calendar
-// period index for everyone (currentPeriodIndex) — not each member's own
-// first-unpaid period, which would make a member's payment disappear from
-// "this month" the instant it's approved and their own progress rolls
-// forward to next month.
-function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const { cycle } = useActiveCycle(groupId);
-  const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
-  const membersQ = useQuery(() => listMembers(groupId), [groupId]);
-
-  const rows = contribs.data ?? [];
-  const roster = membersQ.data ?? [];
-
-  const summary = useMemo(() => {
-    if (!cycle || roster.length === 0) return null;
-    const rowsByMember = new Map<string, typeof rows>();
-    for (const r of rows) {
-      const list = rowsByMember.get(r.membership_id);
-      if (list) list.push(r); else rowsByMember.set(r.membership_id, [r]);
-    }
-
-    // Expected is every active member's heads × this cycle's per-head rate — a plain
-    // roster total, independent of anyone's individual payment history. (What each
-    // member has actually paid can differ from that, which is exactly the gap this
-    // widget exists to show — deriving "expected" from paid amounts would hide it.)
-    const totalHeads = roster.reduce((s, m) => s + m.heads, 0);
-    const expected = totalHeads * Number(cycle.contribution_amount);
-
-    let collected = 0;
-    let collectedCount = 0;
-    let lateCount = 0;
-    let latestDue: string | null = null;
-
-    // The SAME calendar period for every member — not each member's own first
-    // unpaid one. Otherwise a member who's already paid this month has their
-    // "current" period roll forward to next month the instant it's approved,
-    // and their payment disappears from THIS month's collected total.
-    const periodIdx = currentPeriodIndex(cycle);
-
-    for (const m of roster) {
-      const timeline = buildTimeline(cycle, rowsByMember.get(m.id) ?? [], m.heads);
-      const entry = periodIdx !== null ? (timeline[periodIdx] ?? null) : (timeline[timeline.length - 1] ?? null);
-      if (!entry) continue; // open-ended cycle, this member has no rows yet — nothing to compare against
-      if (entry.kind === 'paid') { collected += entry.amount; collectedCount++; }
-      if (entry.kind === 'late') lateCount++;
-      if (!latestDue) latestDue = entry.dueDate.toISOString(); // same period for everyone now, so the same due date
-    }
-
-    return { expected, collected, collectedCount, lateCount, latestDue, totalMembers: roster.length };
-  }, [cycle, roster, rows]);
-
-  if (!cycle || !summary) return null;
-
-  const pct = summary.expected > 0 ? Math.min(100, Math.round((summary.collected / summary.expected) * 100)) : 0;
-
-  return (
-    <>
-      <SectionHead title="This month's collection" aside={summary.latestDue ? `Due ${shortDate(summary.latestDue)}` : undefined} />
-      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 17 }, shadowToken.soft]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 11 }}>
-          <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>
-            {formatPeso(summary.collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(summary.expected)}</Text>
-          </Text>
-          <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>{summary.collectedCount} of {summary.totalMembers} members</Text>
-        </View>
-        <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
-          <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 5, backgroundColor: semantic.brand }} />
-        </View>
-
-        {summary.lateCount > 0 ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 15, paddingTop: 14, borderTopWidth: 1, borderColor: semantic.border }}>
-            <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: intent.danger.soft, alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={15} color={intent.danger.text} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 12, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{summary.lateCount} member{summary.lateCount === 1 ? '' : 's'} overdue</Text>
-              <Text variant="caption" color="secondary" style={{ fontSize: 10.5, lineHeight: 13, marginTop: 2 }}>Past the due date</Text>
-            </View>
-            <Pressable onPress={() => go('contributions/confirm')} style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 10, paddingVertical: 9, paddingHorizontal: 13 }}>
-              <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>View</Text>
-            </Pressable>
-          </View>
-        ) : null}
-      </View>
+      <LoanDecisionSheet groupId={groupId} loan={viewLoan} onClose={() => setViewLoan(null)} onDecided={onChanged} />
     </>
   );
 }
@@ -719,7 +578,7 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <DecisionQueue groupId={groupId} go={go} />
 
-      <CollectionBlock groupId={groupId} go={go} />
+      <CollectionBlock groupId={groupId} go={go} head={(title, aside) => <SectionHead title={title} aside={aside} />} />
 
       <ScrollTileRow actions={MANAGE_ACTIONS} go={go} />
 

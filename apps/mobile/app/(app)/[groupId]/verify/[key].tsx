@@ -4,7 +4,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, X, ScanLine, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { AppBar } from '@/components/shared/AppBar';
+import { CloseHeader } from '@/features/payments/PaymentPage';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -77,7 +77,8 @@ export default function VerifyRecord() {
   if (!i) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Record" backgroundColor={semantic.background} tintColor={semantic.textPrimary} />
+        {/* No title while loading — it would flash before the real one ("Contribution"). */}
+        <CloseHeader title={queue.loading ? undefined : 'Record'} onClose={() => router.back()} />
         {queue.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} /> : (
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 40, paddingHorizontal: 24 }}>This one’s already been handled, or it isn’t yours to sign off.</Text>
         )}
@@ -97,7 +98,7 @@ export default function VerifyRecord() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title={i.label} backgroundColor={semantic.background} tintColor={semantic.textPrimary} />
+      <CloseHeader title={i.label} onClose={() => router.back()} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 120 }}>
         <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{i.name}</Text>
         {i.amount !== null ? <Text style={{ fontSize: 32, lineHeight: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(i.amount)}</Text> : null}

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Wallet } from 'lucide-react-native';
+import { Wallet, ShieldCheck } from 'lucide-react-native';
+import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { CloseHeader } from '@/features/payments/PaymentPage';
+import { CloseHeader, SuccessView } from '@/features/payments/PaymentPage';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
@@ -71,6 +72,8 @@ export default function RequestLoan() {
   const [amount, setAmount] = useState('');
   const [purpose, setPurpose] = useState('');
   const [term, setTerm] = useState('6');
+  // Set once the application goes through — swaps the form for the success page.
+  const [submitted, setSubmitted] = useState<{ principal: number; months: number; perMonth: number; headNo: number; borrower: string; at: Date } | null>(null);
 
   // One loan per head — default to the head the hub passed in, else the first free one.
   const slots = eligibility.data?.slots ?? [];
@@ -80,7 +83,7 @@ export default function RequestLoan() {
 
   // A loan for someone you carry needs their name — saved onto that head, so
   // it also shows as "Head 2 · Pedro" everywhere else. Head 1 is you.
-  const { membership } = useActiveGroup();
+  const { membership, role } = useActiveGroup();
   const { member } = useAuth();
   const saveNames = useSetHeadNames(groupId!);
   const [nameDraft, setNameDraft] = useState<Record<number, string>>({});
@@ -127,10 +130,78 @@ export default function RequestLoan() {
     }
     const ok = await apply.run({ principal: amt, term_months: months, purpose: purpose || undefined, head_no: headNo });
     if (ok !== undefined) {
-      router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } });
+      setSubmitted({ principal: Number(amt), months, perMonth, headNo, borrower: headNo > 1 ? borrowerName.trim() : 'You', at: new Date() });
     } else if (apply.error) {
       Alert.alert('Could not submit', apply.error.message);
     }
+  }
+
+  if (submitted) {
+    // The Organizer decides loans — except their own, which goes to the Treasurer.
+    const decider = role === 'owner' ? 'the Treasurer' : 'the Organizer';
+    return (
+      <SuccessView
+        heading="Loan request sent"
+        amount={submitted.principal}
+        note={`${decider[0].toUpperCase()}${decider.slice(1)} will review it. You'll be notified once it's decided.`}
+        phrase="Borrow with purpose, repay with pride — every peso you return helps the whole group grow."
+        rows={[
+          { label: 'Term', value: `${submitted.months} month${submitted.months === 1 ? '' : 's'}` },
+          { label: 'About per month', value: `${formatPeso(submitted.perMonth)} + interest` },
+          { label: 'For', value: submitted.headNo > 1 ? `Head ${submitted.headNo} · ${submitted.borrower}` : 'You (Head 1)' },
+          { label: 'Status', value: 'Waiting for review' },
+          { label: 'Sent', value: submitted.at.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
+        ]}
+        onClose={() => router.back()}
+        viewAllLabel="View my loans"
+        onViewAll={() => router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } })}
+      />
+    );
+  }
+
+  // Loans need a verified account — explain that here, with the way to fix it, instead of the form.
+  const vstatus = member?.verification_status;
+  if (vstatus && vstatus !== 'verified') {
+    const vmeta = VERIFY_META[vstatus];
+    const vtone = intent[vmeta.tone];
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
+        <CloseHeader title="Request a loan" onClose={() => router.back()} />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
+          <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: vtone.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+            <ShieldCheck size={42} color={vtone.text} />
+          </View>
+          <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, textAlign: 'center' }}>
+            {vstatus === 'rejected' ? "Loans aren't available" : 'Verify your account first'}
+          </Text>
+          <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 8, lineHeight: 20 }}>
+            {vstatus === 'pending'
+              ? "Your ID is being reviewed. You can request a loan once it's approved."
+              : vstatus === 'rejected'
+                ? 'Loans are only for verified accounts, and your verification was rejected.'
+                : 'Loans are only for verified members. It takes a few minutes: a photo of your ID and a selfie.'}
+          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: vtone.soft, borderRadius: 20, paddingVertical: 5, paddingHorizontal: 12, marginTop: 16 }}>
+            <vmeta.icon size={13} color={vtone.text} strokeWidth={2.4} />
+            <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: vtone.text }}>{vmeta.title}</Text>
+          </View>
+        </View>
+        <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 8 }}>
+          {vmeta.btn ? <Button label={vmeta.btn} onPress={() => router.push(verifyDestination(vstatus) as any)} /> : null}
+          <Button label="Not now" variant="ghost" onPress={() => router.back()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Don't show the form until eligibility is known — it used to flash before the gate below.
+  if (!eligibility.data && !eligibility.error) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
+        <CloseHeader title="Request a loan" onClose={() => router.back()} />
+        <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} />
+      </SafeAreaView>
+    );
   }
 
   // The "+" sheet reaches this form directly, so it enforces the same eligibility gate as the loans overview.

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View, ScrollView, Pressable, Image, ActivityIndicator, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, ScrollView, Pressable, Image, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Mail, ChevronDown, Phone, Calendar } from 'lucide-react-native';
-import { DateTimePicker } from '@expo/ui/community/datetime-picker';
+import { Mail, ChevronDown, Phone } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -14,6 +13,7 @@ import { AddressPickerSheet } from '@/components/ui/AddressPickerSheet';
 import { PickerSheet } from '@/components/shared/PickerSheet';
 import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
 import { VerificationStepHeader } from '@/components/shared/VerificationStepHeader';
+import { DateField } from '@/components/shared/DateInput';
 import { semantic, shadowToken } from '@/theme/colors';
 import { uploadImage, readImageBase64 } from '@/lib/upload';
 import { submitIdentity, extractIdFields } from '@/api/members';
@@ -51,92 +51,8 @@ function toTitleCase(value: string): string {
     .replace(/(^|[\s\-'.])([a-zà-ÿ])/g, (_m, sep, letter) => sep + letter.toUpperCase());
 }
 
-function parseIsoDate(value: string): Date | null {
-  if (!value.trim()) return null;
-  const d = new Date(`${value.trim()}T00:00:00`);
-  return isNaN(d.getTime()) ? null : d;
-}
-function toIsoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function formatDisplayDate(value: string): string {
-  const d = parseIsoDate(value);
-  return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
-}
-
 const MAX_BIRTHDAY = new Date();
-
-/** Tap-to-open date field backed by @expo/ui's native DateTimePicker — same pattern as signup.tsx's. */
-function BirthdayField({ label, value, onChange }: { label: string; value: string; onChange: (iso: string) => void }) {
-  const [show, setShow] = useState(false);
-  const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={{ gap: 7, marginBottom: 15 }}>
-        <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>{label}</Text>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={semantic.textMuted}
-          style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, height: 48, color: semantic.textPrimary }}
-        />
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ gap: 6, marginBottom: 15 }}>
-      <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>{label}</Text>
-      <Pressable
-        onPress={() => setShow(true)}
-        style={{
-          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6,
-          backgroundColor: semantic.surfaceAlt, borderRadius: 12,
-          paddingVertical: 14, paddingHorizontal: 14,
-        }}
-      >
-        <Text variant="body" style={{ color: value ? semantic.textPrimary : semantic.textMuted }}>
-          {value ? formatDisplayDate(value) : 'Select date'}
-        </Text>
-        <Calendar size={18} color={semantic.textMuted} />
-      </Pressable>
-
-      {show && Platform.OS === 'android' ? (
-        <DateTimePicker
-          mode="date"
-          value={current}
-          maximumDate={MAX_BIRTHDAY}
-          onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
-          onDismiss={() => setShow(false)}
-          style={{ position: 'absolute', width: 0, height: 0 }}
-        />
-      ) : null}
-
-      {Platform.OS === 'ios' ? (
-        <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setShow(false)}>
-            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
-              <Text variant="h3" style={{ fontSize: 17 }}>{label}</Text>
-              <DateTimePicker
-                mode="date"
-                display="inline"
-                value={current}
-                maximumDate={MAX_BIRTHDAY}
-                onValueChange={(_e, date) => onChange(toIsoDate(date))}
-              />
-              <Button label="Done" onPress={() => setShow(false)} />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      ) : null}
-    </View>
-  );
-}
+const DEFAULT_BIRTHDAY = new Date(2000, 0, 1);
 
 export default function Identity() {
   const router = useRouter();
@@ -419,7 +335,7 @@ export default function Identity() {
               <Field label="Middle Name (Optional)" placeholder="Santos" value={middleName} onChangeText={setMiddleName} />
               <View style={{ flexDirection: 'row', gap: 12 }}>
                 <View style={{ flex: 1 }}>
-                  <BirthdayField label="Birthday" value={birthday} onChange={setBirthday} />
+                  <DateField label="Birthday" value={birthday} onChange={setBirthday} maximumDate={MAX_BIRTHDAY} defaultDate={DEFAULT_BIRTHDAY} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text variant="label" color="secondary" style={{ fontSize: 12.5, marginBottom: 8 }}>Sex</Text>

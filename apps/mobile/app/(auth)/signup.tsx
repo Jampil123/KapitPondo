@@ -1,37 +1,21 @@
 import { useState } from 'react';
-import { View, ScrollView, TextInput, Modal, Platform, KeyboardAvoidingView } from 'react-native';
+import { View, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Pressable } from 'react-native';
-import { User, Phone, Lock, Mail, Calendar, ChevronLeft } from 'lucide-react-native';
-import { DateTimePicker } from '@expo/ui/community/datetime-picker';
+import { User, Phone, Lock, Mail, ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field, PasswordField } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { PasswordRules, passwordMeetsRules } from '@/components/ui/PasswordRules';
 import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
-import { semantic, intent } from '@/theme/colors';
+import { DateField, parseIsoDate } from '@/components/shared/DateInput';
+import { semantic } from '@/theme/colors';
 import { useAuth, PhoneAlreadyRegisteredError } from '@/context/AuthContext';
 
 const PREFIX = '+63 ';
-
-function parseIsoDate(value: string): Date | null {
-  if (!value.trim()) return null;
-  const d = new Date(`${value.trim()}T00:00:00`);
-  return isNaN(d.getTime()) ? null : d;
-}
-function toIsoDate(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-function formatDisplayDate(value: string): string {
-  const d = parseIsoDate(value);
-  return d ? d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : value;
-}
 
 const MIN_SIGNUP_AGE = 18;
 
@@ -44,105 +28,7 @@ function calculateAge(birthDate: Date): number {
 }
 
 const MAX_BIRTHDAY = new Date();
-
-function BirthdayField({
-  label,
-  value,
-  onChange,
-  error,
-}: {
-  label: string;
-  value: string;
-  onChange: (iso: string) => void;
-  error?: string;
-}) {
-  const [show, setShow] = useState(false);
-  const current = parseIsoDate(value) ?? new Date(2000, 0, 1);
-
-  if (Platform.OS === 'web') {
-    return (
-      <View style={{ gap: 7, marginBottom: 15 }}>
-        <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
-        <TextInput
-          value={value}
-          onChangeText={onChange}
-          placeholder="YYYY-MM-DD"
-          placeholderTextColor={semantic.textMuted}
-          style={{
-            backgroundColor: semantic.surfaceAlt,
-            borderRadius: 12,
-            paddingHorizontal: 14,
-            height: 48,
-            color: semantic.textPrimary,
-            borderWidth: error ? 1.5 : 0,
-            borderColor: error ? intent.danger.base : undefined,
-          }}
-        />
-        {error ? (
-          <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
-        ) : null}
-      </View>
-    );
-  }
-
-  return (
-    <View style={{ gap: 6, marginBottom: 15 }}>
-      <Text variant="label" color="secondary" style={{ fontSize: 12.5, fontWeight: '500' }}>{label}</Text>
-      <Pressable
-        onPress={() => setShow(true)}
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 10,
-          backgroundColor: semantic.surfaceAlt,
-          borderRadius: 12,
-          paddingVertical: 13,
-          paddingHorizontal: 14,
-          borderWidth: error ? 1.5 : 0,
-          borderColor: error ? intent.danger.base : undefined,
-        }}
-      >
-        <Text variant="body" style={{ color: value ? semantic.textPrimary : semantic.textMuted }}>
-          {value ? formatDisplayDate(value) : 'Select date'}
-        </Text>
-        <Calendar size={18} color={semantic.textMuted} />
-      </Pressable>
-      {error ? (
-        <Text variant="caption" style={{ color: intent.danger.text }}>{error}</Text>
-      ) : null}
-
-      {show && Platform.OS === 'android' ? (
-        <DateTimePicker
-          mode="date"
-          value={current}
-          maximumDate={MAX_BIRTHDAY}
-          onValueChange={(_e, date) => { onChange(toIsoDate(date)); setShow(false); }}
-          onDismiss={() => setShow(false)}
-          style={{ position: 'absolute', width: 0, height: 0 }}
-        />
-      ) : null}
-
-      {Platform.OS === 'ios' ? (
-        <Modal visible={show} transparent animationType="slide" onRequestClose={() => setShow(false)}>
-          <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.35)', justifyContent: 'flex-end' }} onPress={() => setShow(false)}>
-            <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 20, gap: 14 }}>
-              <Text variant="h3" style={{ fontSize: 17 }}>{label}</Text>
-              <DateTimePicker
-                mode="date"
-                display="inline"
-                value={current}
-                maximumDate={MAX_BIRTHDAY}
-                onValueChange={(_e, date) => onChange(toIsoDate(date))}
-              />
-              <Button label="Done" onPress={() => setShow(false)} />
-            </Pressable>
-          </Pressable>
-        </Modal>
-      ) : null}
-    </View>
-  );
-}
+const DEFAULT_BIRTHDAY = new Date(2000, 0, 1);
 
 function formatPhone(raw: string): string {
   if (!raw.startsWith('+63')) return PREFIX;
@@ -264,7 +150,7 @@ export default function SignUp() {
             error={lastNameError}
             leading={<User size={18} color={semantic.textMuted} />}
           />
-          <BirthdayField
+          <DateField maximumDate={MAX_BIRTHDAY} defaultDate={DEFAULT_BIRTHDAY}
             label="Birthday"
             value={birthday}
             onChange={(iso) => { setBirthday(iso); setTouched((t) => ({ ...t, birthday: true })); }}

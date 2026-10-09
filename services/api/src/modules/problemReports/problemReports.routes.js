@@ -25,6 +25,14 @@ router.post('/me/problem-reports', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Active categories only — what a member may file under.
+router.get('/me/problem-reports/categories', requireAuth, async (req, res, next) => {
+  try {
+    const categories = await service.getCategories();
+    res.json({ categories: categories.filter((c) => c.active !== false).map(({ key, label }) => ({ key, label })) });
+  } catch (err) { next(err); }
+});
+
 router.get('/me/problem-reports', requireAuth, async (req, res, next) => {
   try {
     res.json({ reports: await service.listMyReports(req.member.id) });

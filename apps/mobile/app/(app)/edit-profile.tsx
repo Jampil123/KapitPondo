@@ -7,6 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ChevronDown, ChevronRight, Check, X, Phone, Mail, Lock, AlertTriangle, Camera } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
+import { DateField } from '@/components/shared/DateInput';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
@@ -32,15 +33,18 @@ type FieldConfig = {
   key: ProfileUpdateField;
   label: string;
   placeholder?: string;
-  kind: 'text' | 'picker' | 'address';
+  kind: 'text' | 'picker' | 'address' | 'date';
   options?: PickerOption[];
 };
+
+const MAX_BIRTHDAY = new Date();
+const DEFAULT_BIRTHDAY = new Date(2000, 0, 1);
 
 const PERSONAL_FIELDS: FieldConfig[] = [
   { key: 'first_name', label: 'First Name', placeholder: 'Juan', kind: 'text' },
   { key: 'last_name', label: 'Last Name', placeholder: 'Dela Cruz', kind: 'text' },
   { key: 'middle_name', label: 'Middle Name', placeholder: 'Santos', kind: 'text' },
-  { key: 'birthday', label: 'Birthday', placeholder: 'MM/DD/YYYY', kind: 'text' },
+  { key: 'birthday', label: 'Birthday', kind: 'date' },
   { key: 'nationality', label: 'Nationality', placeholder: 'Filipino', kind: 'text' },
 ];
 
@@ -272,6 +276,9 @@ export default function EditProfile() {
       occupation: [occupation, setOccupation],
     };
     const [value, setValue] = stateMap[f.key];
+    if (f.kind === 'date') {
+      return <DateField key={f.key} label={f.label} value={value} onChange={setValue} maximumDate={MAX_BIRTHDAY} defaultDate={DEFAULT_BIRTHDAY} />;
+    }
     return <Field key={f.key} label={f.label} placeholder={f.placeholder} value={value} onChangeText={setValue} />;
   }
 
@@ -540,6 +547,8 @@ function UpdateRequestModal({
                   <ChevronDown size={18} color={semantic.textMuted} />
                 </Pressable>
               </>
+            ) : field.kind === 'date' ? (
+              <DateField label="New value" value={newValue} onChange={setNewValue} maximumDate={MAX_BIRTHDAY} defaultDate={DEFAULT_BIRTHDAY} />
             ) : (
               <Field label="New value" placeholder="Enter the corrected information" value={newValue} onChangeText={setNewValue} />
             )}

@@ -1,33 +1,19 @@
 import { useState } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
-import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Wallet, Banknote, Eye, CheckCircle2, AlertTriangle, X } from 'lucide-react-native';
+import { Wallet, Banknote, Eye } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { TabBar } from '@/components/ui/TabBar';
 import { Avatar } from '@/components/ui/Avatar';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { BandHeader } from '@/components/shared/DashboardBand';
-import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
-import { SlideSheet } from '@/components/shared/SlideSheet';
 import { semantic, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
-import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useLoans, useLiquidity, useApproveLoan, useRejectLoan, useLoanEligibility } from '@/features/lending/lending.hooks';
-import { headLabel, type Loan, type LoanStatus } from '@/api/lending';
-
-function loanName(l: Loan): string {
-  const name = l.membership?.members?.full_name ?? 'Member';
-  // One loan per head — say which head when it isn't the member's own.
-  return l.head_no > 1 ? `${name} · ${headLabel(l.head_no, l.head_name)}` : name;
-}
-function shortDate(iso: string | null): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-}
+import { useLoans, useLiquidity } from '@/features/lending/lending.hooks';
+import { LoanDecisionSheet, loanName } from '@/features/lending/LoanDecisionSheet';
+import type { Loan, LoanStatus } from '@/api/lending';
 
 export default function LoanDecisions() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
@@ -36,56 +22,11 @@ export default function LoanDecisions() {
 
   const { membership } = useActiveGroup();
   const liquidity = useLiquidity(groupId!);
-  const { cycle } = useActiveCycle(groupId!);
   const canDisburse = membership?.role === 'treasurer';
   const pendingList = useLoans(groupId!, { status: 'pending' });
   const tabList = useLoans(groupId!, { status: tab });
-  const approve = useApproveLoan(groupId!);
-  const reject = useRejectLoan(groupId!);
-
   const [detailsTarget, setDetailsTarget] = useState<Loan | null>(null); // loan being viewed before a decision
-  const eligibility = useLoanEligibility(groupId!, detailsTarget?.id);
-
-  const [rejectTarget, setRejectTarget] = useState<Loan | null>(null);
   const available = Number(liquidity.data?.available_cash ?? 0);
-  const hasCycleRate = cycle?.default_interest_rate != null;
-
-  // Approving needs a rate — sourced from this cycle's configured default
-  // (cycles/configure.tsx) instead of a second sheet asking the Owner to
-  // type one in. Confirms with a dialog right here rather than opening
-  // another screen just to review the same numbers again.
-  function onApprovePress(l: Loan) {
-    if (!hasCycleRate) {
-      Alert.alert('No interest rate set', "This cycle has no default interest rate configured yet — set one in Configure Cycle before approving loans.");
-      return;
-    }
-    const rate = Number(cycle!.default_interest_rate);
-    const amount = available > 0 && available < Number(l.principal) ? available : Number(l.principal);
-    const partial = amount < Number(l.principal);
-    setDetailsTarget(null);
-    Alert.alert(
-      'Approve this loan?',
-      `${formatPeso(amount)}${partial ? ` of the ${formatPeso(l.principal)} requested (fund cash is short)` : ''} at ${(rate * 100).toFixed(2)}% monthly, ${l.term_months} month${l.term_months === 1 ? '' : 's'}, for ${loanName(l)}.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Approve', onPress: () => confirmApprove(l.id, rate, amount) },
-      ],
-    );
-  }
-
-  async function confirmApprove(loanId: string, rate: number, amount: number) {
-    const ok = await approve.run(loanId, rate, String(amount));
-    if (ok !== undefined) { pendingList.refetch(); tabList.refetch(); liquidity.refetch(); }
-    else if (approve.error) Alert.alert('Could not approve', approve.error.message);
-  }
-
-  async function onRejectConfirm(reason: string) {
-    if (!rejectTarget) return;
-    const ok = await reject.run(rejectTarget.id, reason || undefined);
-    setRejectTarget(null);
-    if (ok !== undefined) { tabList.refetch(); pendingList.refetch(); }
-    else if (reject.error) Alert.alert('Could not reject', reject.error.message);
-  }
 
   const list = tabList.data ?? [];
 
@@ -176,113 +117,11 @@ export default function LoanDecisions() {
         )}
       </View>
 
-      {/* View details — what the Organizer should review before deciding (TC-014/TC-034) */}
-      <SlideSheet value={detailsTarget} onClose={() => setDetailsTarget(null)}>
-        {(d) => (
-          <>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-              <Avatar name={loanName(d)} uri={d.membership?.members?.avatar_url} size={46} />
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text variant="h2" style={{ fontSize: 17 }}>{loanName(d)}</Text>
-                <StatusBadge entity="loan" value={d.status} />
-              </View>
-              <Pressable onPress={() => setDetailsTarget(null)} hitSlop={10} style={{ padding: 2 }}>
-                <X size={20} color={semantic.textMuted} />
-              </Pressable>
-            </View>
-
-            <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 14, padding: 13, gap: 8 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text variant="caption" color="secondary">Purpose</Text>
-                <Text variant="label" style={{ fontSize: 13 }}>{d.purpose ?? '—'}</Text>
-              </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text variant="caption" color="secondary">Requested principal</Text>
-                <Text variant="label" style={{ fontSize: 13 }}>{formatPeso(d.principal)}</Text>
-              </View>
-              {d.approved_principal ? (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text variant="caption" color="secondary">Approved amount</Text>
-                  <Text variant="label" style={{ fontSize: 13 }}>{formatPeso(d.approved_principal)}</Text>
-                </View>
-              ) : null}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text variant="caption" color="secondary">Term</Text>
-                <Text variant="label" style={{ fontSize: 13 }}>{d.term_months} months</Text>
-              </View>
-              {d.interest_rate ? (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text variant="caption" color="secondary">Interest rate</Text>
-                  <Text variant="label" style={{ fontSize: 13 }}>{(Number(d.interest_rate) * 100).toFixed(1)}% / month</Text>
-                </View>
-              ) : null}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                <Text variant="caption" color="secondary">Applied</Text>
-                <Text variant="label" style={{ fontSize: 13 }}>{shortDate(d.applied_at)}</Text>
-              </View>
-              {d.rejection_reason ? (
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text variant="caption" color="secondary">Rejection reason</Text>
-                  <Text variant="label" style={{ fontSize: 13, flexShrink: 1, textAlign: 'right' }}>{d.rejection_reason}</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {d.status === 'pending' ? (
-              <View style={{ backgroundColor: eligibility.data?.eligible === false ? '#F8EFDA' : '#E2F0E8', borderRadius: 14, padding: 13, gap: 8 }}>
-                {eligibility.loading ? (
-                  <ActivityIndicator color={semantic.brand} />
-                ) : eligibility.data?.eligible ? (
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <CheckCircle2 size={18} color="#3E8E66" />
-                    <Text variant="label" style={{ color: '#3E8E66', fontSize: 13 }}>Eligible for approval</Text>
-                  </View>
-                ) : (
-                  <View style={{ gap: 6 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <AlertTriangle size={18} color="#A87C2C" />
-                      <Text variant="label" style={{ color: '#A87C2C', fontSize: 13 }}>Review before approving</Text>
-                    </View>
-                    {(eligibility.data?.reasons ?? []).map((r) => (
-                      <Text key={r} variant="caption" style={{ color: '#A87C2C' }}>· {r}</Text>
-                    ))}
-                  </View>
-                )}
-                <Text variant="caption" color="secondary">Available fund cash: {formatPeso(available)}</Text>
-              </View>
-            ) : null}
-
-            {d.status === 'pending' ? (
-              <View style={{ flexDirection: 'row', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Pressable
-                    onPress={() => { setDetailsTarget(null); setRejectTarget(d); }}
-                    style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#F7E5E5' }}
-                  >
-                    <Text variant="label" style={{ color: '#C25C5E' }}>Reject</Text>
-                  </Pressable>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Pressable
-                    onPress={() => onApprovePress(d)}
-                    style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand }}
-                  >
-                    <Text variant="label" style={{ color: '#fff' }}>Approve</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </>
-        )}
-      </SlideSheet>
-
-      <ReasonPrompt
-        visible={!!rejectTarget}
-        title={rejectTarget ? `Reject ${loanName(rejectTarget)}'s loan?` : 'Reject loan'}
-        confirmLabel="Reject"
-        destructive
-        onCancel={() => setRejectTarget(null)}
-        onConfirm={onRejectConfirm}
+      <LoanDecisionSheet
+        groupId={groupId!}
+        loan={detailsTarget}
+        onClose={() => setDetailsTarget(null)}
+        onDecided={() => { pendingList.refetch(); tabList.refetch(); liquidity.refetch(); }}
       />
     </SafeAreaView>
   );

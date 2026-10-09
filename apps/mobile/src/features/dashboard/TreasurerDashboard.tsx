@@ -1,14 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { View, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
-import { Alert } from '@/lib/alert';
-import { toast } from '@/components/ui/Toast';
-import { useRouter } from 'expo-router';
+import { useCallback, useMemo, type ReactNode } from 'react';
+import { View, Pressable, ActivityIndicator } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   BarChart3, CheckCircle2, ScrollText,
   ArrowUpCircle,
-  PiggyBank, HandCoins, Receipt, X, Check, CalendarClock, Clock, Download } from 'lucide-react-native';
+  PiggyBank, HandCoins, CalendarClock, Clock, Download, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { ScrollTileRow, type TileAction } from '@/components/shared/ScrollTileRow';
 import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
@@ -19,8 +16,9 @@ import { parseApiDate } from '@/lib/cycle';
 import { useAuth } from '@/context/AuthContext';
 import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useContributions, useConfirmContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
-import { useLoans, useRepayments, useConfirmRepaymentReceipt, useRejectRepayment } from '@/features/lending/lending.hooks';
+import { useContributions } from '@/features/contributions/contributions.hooks';
+import { CollectionBlock } from './CollectionBlock';
+import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
 import { useSignoffQueue } from '@/features/signoff/signoff';
 import type { Contribution } from '@/api/contributions';
 import type { Loan } from '@/api/lending';
@@ -29,14 +27,6 @@ function shortDate(iso: string | null) {
   if (!iso) return '';
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-}
-
-/** "15th" — day of month only, built by hand so it doesn't depend on the device's Intl support. */
-function dayOnly(iso: string) {
-  const d = parseApiDate(iso).getDate();
-  if (isNaN(d)) return '';
-  const suffix = d % 100 >= 11 && d % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][d % 10] ?? 'th';
-  return `${d}${suffix}`;
 }
 
 function SectionHead({ title, aside, tone, onAsidePress }: { title: string; aside?: string; tone?: 'hot' | 'calm'; onAsidePress?: () => void }) {
@@ -131,98 +121,26 @@ function EmptyRow({ title, sub }: { title: string; sub: string }) {
   );
 }
 
-/* ---------------- Payment verifications — confirm/return right here, like the Organizer's decision cards ---------------- */
+/* ---------------- Payment verifications — tap a card for the full sign-off screen ---------------- */
 type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean; kind: 'contribution' | 'repayment'; proof: string | null };
 
 const VERIFY_SHOWN = 3;
 
-function VerifyAction({ label, tone, Icon, onPress, disabled }: { label: string; tone: 'ok' | 'danger'; Icon: any; onPress: () => void; disabled?: boolean }) {
-  // Confirm uses the app's primary button color; Return stays a soft red — same as the Organizer's quick actions.
-  const t = tone === 'ok' ? { bg: semantic.brandDark, fg: '#fff' } : { bg: intent.danger.soft, fg: intent.danger.text };
+/** Opens verify/[key] — recorded vs read from proof, rule check, and the Confirm / Reject step. */
+function VerificationCard({ row, onPress }: { row: ProofRow; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} hitSlop={6} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: t.bg, borderRadius: 9, paddingVertical: 6, paddingHorizontal: 11, opacity: disabled ? 0.5 : 1 }}>
-      <Icon size={12} color={t.fg} strokeWidth={2.6} />
-      <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: t.fg }}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function VerificationCard({ groupId, row, onChanged }: { groupId: string; row: ProofRow; onChanged: () => void }) {
-  // Step 1 of 2 (migration 0075): confirming moves it to "Pending verification"; the Auditor's verification posts it.
-  const approveContribution = useConfirmContribution(groupId);
-  const rejectContribution = useRejectContribution(groupId);
-  const confirmRepayment = useConfirmRepaymentReceipt(groupId);
-  const rejectRepayment = useRejectRepayment(groupId);
-  const approve = row.kind === 'contribution' ? approveContribution : confirmRepayment;
-  const reject = row.kind === 'contribution' ? rejectContribution : rejectRepayment;
-  const [returning, setReturning] = useState(false);
-  const [viewingProof, setViewingProof] = useState(false);
-  const busy = approve.loading || reject.loading;
-  const what = row.kind === 'contribution' ? 'contribution' : 'repayment';
-
-  async function onConfirm() {
-    const ok = await approve.run(row.id);
-    if (ok !== undefined) { onChanged(); toast('Confirmed — waiting for the Auditor’s verification'); }
-    else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
-  }
-  async function onReturn(reason: string) {
-    setReturning(false);
-    const ok = await reject.run(row.id, reason || undefined);
-    if (ok !== undefined) { onChanged(); toast(`Returned ${row.name}'s ${what}`); }
-    else if (reject.error) Alert.alert('Could not return', reject.error.message);
-  }
-
-  return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, gap: 12, marginBottom: 10 }, shadowToken.soft]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text variant="overline" color="muted">{row.kind === 'contribution' ? 'Contribution' : 'Loan repayment'}</Text>
-          <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, marginTop: 4 }} numberOfLines={2}>{row.name}</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-            <Text variant="caption" color="secondary" numberOfLines={1}>{row.sub}</Text>
-            {row.late ? <Tag tone="late">Late</Tag> : null}
-          </View>
+    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 }, shadowToken.soft]}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="overline" color="muted">{row.kind === 'contribution' ? 'Contribution' : 'Loan repayment'}</Text>
+        <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, marginTop: 2 }} numberOfLines={1}>{row.name}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
+          <Text variant="caption" color="secondary" numberOfLines={1}>{row.sub}</Text>
+          {row.late ? <Tag tone="late">Late</Tag> : null}
         </View>
-        <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(row.amount)}</Text>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-        {row.proof ? (
-          <Pressable onPress={() => setViewingProof(true)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
-            <Image source={{ uri: row.proof }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-          </Pressable>
-        ) : (
-          <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <Receipt size={16} color={semantic.textMuted} />
-          </View>
-        )}
-        <View style={{ flex: 1 }} />
-        <VerifyAction label="Return" tone="danger" Icon={X} onPress={() => setReturning(true)} disabled={busy} />
-        <VerifyAction label="Confirm" tone="ok" Icon={Check} onPress={onConfirm} disabled={busy} />
-      </View>
-      <ReasonPrompt
-        visible={returning}
-        title={`Return ${row.name}'s ${what}?`}
-        confirmLabel="Return"
-        destructive
-        required={row.kind === 'contribution'}
-        onCancel={() => setReturning(false)}
-        onConfirm={onReturn}
-      />
-      <Modal visible={viewingProof} transparent animationType="fade" onRequestClose={() => setViewingProof(false)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewingProof(false)}>
-          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <View style={{ flex: 1 }}>
-                <Text variant="label">{row.name}</Text>
-                <Text variant="caption" color="secondary">{formatPeso(row.amount)}</Text>
-              </View>
-              <Pressable onPress={() => setViewingProof(false)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-            </View>
-            {row.proof ? <Image source={{ uri: row.proof }} style={{ width: '100%', aspectRatio: 3 / 4, backgroundColor: semantic.surfaceAlt }} resizeMode="contain" /> : null}
-          </View>
-        </Pressable>
-      </Modal>
-    </View>
+      <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(row.amount)}</Text>
+      <ChevronRight size={18} color={semantic.textMuted} />
+    </Pressable>
   );
 }
 
@@ -262,7 +180,10 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
 
   const rows = [...contribRows, ...repayRows];
   const loading = (pendingContribs.data == null && !pendingContribs.error) || (pendingRepayments.data == null && !pendingRepayments.error);
-  const refresh = () => { pendingContribs.refetch(); pendingRepayments.refetch(); };
+  // Back from the sign-off screen: drop whatever was confirmed or returned there.
+  const { refetch: refetchContribs } = pendingContribs;
+  const { refetch: refetchRepayments } = pendingRepayments;
+  useFocusEffect(useCallback(() => { refetchContribs(); refetchRepayments(); }, [refetchContribs, refetchRepayments]));
   // "See all" opens whichever list the hidden ones belong to — repayments live on their own page.
   const hidden = rows.slice(VERIFY_SHOWN);
   const seeAllRepayments = hidden.length > 0 && hidden.every((r) => r.kind === 'repayment');
@@ -279,7 +200,7 @@ function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: 
         <EmptyRow title="No proofs waiting" sub="New submissions will show up here" />
       ) : (
         <>
-          {rows.slice(0, VERIFY_SHOWN).map((r) => <VerificationCard key={`${r.kind}-${r.id}`} groupId={groupId} row={r} onChanged={refresh} />)}
+          {rows.slice(0, VERIFY_SHOWN).map((r) => <VerificationCard key={`${r.kind}-${r.id}`} row={r} onPress={() => go('verify/[key]', { key: `${r.kind === 'contribution' ? 'c' : 'p'}-${r.id}` })} />)}
           {hidden.length > 0 ? (
             <Pressable
               onPress={() => (seeAllRepayments ? go('loans/record-repayment') : go('contributions/confirm', { tab: 'pending' }))}
@@ -415,106 +336,6 @@ function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }
 }
 
 /* ---------------- This month's collection ---------------- */
-function CollectionBlock({ groupId, go }: { groupId: string; go: (r: string, p?: Record<string, string>) => void }) {
-  const { cycle } = useActiveCycle(groupId);
-  const contribs = useContributions(groupId, cycle?.id ? { cycle_id: cycle.id } : {});
-  const balances = useMemberBalances(groupId);
-
-  // Top-ups pay an earlier period's balance, so they never stand for "this period".
-  const rows = (contribs.data ?? []).filter((r) => !r.top_up_of);
-  // "This period" = each member's most recent contribution row for this cycle — see
-  // OwnerDashboard's identical CollectionBlock for why due_date grouping isn't safe.
-  const currentRows = useMemo(() => {
-    const latestByMember = new Map<string, Contribution>();
-    for (const r of rows) {
-      const existing = latestByMember.get(r.membership_id);
-      const t = new Date(r.due_date ?? r.created_at).getTime();
-      const existingT = existing ? new Date(existing.due_date ?? existing.created_at).getTime() : -Infinity;
-      if (!existing || t > existingT) latestByMember.set(r.membership_id, r);
-    }
-    return [...latestByMember.values()];
-  }, [rows]);
-
-  const nameById = useMemo(() => {
-    const m = new Map<string, { name: string; heads: number }>();
-    (balances.data ?? []).forEach((b) => m.set(b.membership_id, { name: b.full_name ?? 'Member', heads: b.heads }));
-    return m;
-  }, [balances.data]);
-
-  const currentDue = currentRows.reduce<string | null>((latest, r) => {
-    if (!r.due_date) return latest;
-    return !latest || new Date(r.due_date) > new Date(latest) ? r.due_date : latest;
-  }, null);
-  const expected = currentRows.reduce((s, r) => s + Number(r.amount), 0);
-  const collected = currentRows.filter((r) => r.status === 'approved').reduce((s, r) => s + Number(r.amount), 0);
-  const collectedCount = currentRows.filter((r) => r.status === 'approved').length;
-  const owingRows = currentRows.filter((r) => r.status === 'pending');
-  const owingSum = owingRows.reduce((s, r) => s + Number(r.amount), 0);
-  const pct = expected > 0 ? Math.min(100, Math.round((collected / expected) * 100)) : 0;
-
-  if (!cycle || currentRows.length === 0) return null;
-
-  const shown = owingRows.slice(0, 2);
-  const rest = owingRows.length - shown.length;
-
-  return (
-    <>
-      <SectionHead title="This month's collection" aside={currentDue ? `Due ${dayOnly(currentDue)}` : undefined} />
-      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 17 }, shadowToken.soft]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
-          <Text style={{ fontSize: 16, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>
-            {formatPeso(collected)} <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: semantic.textMuted }}>of {formatPeso(expected)}</Text>
-          </Text>
-          <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>{collectedCount} of {currentRows.length} members</Text>
-        </View>
-        <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
-          <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 5, backgroundColor: semantic.brand }} />
-        </View>
-
-        {owingRows.length > 0 ? (
-          <View style={{ marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderColor: semantic.border, gap: 10 }}>
-            {shown.map((r) => {
-              const info = nameById.get(r.membership_id);
-              return (
-                <View key={r.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                    <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>
-                      {(info?.name ?? 'M').split(' ').slice(0, 2).map((w) => w[0]).join('').toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{info?.name ?? 'Member'}</Text>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
-                      <Text variant="caption" color="secondary">{info?.heads ?? 1} head{(info?.heads ?? 1) === 1 ? '' : 's'}</Text>
-                      {r.is_late ? <Tag tone="late">Late</Tag> : null}
-                    </View>
-                  </View>
-                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(r.amount)}</Text>
-                </View>
-              );
-            })}
-            {rest > 0 ? (
-              <Pressable onPress={() => go('contributions/confirm')} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>+{rest}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{rest} more member{rest === 1 ? '' : 's'} owing</Text>
-                  <Text variant="caption" color="secondary">{formatPeso(owingSum - shown.reduce((s, r) => s + Number(r.amount), 0))} outstanding</Text>
-                </View>
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
-
-        <Pressable onPress={() => go('contributions/confirm', { tab: 'record' })} style={{ marginTop: 15, paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.surfaceAlt }}>
-          <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Record a contribution</Text>
-        </Pressable>
-      </View>
-    </>
-  );
-}
-
 /* ---------------- Record grid ---------------- */
 const ACTIONS: TileAction[] = [
   { label: 'Contribution', icon: ArrowUpCircle, route: 'contributions/confirm', params: { tab: 'record' } },
@@ -575,7 +396,7 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
       <ToRelease groupId={groupId} go={go} />
 
-      <CollectionBlock groupId={groupId} go={go} />
+      <CollectionBlock groupId={groupId} go={go} head={(title, aside) => <SectionHead title={title} aside={aside} />} />
 
       <SectionHead title="Records" />
       <ScrollTileRow actions={ACTIONS} go={go} />

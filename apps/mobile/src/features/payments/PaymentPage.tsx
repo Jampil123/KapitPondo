@@ -49,20 +49,25 @@ export function SectionHead({ title }: { title: string }) {
 export function AmountBlock({ label, amount, badge, meta, note, copied, onCopy }: {
   label: string; amount: number | string; badge: ReactNode; meta: ReactNode; note?: string; copied?: boolean; onCopy?: () => void;
 }) {
+  // Amount on the left, status on the right; the details run full width below.
   return (
-    <View style={{ alignItems: 'center', paddingTop: 8 }}>
-      <Text variant="overline" color="muted">{label}</Text>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 }}>
-        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6 }}>{formatPeso(amount)}</Text>
-        {onCopy ? (
-          <Pressable onPress={onCopy} hitSlop={10} accessibilityRole="button" accessibilityLabel="Copy amount">
-            {copied ? <Check size={18} color={intent.success.text} /> : <Copy size={18} color={semantic.textMuted} />}
-          </Pressable>
-        ) : null}
+    <View style={{ paddingTop: 8 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+        <View style={{ flexShrink: 1 }}>
+          <Text variant="overline" color="muted">{label}</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 }}>
+            <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6 }}>{formatPeso(amount)}</Text>
+            {onCopy ? (
+              <Pressable onPress={onCopy} hitSlop={10} accessibilityRole="button" accessibilityLabel="Copy amount">
+                {copied ? <Check size={18} color={intent.success.text} /> : <Copy size={18} color={semantic.textMuted} />}
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+        <View style={{ marginTop: 2, flexShrink: 0 }}>{badge}</View>
       </View>
-      <View style={{ marginTop: 10 }}>{badge}</View>
-      <Text variant="body" color="secondary" style={{ marginTop: 10, fontSize: 12.5, textAlign: 'center' }}>{meta}</Text>
-      {note ? <Text variant="caption" color="muted" style={{ marginTop: 3 }}>{note}</Text> : null}
+      <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>{meta}</Text>
+      {note ? <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{note}</Text> : null}
     </View>
   );
 }
@@ -216,8 +221,10 @@ export function formatDateTime(date: Date) {
 }
 
 /** Shown after a payment (contribution or loan repayment) is submitted; the header is the close icon alone. */
-export function SuccessView({ heading, amount, note, rows, onClose, viewAllLabel, onViewAll }: {
+export function SuccessView({ heading, amount, note, phrase, rows, onClose, viewAllLabel, onViewAll }: {
   heading: string;
+  /** Optional short line shown as a quote under the note. */
+  phrase?: string;
   amount: number | string;
   note: string;
   rows: { label: string; value: ReactNode }[];
@@ -238,6 +245,11 @@ export function SuccessView({ heading, amount, note, rows, onClose, viewAllLabel
           <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 18 }}>{heading}</Text>
           <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.6, marginTop: 6 }}>{formatPeso(amount)}</Text>
           <Text variant="body" color="secondary" style={{ fontSize: 12.5, textAlign: 'center', marginTop: 8 }}>{note}</Text>
+          {phrase ? (
+            <View style={{ marginTop: 18, alignSelf: 'stretch', backgroundColor: semantic.surfaceAlt, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 16 }}>
+              <Text style={{ fontSize: 13, lineHeight: 19, fontFamily: 'Poppins_500Medium', fontStyle: 'italic', color: semantic.brandDark, textAlign: 'center' }}>“{phrase}”</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={{ marginTop: 28 }}>

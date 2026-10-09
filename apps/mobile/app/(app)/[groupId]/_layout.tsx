@@ -35,6 +35,7 @@ export default function GroupLayout() {
             <Stack.Screen name="audit/proof/[id]" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="audit/flag/[id]" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="ledger/[entryId]" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="verify/[key]" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="audit/new-finding" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/repayments/index" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/repayments/[paymentId]" options={{ animation: 'slide_from_bottom' }} />

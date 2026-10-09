@@ -5,7 +5,7 @@ import {
   Coins, Users, PiggyBank, Repeat, LifeBuoy,
   UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ClipboardCheck,
   ChevronRight, Banknote, Flag, Clock, Download, ScrollText, FileText, Stamp, HandCoins, Wallet, Inbox,
-  ShieldQuestion, UserCog, LayoutGrid,
+  ShieldQuestion, UserCog, LayoutGrid, MessageSquareWarning,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -82,6 +82,7 @@ function sectionsFor(role: GroupRole): Section[] {
       { icon: ShieldQuestion, label: role === 'member' ? 'What members can do' : `What ${ROLE_NAME[role].toLowerCase()}s can't do`, to: 'role-guide' },
       { icon: UserCog, label: 'Profile and security', to: 'profile' },
       { icon: LifeBuoy, label: 'Help center', to: '/(app)/help-center' },
+      { icon: MessageSquareWarning, label: 'Complaints', to: 'complaints' },
     ],
   };
   // A member's records and group pages live on the Shortcuts page (the dashboard's "See more").

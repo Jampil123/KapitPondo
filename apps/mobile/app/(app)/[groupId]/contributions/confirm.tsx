@@ -1,13 +1,10 @@
-import { useMemo, useState } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
-import { Alert } from '@/lib/alert';
-import { toast } from '@/components/ui/Toast';
+import { useCallback, useMemo, useState } from 'react';
+import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { X, Receipt, Check } from 'lucide-react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
-import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { PillFilters } from '@/components/shared/PillFilters';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
@@ -16,7 +13,7 @@ import { useQuery } from '@/hooks/useApi';
 import { useAuth } from '@/context/AuthContext';
 import { listMembers, type GroupMember } from '@/api/groups';
 import { type Contribution } from '@/api/contributions';
-import { useContributions, useConfirmContribution, useRejectContribution } from '@/features/contributions/contributions.hooks';
+import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { currentPeriodIndex, cyclePeriods, periodLabel } from '@/features/contributions/periods';
 import { computePeriodSummary } from '@/features/contributions/periodSummary';
@@ -88,9 +85,6 @@ export default function ConfirmContributions() {
   const periodWord = cycle?.frequency === 'weekly' ? 'week' : cycle?.frequency === 'quarterly' ? 'quarter' : 'month';
   const headsById = useMemo(() => new Map(roster.map((m) => [m.id, m.heads])), [roster]);
 
-  const approve = useConfirmContribution(groupId!);
-  const reject = useRejectContribution(groupId!);
-
   const rows = all.data ?? [];
   // How many live (non-rejected) rows in this cycle share a reference number —
   // reused already-loaded data instead of a per-row API call, same idea as
@@ -146,28 +140,18 @@ export default function ConfirmContributions() {
       .filter(({ entry }) => entry && (entry.kind === 'review' || entry.kind === 'paid'));
   }, [roster, summary]);
 
+  // Full side-by-side check (recorded vs read from proof, rule check) — the
+  // same sign-off screen the Organizer uses; it handles Confirm / Reject too.
+  function openReview(c: Contribution) {
+    router.push({ pathname: '/(app)/[groupId]/verify/[key]' as any, params: { groupId, key: `c-${c.id}` } });
+  }
+  // Pick up a confirm/reject made on that screen.
+  const { refetch: refetchAll } = all;
+  useFocusEffect(useCallback(() => { refetchAll(); }, [refetchAll]));
+
   function goToRecordScreen(m: GroupMember) {
     router.push({ pathname: '/(app)/[groupId]/contributions/record' as any, params: { groupId, membershipId: m.id } });
   }
-
-  async function onApprove(id: string) {
-    // Confirming only moves it to "Pending verification" — the Auditor's verification posts it.
-    const ok = await approve.run(id);
-    if (ok !== undefined) { all.refetch(); toast('Confirmed — waiting for the Auditor’s verification'); }
-    else if (approve.error) Alert.alert('Could not confirm', approve.error.message);
-  }
-
-  const [returnTarget, setReturnTarget] = useState<Contribution | null>(null);
-  async function onReturnConfirm(reason: string) {
-    if (!returnTarget) return;
-    const id = returnTarget.id;
-    setReturnTarget(null);
-    const ok = await reject.run(id, reason || undefined);
-    if (ok !== undefined) { all.refetch(); toast('Returned to the member'); }
-    else if (reject.error) Alert.alert('Could not return', reject.error.message);
-  }
-
-  const [viewProof, setViewProof] = useState<Contribution | null>(null);
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
@@ -226,8 +210,8 @@ export default function ConfirmContributions() {
                 const isDuplicateRef = !!c.external_reference && (refCounts.get(c.external_reference) ?? 0) > 1;
                 const noProof = !c.proof_signed_url;
                 return (
-                  <View key={c.id} style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
-                    <View style={{ flexDirection: 'row', gap: 12, padding: 14, paddingBottom: 0 }}>
+                  <Pressable key={c.id} onPress={() => openReview(c)} style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, paddingBottom: 0 }}>
                       <Avatar name={nameOf(c)} uri={c.memberships?.members?.avatar_url} size={48} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={2}>{nameOf(c)}</Text>
@@ -236,6 +220,7 @@ export default function ConfirmContributions() {
                           {METHOD_LABEL[c.payment_method ?? ''] ?? 'Payment'} · {heads} head{heads === 1 ? '' : 's'} · sent {timeAgo(c.created_at)}
                         </Text>
                       </View>
+                      <ChevronRight size={18} color={semantic.textMuted} />
                     </View>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 14, paddingBottom: 0 }}>
                       {c.external_reference ? <Fact label="Ref" value={c.external_reference} /> : <Fact value="No reference number" tone="warn" />}
@@ -246,31 +231,8 @@ export default function ConfirmContributions() {
                       {isDuplicateRef ? <Fact value="Duplicate reference" tone="late" /> : null}
                       {noProof ? <Fact value="No proof attached" tone="late" /> : null}
                     </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 14 }}>
-                      {c.proof_signed_url ? (
-                        <Pressable onPress={() => setViewProof(c)} style={{ width: 40, height: 40, borderRadius: 10, overflow: 'hidden', backgroundColor: semantic.surfaceAlt }}>
-                          <Image source={{ uri: c.proof_signed_url }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                        </Pressable>
-                      ) : null}
-                      <View style={{ flex: 1 }} />
-                      <Pressable
-                        onPress={() => setReturnTarget(c)}
-                        disabled={reject.loading}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.danger.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
-                      >
-                        <X size={12} color={intent.danger.text} strokeWidth={2.6} />
-                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>Return</Text>
-                      </Pressable>
-                      <Pressable
-                        onPress={() => onApprove(c.id)}
-                        disabled={approve.loading}
-                        style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: intent.success.soft, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 12 }}
-                      >
-                        <Check size={12} color={intent.success.text} strokeWidth={2.6} />
-                        <Text style={{ fontSize: 11, fontFamily: 'Poppins_600SemiBold', color: intent.success.text }}>Confirm</Text>
-                      </Pressable>
-                    </View>
-                  </View>
+                    <View style={{ height: 14 }} />
+                  </Pressable>
                 );
               })}
             </View>
@@ -406,38 +368,6 @@ export default function ConfirmContributions() {
         )}
       </ScrollView>
 
-      {/* Proof viewer */}
-      <Modal visible={!!viewProof} transparent animationType="fade" onRequestClose={() => setViewProof(null)}>
-        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.8)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewProof(null)}>
-          <View style={{ width: '100%', backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', padding: 14 }}>
-              <View style={{ flex: 1 }}>
-                <Text variant="label">{viewProof ? nameOf(viewProof) : ''}</Text>
-                <Text variant="caption" color="secondary">{formatPeso(viewProof?.amount)}</Text>
-              </View>
-              <Pressable onPress={() => setViewProof(null)} hitSlop={8}><X size={22} color={semantic.textSecondary} /></Pressable>
-            </View>
-            {viewProof?.proof_signed_url ? (
-              <Image source={{ uri: viewProof.proof_signed_url }} style={{ width: '100%', height: 360 }} resizeMode="contain" />
-            ) : (
-              <View style={{ height: 200, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-                <Receipt size={36} color={semantic.brand} />
-              </View>
-            )}
-          </View>
-        </Pressable>
-      </Modal>
-
-      <ReasonPrompt
-        visible={!!returnTarget}
-        title={returnTarget ? `Return ${nameOf(returnTarget)}'s proof?` : 'Return proof'}
-        placeholder="What needs to be fixed? (visible to the member)"
-        confirmLabel="Return"
-        destructive
-        required
-        onCancel={() => setReturnTarget(null)}
-        onConfirm={onReturnConfirm}
-      />
     </SafeAreaView>
   );
 }

@@ -16,6 +16,7 @@ import { GroupsPage } from './features/groups/GroupsPage';
 import { GroupDetailPage } from './features/groups/GroupDetailPage';
 import { ReportsPage } from './features/reports/ReportsPage';
 import { ComplaintsPage } from './features/complaints/ComplaintsPage';
+import { FeedbackPage } from './features/feedback/FeedbackPage';
 import { SystemConfigPage } from './features/system-config/SystemConfigPage';
 import { SettingsPage } from './features/settings/SettingsPage';
 
@@ -67,6 +68,7 @@ export default function App() {
         <Route path="groups/:groupId" element={<GroupDetailPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="complaints" element={<ComplaintsPage />} />
+        <Route path="feedback" element={<FeedbackPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="system-config" element={<SystemConfigPage />} />
         <Route path="profile" element={<Navigate to="/settings" replace />} />

@@ -7,7 +7,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { Layers, Minus, Plus, Lock } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup, useGroups } from '@/context/GroupContext';
@@ -90,8 +90,8 @@ export default function Heads() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Heads" subtitle="Member" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
+      <BandHeader title="Heads" />
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -109,14 +109,14 @@ export default function Heads() {
           <Text style={{ fontSize: 32, fontFamily: 'Poppins_700Bold', color: '#fff', letterSpacing: -0.5 }}>{heads}</Text>
         </View>
 
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16 }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16 }, shadowToken.soft]}>
           <Text variant="h3" style={{ fontSize: 15, marginBottom: 4 }}>What this affects</Text>
           <InfoRow label="Per-head contribution" value={cycle ? formatPeso(cycle.contribution_amount) : '—'} />
           <InfoRow label="Your expected contribution" value={expected !== null ? formatPeso(expected) : '—'} />
           {credit > 0 ? <InfoRow label="Advance credit" value={formatPeso(credit)} /> : null}
         </View>
 
-        <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 12 }, shadowToken.card]}>
+        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, gap: 12 }, shadowToken.soft]}>
           <Text variant="h3" style={{ fontSize: 15 }}>Change your heads</Text>
           {!editable ? (
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12 }}>
@@ -143,7 +143,8 @@ export default function Heads() {
               keyboardType="number-pad"
               editable={editable}
               style={{
-                flex: 1, textAlign: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12,
+                // minWidth 0: on web an <input> has an intrinsic width that otherwise pushes "+" off the card.
+                flex: 1, minWidth: 0, textAlign: 'center', backgroundColor: semantic.surfaceAlt, borderRadius: 12,
                 height: 44, fontFamily: 'Poppins_700Bold', fontSize: 18, color: semantic.textPrimary,
               }}
             />
@@ -175,7 +176,7 @@ export default function Heads() {
         </View>
 
         {extraHeads.length > 0 ? (
-          <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 16, gap: 10 }, shadowToken.card]}>
+          <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, gap: 10 }, shadowToken.soft]}>
             <View>
               <Text variant="h3" style={{ fontSize: 15 }}>Who you carry</Text>
               <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Each head can have its own loan.</Text>

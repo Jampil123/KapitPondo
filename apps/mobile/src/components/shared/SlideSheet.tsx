@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Modal, Pressable, KeyboardAvoidingView, Platform, Animated, Easing, Dimensions } from 'react-native';
+import { Modal, Pressable, KeyboardAvoidingView, Platform, Animated, Easing, Dimensions, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { semantic } from '@/theme/colors';
 
@@ -9,7 +9,9 @@ import { semantic } from '@/theme/colors';
 // to constrain anything, and the sheet sizes to raw content instead. Using a
 // concrete pixel value (screen height, not the window's, so it's stable
 // across Android's on-screen nav bar) sidesteps that Yoga quirk entirely.
-const MAX_SHEET_HEIGHT = Dimensions.get('screen').height * 0.85;
+// On web, though, the screen is taller than the visible page (mobile browser
+// address bar + toolbar), so the sheet's bottom ran off-view — use the window there.
+const NATIVE_MAX_SHEET_HEIGHT = Dimensions.get('screen').height * 0.85;
 
 /**
  * Bottom sheet with a real slide-up/slide-down transition, replacing
@@ -30,6 +32,8 @@ export function SlideSheet<T>({
 }) {
   const visible = value !== null;
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  const MAX_SHEET_HEIGHT = Platform.OS === 'web' ? windowHeight * 0.9 : NATIVE_MAX_SHEET_HEIGHT;
   const [mounted, setMounted] = useState(visible);
   const [rendered, setRendered] = useState<T | null>(value);
   const translateY = useRef(new Animated.Value(visible ? 0 : 500)).current;
@@ -65,7 +69,6 @@ export function SlideSheet<T>({
           padding: 20, paddingBottom: 20 + insets.bottom, gap: 14, maxHeight: MAX_SHEET_HEIGHT, overflow: 'hidden',
         }}
       >
-        <View style={{ width: 38, height: 4, borderRadius: 99, backgroundColor: semantic.border, alignSelf: 'center', marginTop: -6, marginBottom: -8 }} />
         {children(rendered)}
       </Pressable>
     </Animated.View>

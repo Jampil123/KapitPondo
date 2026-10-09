@@ -7,7 +7,6 @@ import { ArrowUpRight, ArrowDownRight, FileDown, Repeat, AlertTriangle, PiggyBan
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterTabs } from '@/components/shared/FilterTabs';
-import { GrowthChart, MONTH_SHORT } from '@/components/shared/GrowthChart';
 import { semantic, intent, type IntentName, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { shareCsv } from '@/lib/csv';
@@ -125,27 +124,13 @@ export default function MyLedger() {
     });
   }, [ledger.data, membership?.id, period, cycle]);
 
-  const growth = useMemo(() => {
-    const contribs = entries.filter((e) => e.entry_type === 'contribution');
-    const first = period === 'cycle' && cycle
-      ? new Date(cycle.start_date)
-      : contribs.reduce<Date | null>((d, e) => { const t = new Date(e.posted_at); return !d || t < d ? t : d; }, null);
-    if (!first) return [];
+  const addedThisMonth = useMemo(() => {
     const now = new Date();
-    const months: { key: number; label: string; value: number }[] = [];
-    for (let d = new Date(first.getFullYear(), first.getMonth(), 1); d <= now && months.length < 24; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
-      months.push({ key: d.getFullYear() * 12 + d.getMonth(), label: MONTH_SHORT[d.getMonth()], value: 0 });
-    }
-    for (const e of contribs) {
-      const t = new Date(e.posted_at);
-      const m = months.find((x) => x.key === t.getFullYear() * 12 + t.getMonth());
-      if (m) m.value += Number(e.amount);
-    }
-    const thisMonth = months[months.length - 1]?.value ?? 0;
-    let run = 0;
-    return months.map((m) => ({ label: m.label, value: (run += m.value), thisMonth }));
-  }, [entries, period, cycle]);
-  const addedThisMonth = growth[growth.length - 1]?.thisMonth ?? 0;
+    return entries
+      .filter((e) => e.entry_type === 'contribution')
+      .filter((e) => { const t = new Date(e.posted_at); return t.getFullYear() === now.getFullYear() && t.getMonth() === now.getMonth(); })
+      .reduce((s, e) => s + Number(e.amount), 0);
+  }, [entries]);
 
   // Straight from the loan itself, not the ledger — same math as the Loans page.
   const loans = useLoans(groupId!, {});
@@ -196,7 +181,7 @@ export default function MyLedger() {
           onChange={setPeriod}
         />
 
-        {/* ---------------- Contributed + growth chart ---------------- */}
+        {/* ---------------- Contributed ---------------- */}
         <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16, marginTop: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <View>
@@ -215,11 +200,6 @@ export default function MyLedger() {
             {heads} head{heads === 1 ? '' : 's'}
             {period === 'cycle' && timeline.length > 0 ? ` · ${postedCount} of ${timeline.length} periods posted` : ''}
           </Text>
-          {growth.length > 0 ? (
-            <View style={{ marginTop: 14 }}>
-              <GrowthChart points={growth} />
-            </View>
-          ) : null}
         </View>
 
         {/* ---------------- Loans, penalties, share ---------------- */}

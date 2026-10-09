@@ -4,7 +4,7 @@ import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import { Camera, Check, AlertTriangle, Copy, QrCode as QrCodeIcon, Hash } from 'lucide-react-native';
+import { Camera, Check, AlertTriangle, Copy, QrCode as QrCodeIcon, Hash, X } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
@@ -138,13 +138,19 @@ export function PayGcashSheet({ visible, onClose, cycleId, amount, dueDate, onSu
   return (
     <SlideSheet value={visible ? {} : null} onClose={onClose}>
       {() => (
-        // flexShrink lets this actually scroll once content exceeds the
-        // sheet's maxHeight — without it, Yoga never shrinks a ScrollView
-        // below its content size, so the sheet's own cap just clips the
-        // bottom (submit/cancel buttons) instead of making it scrollable.
-        <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+        <>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
           <Text variant="h2" style={{ fontSize: 18 }}>Pay with GCash</Text>
-          <Text variant="body" color="secondary" style={{ marginTop: 5, lineHeight: 19 }}>
+          <Pressable onPress={onClose} hitSlop={10} accessibilityLabel="Close"
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+            <X size={18} color={semantic.textSecondary} />
+          </Pressable>
+        </View>
+        {/* Title + close stay pinned; the rest scrolls. flexShrink lets the
+            ScrollView shrink below its content once the sheet hits maxHeight —
+            without it Yoga never shrinks it, and the sheet clips the submit button. */}
+        <ScrollView showsVerticalScrollIndicator={false} style={{ flexShrink: 1 }} contentContainerStyle={{ paddingBottom: 24 }}>
+          <Text variant="body" color="secondary" style={{ lineHeight: 19 }}>
             Scan the QR in GCash, or copy the details below. The money goes straight to the treasurer — KapitPondo never holds it.
           </Text>
 
@@ -240,8 +246,8 @@ export function PayGcashSheet({ visible, onClose, cycleId, amount, dueDate, onSu
             disabled={!proofUri}
             style={{ marginTop: 2 }}
           />
-          <Button label="Cancel" variant="ghost" onPress={onClose} style={{ marginTop: 8 }} />
         </ScrollView>
+        </>
       )}
     </SlideSheet>
   );

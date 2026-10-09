@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { LayoutDashboard, Users, Boxes, Activity, BarChart3, MessageSquareWarning, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, Boxes, Activity, BarChart3, MessageSquareWarning, MessagesSquare, SlidersHorizontal } from 'lucide-react';
 import kapitlogo from '../../assets/images/KapitPondoL.png';
 import type { AdminMe } from '../../context/AdminAuthContext';
 import { Tooltip } from '../ui/Tooltip';
 import { AccountMenu } from './AccountMenu';
 import { SidebarControl, type SidebarMode } from './SidebarControl';
 
-export type SidebarBadges = { pending_verifications: number | null; new_complaints: number | null };
+export type SidebarBadges = { pending_verifications: number | null; new_complaints: number | null; unread_feedback: number | null };
+// Unread inbox items (Complaints, Feedback) badge red; the verification queue keeps the brand color.
+const RED_BADGES = new Set<keyof SidebarBadges>(['new_complaints', 'unread_feedback']);
 type NavItem = { to: string; label: string; icon: LucideIcon; end?: boolean; badgeKey?: keyof SidebarBadges };
 
 const HOME_NAV: NavItem[] = [
@@ -17,6 +19,7 @@ const HOME_NAV: NavItem[] = [
   { to: '/groups', label: 'Fund Groups', icon: Boxes },
   { to: '/audit', label: 'Activity', icon: Activity },
   { to: '/complaints', label: 'Complaints', icon: MessageSquareWarning, badgeKey: 'new_complaints' },
+  { to: '/feedback', label: 'Feedback', icon: MessagesSquare, badgeKey: 'unread_feedback' },
   { to: '/reports', label: 'Reports & Analytics', icon: BarChart3 },
   { to: '/system-config', label: 'Configuration', icon: SlidersHorizontal },
 ];
@@ -39,6 +42,7 @@ function NavSection({ title, items, badges, expanded, showTooltips }: {
       <div className="space-y-1.5">
         {items.map((n) => {
           const badge = n.badgeKey ? badges[n.badgeKey] : null;
+          const badgeBg = n.badgeKey && RED_BADGES.has(n.badgeKey) ? 'bg-danger' : 'bg-brand';
           return (
             <Tooltip key={n.to} label={badge ? `${n.label} (${badge})` : n.label} disabled={!showTooltips}>
               <NavLink to={n.to} end={n.end}
@@ -52,14 +56,14 @@ function NavSection({ title, items, badges, expanded, showTooltips }: {
                     <span className="relative shrink-0 flex items-center justify-center">
                       <n.icon size={20} color={isActive ? '#fff' : 'rgba(255, 255, 255, 0.62)'} />
                       {!expanded && badge ? (
-                        <span className="absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full bg-brand ring-2 ring-[#2A3E4B]" />
+                        <span className={`absolute -top-1 -right-1.5 w-2.5 h-2.5 rounded-full ${badgeBg} ring-2 ring-[#2A3E4B]`} />
                       ) : null}
                     </span>
                     {expanded ? (
                       <>
                         <span className="flex-1 whitespace-nowrap">{n.label}</span>
                         {badge ? (
-                          <span className="min-w-5 h-5 px-1.5 rounded-full bg-brand text-white text-[11px] font-semibold flex items-center justify-center">
+                          <span className={`min-w-5 h-5 px-1.5 rounded-full ${badgeBg} text-white text-[11px] font-semibold flex items-center justify-center`}>
                             {badge}
                           </span>
                         ) : null}
