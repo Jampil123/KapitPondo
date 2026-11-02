@@ -11,6 +11,7 @@
  * typed helpers in api/members.ts, api/groups.ts, etc.
  */
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { supabase } from '../lib/supabase';
 
 /** Resolve where the API lives. */
@@ -23,7 +24,9 @@ function resolveBaseUrl(): string {
       // @ts-expect-error legacy field on older Expo runtimes
       Constants.manifest?.debuggerHost ??
       '';
-    const host = hostUri.split(':')[0];
+    // On web, hostUri is empty — use the host the page was opened from, so http://<pc-ip>:8081 on another
+    // device calls http://<pc-ip>:4000 instead of that device's own localhost.
+    const host = Platform.OS === 'web' ? window.location.hostname : hostUri.split(':')[0];
     const port = process.env.EXPO_PUBLIC_API_PORT ?? '4000';
 
     return host ? `http://${host}:${port}` : `http://localhost:${port}`;

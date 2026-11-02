@@ -32,6 +32,20 @@ async function verifyDistribution({ distributionId, verifiedBy, notes }) {
   return data;
 }
 
+// The Auditor takes their verification back before the Organizer finalizes — the preview returns to 'previewed'.
+async function unverifyDistribution({ distributionId, memberId }) {
+  const { data, error } = await supabase
+    .from('distributions')
+    .update({ status: 'previewed', verified_by: null, verified_at: null, verify_notes: null, updated_at: new Date().toISOString() })
+    .eq('id', distributionId)
+    .eq('status', 'verified')
+    .eq('verified_by', memberId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 async function listDistributions(groupId) {
   const { data, error } = await supabase
     .from('distributions')
@@ -232,6 +246,7 @@ module.exports = {
   setHeadNames,
   previewDistribution,
   verifyDistribution,
+  unverifyDistribution,
   listDistributions,
   getDistribution,
   getAllocations,

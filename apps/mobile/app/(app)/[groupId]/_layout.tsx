@@ -39,6 +39,7 @@ export default function GroupLayout() {
             <Stack.Screen name="audit/new-finding" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/repayments/index" options={{ animation: 'slide_from_bottom' }} />
             <Stack.Screen name="loans/repayments/[paymentId]" options={{ animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="loans/[loanId]" options={{ animation: 'slide_from_bottom' }} />
           </Stack>
         </View>
         {/* Slides away as a tab page slides in, and back up on return to the dashboard. */}

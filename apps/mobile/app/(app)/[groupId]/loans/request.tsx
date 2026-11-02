@@ -153,8 +153,6 @@ export default function RequestLoan() {
           { label: 'Sent', value: submitted.at.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
         ]}
         onClose={() => router.back()}
-        viewAllLabel="View my loans"
-        onViewAll={() => router.replace({ pathname: '/(app)/[groupId]/loans', params: { groupId } })}
       />
     );
   }
@@ -222,12 +220,12 @@ export default function RequestLoan() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
       <CloseHeader title="Request a loan" onClose={() => router.back()} />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Which head ---------------- */}
         {slots.length > 1 ? (
           <>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               {slots.map((sl) => (
                 <HeadChip key={sl.head_no} slot={sl} selected={sl.head_no === headNo} onPress={() => setPickedHead(sl.head_no)} />
               ))}
@@ -236,7 +234,6 @@ export default function RequestLoan() {
         ) : null}
 
         {/* ---------------- Loan details ---------------- */}
-        <SectionHead title="Loan details" />
         <View style={{ gap: 0 }}>
           {headNo > 1 ? (
             <Field

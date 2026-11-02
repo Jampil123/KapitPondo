@@ -19,7 +19,7 @@ export const PRIMARY_LABEL: Record<SignoffItem['action'], string> = {
   confirm: 'Confirm receipt',
   verify: 'Approve and post',
   review: 'Clear for release',
-  release: 'Release funds',
+  release: 'Disburse',
   verify_release: 'Verify and post',
   approve: 'Approve reversal',
 };

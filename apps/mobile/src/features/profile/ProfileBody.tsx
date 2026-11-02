@@ -6,18 +6,18 @@ import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Bell, HelpCircle, Lock, ChevronRight, LogOut,
-  Mail, KeyRound, Download, History,
+  Bell, HelpCircle, Lock, ChevronRight, LogOut, Check,
+  Mail, Phone, KeyRound, Download, History, UserRound,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
-import { semantic, shadowToken, intent, type IntentName } from '@/theme/colors';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { semantic, intent, verifiedGreen, type IntentName } from '@/theme/colors';
 import { formatPH } from '@/lib/phone';
 import { useAuth } from '@/context/AuthContext';
 import { updateProfile } from '@/api/members';
 import { uploadAvatar } from '@/lib/upload';
-import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
+import { VERIFY_META } from '@/constants/verificationStatus';
 
 function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: string; sub?: string; pill?: { text: string; tone: IntentName }; onPress?: () => void }) {
   const tone = pill ? intent[pill.tone] : null;
@@ -41,11 +41,16 @@ function Row({ icon: Icon, label, sub, pill, onPress }: { icon: any; label: stri
   );
 }
 
+// Natural green (PayMaya-style) for the verified badge and the check on the profile photo.
+const VERIFIED_BADGE = { soft: verifiedGreen.base, text: '#FFFFFF' };
+
 export function ProfileBody() {
   const router = useRouter();
   const { member, signOut, refreshMember } = useAuth();
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [bandHeight, setBandHeight] = useState(150);
+  const [signOutOpen, setSignOutOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const status = member?.verification_status ?? 'unverified';
   const vmeta = VERIFY_META[status] ?? VERIFY_META.unverified;
@@ -77,16 +82,14 @@ export function ProfileBody() {
     }
   }
 
-  function confirmSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-
-        onPress: () => signOut(),
-      },
-    ]);
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await signOut();
+    } finally {
+      setSigningOut(false);
+      setSignOutOpen(false);
+    }
   }
 
   // Shared by two renders below: the real (visible) header and an invisible
@@ -107,7 +110,7 @@ export function ProfileBody() {
           <View
             style={{
               position: 'absolute', bottom: -2, right: -2, width: 24, height: 24, borderRadius: 12,
-              backgroundColor: uploadingAvatar ? semantic.brand : vtone.strong, alignItems: 'center', justifyContent: 'center',
+              backgroundColor: uploadingAvatar ? semantic.brand : status === 'verified' ? VERIFIED_BADGE.soft : vtone.strong, alignItems: 'center', justifyContent: 'center',
               borderWidth: 2, borderColor: '#6A93A6',
             }}
           >
@@ -119,12 +122,18 @@ export function ProfileBody() {
           <Text style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.75)', marginTop: 3 }} numberOfLines={1}>
             {member?.phone ? formatPH(member.phone) : 'No phone on file'}
           </Text>
+          {/* Verification status where the Personal information button was — tap for the details. */}
           <Pressable
             onPress={() => router.push('/(app)/edit-profile' as any)}
-            style={{ alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 8, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 11, paddingVertical: 5, borderRadius: 20 }}
+            style={{
+              alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+              backgroundColor: status === 'verified' ? VERIFIED_BADGE.soft : 'rgba(255,255,255,0.15)',
+            }}
           >
-            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Edit profile</Text>
-            <ChevronRight size={12} color="#fff" />
+            {status === 'verified' ? <Check size={12} color="#fff" strokeWidth={3} /> : null}
+            <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>
+              {status === 'verified' ? 'Verified' : status === 'pending' ? 'ID in review' : 'Not verified'}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -145,48 +154,28 @@ export function ProfileBody() {
         <View style={{ height: bandHeight }} />
         <View style={{ backgroundColor: semantic.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -18, padding: 18, gap: 20 }}>
 
-        {/* Verification state — leads because it gates what the account can do */}
-        <View style={[{ backgroundColor: vtone.soft, borderRadius: 18, padding: 16 }, shadowToken.card]}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{ width: 32, height: 32, borderRadius: 11, backgroundColor: vtone.strong, alignItems: 'center', justifyContent: 'center' }}>
-              <vmeta.icon size={16} color="#fff" strokeWidth={2.4} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: vtone.text }}>{vmeta.title}</Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{vmeta.subtitle(member?.verification_rejection_reason ?? null)}</Text>
-            </View>
-          </View>
-
-          {vmeta.unlocks ? (
-            <View style={{ marginTop: 13, paddingTop: 12, borderTopWidth: 1, borderColor: 'rgba(30,58,71,0.09)', gap: 7 }}>
-              {['Request a loan', 'Create your own group', 'Be appointed Treasurer or Auditor'].map((u) => (
-                <View key={u} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Lock size={13} color={intent.warning.text} />
-                  <Text variant="caption" color="secondary">{u}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-
-          {vmeta.btn ? (
-            <Button
-              label={vmeta.btn}
-              onPress={() => router.push(verifyDestination(status) as any)}
-              style={{ marginTop: 13 }}
-            />
-          ) : null}
-        </View>
-
         {/* Account */}
         <View>
           <Text variant="overline" color="muted" style={{ marginBottom: 9, marginLeft: 4 }}>Account</Text>
           <View>
+            <Row
+              icon={UserRound}
+              label="Personal information"
+              sub="Name, birthday and address"
+              onPress={() => router.push('/(app)/edit-profile' as any)}
+            />
             <Row
               icon={Mail}
               label="Email address"
               sub={member?.email ?? 'Add one to recover your account by email'}
               pill={member?.email ? undefined : { text: 'Not set', tone: 'warning' }}
               onPress={() => router.push('/(app)/email-address' as any)}
+            />
+            <Row
+              icon={Phone}
+              label="Mobile number"
+              sub={member?.phone ? formatPH(member.phone) : 'Not set'}
+              onPress={() => router.push('/(app)/mobile-number' as any)}
             />
             <Row icon={KeyRound} label="Change password" onPress={() => router.push('/(app)/change-password' as any)} />
             <Row icon={Bell} label="Notifications" onPress={() => router.push('/(app)/notification-center' as any)} />
@@ -212,7 +201,7 @@ export function ProfileBody() {
         </View>
 
         <Pressable
-          onPress={confirmSignOut}
+          onPress={() => setSignOutOpen(true)}
           style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 13, borderWidth: 1.5, borderColor: semantic.border }}
         >
           <LogOut size={18} color={intent.danger.text} />
@@ -226,7 +215,7 @@ export function ProfileBody() {
       </ScrollView>
 
       {/* Invisible hit-target copy of the header above, rendered last (on top
-          of the ScrollView) purely so the avatar and "Edit profile" button
+          of the ScrollView) purely so the avatar and "Personal information" button
           are actually tappable — the real header is BEHIND the ScrollView so
           the sheet's rounded corners tuck over it correctly, but that means
           the ScrollView's transparent top spacer sits on top of it and
@@ -240,6 +229,18 @@ export function ProfileBody() {
       >
         {renderHeaderContent()}
       </View>
+
+      <ConfirmDialog
+        visible={signOutOpen}
+        icon={LogOut}
+        title="Sign out?"
+        message="Do you want to sign out of KapitPondo?"
+        confirmLabel="Sign Out"
+        destructive
+        loading={signingOut}
+        onConfirm={handleSignOut}
+        onCancel={() => setSignOutOpen(false)}
+      />
     </View>
   );
 }

@@ -1,39 +1,24 @@
-import { useCallback, useMemo, type ReactNode } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import {
-  BarChart3, CheckCircle2, ScrollText,
-  ArrowUpCircle,
-  PiggyBank, HandCoins, CalendarClock, Clock, Download, ChevronRight } from 'lucide-react-native';
+  ScrollText, ArrowUpCircle, PiggyBank, HandCoins, CalendarClock, Clock, Download,
+} from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
-import { NAV_BG } from '@/components/shared/GroupSheetNav';
 import { ScrollTileRow, type TileAction } from '@/components/shared/ScrollTileRow';
 import { DashboardBand, FoldTarget, glassPanel, onBandText } from '@/components/shared/DashboardBand';
 import { LedgerTimeline } from '@/features/activity/LedgerTimeline';
 import { semantic, shadowToken, intent } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { parseApiDate } from '@/lib/cycle';
-import { useAuth } from '@/context/AuthContext';
-import { useSummary, useLedger, useMemberBalances } from '@/features/reporting/reporting.hooks';
+import { useSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useContributions } from '@/features/contributions/contributions.hooks';
 import { CollectionBlock } from './CollectionBlock';
-import { useLoans, useRepayments } from '@/features/lending/lending.hooks';
-import { useSignoffQueue } from '@/features/signoff/signoff';
-import type { Contribution } from '@/api/contributions';
-import type { Loan } from '@/api/lending';
+import { PendingActionsCard } from './OrganizerActions';
 
-function shortDate(iso: string | null) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
-}
-
-function SectionHead({ title, aside, tone, onAsidePress }: { title: string; aside?: string; tone?: 'hot' | 'calm'; onAsidePress?: () => void }) {
+function SectionHead({ title, aside, tone, onAsidePress, top = 14 }: { title: string; aside?: string; tone?: 'hot' | 'calm'; onAsidePress?: () => void; top?: number }) {
   const color = onAsidePress ? semantic.brandDark : tone === 'hot' ? intent.danger.text : tone === 'calm' ? intent.success.text : semantic.textSecondary;
   const label = aside ? <Text variant="caption" style={{ fontFamily: 'Poppins_600SemiBold', color }}>{aside}</Text> : null;
   return (
-    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 14 }}>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: top }}>
       <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{title}</Text>
       {label && onAsidePress ? <Pressable onPress={onAsidePress} hitSlop={8}>{label}</Pressable> : label}
     </View>
@@ -97,244 +82,6 @@ function CashCard({ groupId }: { groupId: string }) {
   );
 }
 
-/* ---------------- shared row bits ---------------- */
-function Tag({ tone, children }: { tone: 'late' | 'ok'; children: ReactNode }) {
-  const t = tone === 'late' ? intent.danger : intent.success;
-  return (
-    <View style={{ backgroundColor: t.soft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 }}>
-      <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{children}</Text>
-    </View>
-  );
-}
-
-function EmptyRow({ title, sub }: { title: string; sub: string }) {
-  return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 13 }, shadowToken.soft]}>
-      <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
-        <CheckCircle2 size={18} color={intent.success.text} />
-      </View>
-      <View style={{ flex: 1 }}>
-        <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{title}</Text>
-        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{sub}</Text>
-      </View>
-    </View>
-  );
-}
-
-/* ---------------- Payment verifications — tap a card for the full sign-off screen ---------------- */
-type ProofRow = { id: string; name: string; sub: string; amount: number; late?: boolean; kind: 'contribution' | 'repayment'; proof: string | null };
-
-const VERIFY_SHOWN = 3;
-
-/** Opens verify/[key] — recorded vs read from proof, rule check, and the Confirm / Reject step. */
-function VerificationCard({ row, onPress }: { row: ProofRow; onPress: () => void }) {
-  return (
-    <Pressable onPress={onPress} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 12 }, shadowToken.soft]}>
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text variant="overline" color="muted">{row.kind === 'contribution' ? 'Contribution' : 'Loan repayment'}</Text>
-        <Text style={{ fontSize: 14, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, marginTop: 2 }} numberOfLines={1}>{row.name}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 1 }}>
-          <Text variant="caption" color="secondary" numberOfLines={1}>{row.sub}</Text>
-          {row.late ? <Tag tone="late">Late</Tag> : null}
-        </View>
-      </View>
-      <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(row.amount)}</Text>
-      <ChevronRight size={18} color={semantic.textMuted} />
-    </Pressable>
-  );
-}
-
-function ProofsToReview({ groupId, go }: { groupId: string; go: (r: string, p?: Record<string, string>) => void }) {
-  const { member } = useAuth();
-  const pendingContribs = useContributions(groupId, { status: 'submitted' });
-  const pendingRepayments = useRepayments(groupId, 'submitted');
-  const balances = useMemberBalances(groupId);
-
-  const nameById = useMemo(() => {
-    const m = new Map<string, string>();
-    (balances.data ?? []).forEach((b) => m.set(b.membership_id, b.full_name ?? 'Member'));
-    return m;
-  }, [balances.data]);
-  // Anything this Treasurer paid or recorded themselves is the Organizer's to confirm, not theirs.
-  const contribRows: ProofRow[] = (pendingContribs.data ?? [])
-    .filter((c: Contribution) => c.recorded_by !== member?.id && c.memberships?.member_id !== member?.id)
-    .map((c: Contribution) => ({
-      id: c.id,
-      name: nameById.get(c.membership_id) ?? 'Member',
-      sub: `Sent ${shortDate(c.created_at)}`,
-      amount: Number(c.amount),
-      late: c.is_late,
-      kind: 'contribution',
-      proof: c.proof_signed_url,
-    }));
-  const repayRows: ProofRow[] = (pendingRepayments.data ?? [])
-    .filter((p) => p.recorded_by !== member?.id && p.loans?.membership?.member_id !== member?.id)
-    .map((p) => ({
-      id: p.id,
-      name: p.loans?.membership?.members?.full_name ?? 'Member',
-      sub: `Sent ${shortDate(p.created_at)}`,
-      amount: Number(p.amount),
-      kind: 'repayment',
-      proof: p.proof_signed_url,
-    }));
-
-  const rows = [...contribRows, ...repayRows];
-  const loading = (pendingContribs.data == null && !pendingContribs.error) || (pendingRepayments.data == null && !pendingRepayments.error);
-  // Back from the sign-off screen: drop whatever was confirmed or returned there.
-  const { refetch: refetchContribs } = pendingContribs;
-  const { refetch: refetchRepayments } = pendingRepayments;
-  useFocusEffect(useCallback(() => { refetchContribs(); refetchRepayments(); }, [refetchContribs, refetchRepayments]));
-  // "See all" opens whichever list the hidden ones belong to — repayments live on their own page.
-  const hidden = rows.slice(VERIFY_SHOWN);
-  const seeAllRepayments = hidden.length > 0 && hidden.every((r) => r.kind === 'repayment');
-
-  return (
-    <>
-      <SectionHead title="Payment Verifications" aside={loading ? undefined : rows.length > 0 ? `${rows.length} waiting` : 'All clear'} tone={rows.length > 0 ? 'hot' : 'calm'} />
-
-      {loading ? (
-        <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
-          <ActivityIndicator color={semantic.brand} />
-        </View>
-      ) : rows.length === 0 ? (
-        <EmptyRow title="No proofs waiting" sub="New submissions will show up here" />
-      ) : (
-        <>
-          {rows.slice(0, VERIFY_SHOWN).map((r) => <VerificationCard key={`${r.kind}-${r.id}`} row={r} onPress={() => go('verify/[key]', { key: `${r.kind === 'contribution' ? 'c' : 'p'}-${r.id}` })} />)}
-          {hidden.length > 0 ? (
-            <Pressable
-              onPress={() => (seeAllRepayments ? go('loans/record-repayment') : go('contributions/confirm', { tab: 'pending' }))}
-              style={{ paddingVertical: 12, alignItems: 'center', borderRadius: 14, borderWidth: 1, borderColor: semantic.border }}
-            >
-              <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>See all {rows.length}</Text>
-            </Pressable>
-          ) : null}
-        </>
-      )}
-    </>
-  );
-}
-
-/* ---------------- Owner's own loan — needs the Treasurer's decision ---------------- */
-// An Owner can't approve their own loan (no-self-approval rule), so when the
-// Owner is the borrower, the Treasurer is the one authorized to decide it —
-// see lending.routes.js. Without this, that request would only ever be
-// reachable by manually opening Loan decision from More.
-function OwnerLoanToDecide({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const pendingLoans = useLoans(groupId, { status: 'pending' });
-  const loans = (pendingLoans.data ?? []).filter((l) => l.membership?.role === 'owner');
-
-  if (pendingLoans.loading || loans.length === 0) return null;
-
-  function borrowerName(loan: Loan) { return loan.membership?.members?.full_name ?? 'Organizer'; }
-
-  return (
-    <>
-      <SectionHead title="Organizer's loan request" aside={`${loans.length} pending`} tone="hot" />
-      {loans.map((loan) => (
-        <View key={loan.id} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.soft]}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{borrowerName(loan)}</Text>
-              <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>{loan.purpose ?? 'No purpose given'} · {loan.term_months} months</Text>
-            </View>
-            <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(loan.principal)}</Text>
-          </View>
-          <View style={{ marginTop: 10 }}>
-            <Tag tone="late">The Organizer can't approve their own loan — you decide this one</Tag>
-          </View>
-          <Pressable onPress={() => go('loans/decisions')} style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark }}>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>Review request</Text>
-          </Pressable>
-        </View>
-      ))}
-    </>
-  );
-}
-
-/* ---------------- Loans the Treasurer reviews before release (the Auditor's own) ---------------- */
-function LoansToReview({ groupId }: { groupId: string }) {
-  const router = useRouter();
-  const { mine } = useSignoffQueue(groupId);
-  const reviews = mine.filter((i) => i.action === 'review');
-  if (reviews.length === 0) return null;
-  return (
-    <>
-      <SectionHead title="Review before release" aside={`${reviews.length} waiting`} tone="hot" />
-      {reviews.map((r) => (
-        <Pressable
-          key={r.key}
-          onPress={() => router.push({ pathname: '/(app)/[groupId]/signoffs' as any, params: { groupId } })}
-          style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10, flexDirection: 'row', justifyContent: 'space-between', gap: 12 }, shadowToken.soft]}
-        >
-          <View style={{ flex: 1 }}>
-            <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{r.name}</Text>
-            <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Officer loan · approved by the Organizer · review to unlock release</Text>
-          </View>
-          <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{r.amount != null ? formatPeso(r.amount) : ''}</Text>
-        </Pressable>
-      ))}
-    </>
-  );
-}
-
-/* ---------------- To release ---------------- */
-function ToRelease({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const { data } = useSummary(groupId);
-  const { member } = useAuth();
-  const approvedLoans = useLoans(groupId, { status: 'approved' });
-  // Not my own loan (the Organizer releases that). Officer loans still in review stay listed, locked, so it's clear they're on the way.
-  const loans = (approvedLoans.data ?? []).filter((l) => l.membership?.member_id !== member?.id);
-  const inReview = (l: Loan) => !!l.review_required && !l.reviewed_at;
-  const reviewer = (l: Loan) => (l.membership?.role === 'auditor' ? 'you' : 'the Auditor');
-  const cash = Number(data?.available_cash ?? 0);
-
-  if (approvedLoans.loading) {
-    return (
-      <View style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 24, alignItems: 'center' }, shadowToken.soft]}>
-        <ActivityIndicator color={semantic.brand} />
-      </View>
-    );
-  }
-  if (loans.length === 0) return null;
-
-  function borrowerName(loan: Loan) { return loan.membership?.members?.full_name ?? 'Member'; }
-
-  return (
-    <>
-      <SectionHead title="To release" aside={`${loans.length} waiting`} tone="hot" />
-      <View>
-        {loans.slice(0, 2).map((loan) => {
-          const covered = cash >= Number(loan.principal);
-          return (
-            <View key={loan.id} style={[{ backgroundColor: semantic.card, borderRadius: 20, padding: 16, marginBottom: 10 }, shadowToken.soft]}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{borrowerName(loan)}</Text>
-                  <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Approved by Organizer · {shortDate(loan.approved_at)} · {loan.term_months} months</Text>
-                </View>
-                <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(loan.approved_principal ?? loan.principal)}</Text>
-              </View>
-              <View style={{ marginTop: 10 }}>
-                {inReview(loan)
-                  ? <Tag tone="late">{`Officer loan — waiting for ${reviewer(loan)} to review before release`}</Tag>
-                  : <Tag tone={covered ? 'ok' : 'late'}>{covered ? `Cash on hand covers this · ${formatPeso(cash)}` : `Short by ${formatPeso(Number(loan.principal) - cash)}`}</Tag>}
-              </View>
-              <Pressable
-                onPress={() => go('loans/disburse')}
-                disabled={inReview(loan)}
-                style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.brandDark, opacity: inReview(loan) ? 0.4 : 1 }}
-              >
-                <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{inReview(loan) ? 'Waiting for review' : 'Release funds'}</Text>
-              </Pressable>
-            </View>
-          );
-        })}
-      </View>
-    </>
-  );
-}
-
 /* ---------------- This month's collection ---------------- */
 /* ---------------- Record grid ---------------- */
 const ACTIONS: TileAction[] = [
@@ -388,13 +135,7 @@ export function TreasurerDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
-      <OwnerLoanToDecide groupId={groupId} go={go} />
-
-      <ProofsToReview groupId={groupId} go={go} />
-
-      <LoansToReview groupId={groupId} />
-
-      <ToRelease groupId={groupId} go={go} />
+      <PendingActionsCard groupId={groupId} head={(title, aside, hot) => <SectionHead title={title} aside={aside} tone={hot ? 'hot' : 'calm'} top={6} />} />
 
       <CollectionBlock groupId={groupId} go={go} head={(title, aside) => <SectionHead title={title} aside={aside} />} />
 

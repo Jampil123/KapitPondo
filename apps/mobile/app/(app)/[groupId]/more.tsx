@@ -3,7 +3,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import {
   Coins, Users, PiggyBank, Repeat, LifeBuoy,
-  UserCheck, Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ClipboardCheck,
+  Smartphone, ShieldCheck, SlidersHorizontal, AlertTriangle, CalendarClock, ClipboardCheck,
   ChevronRight, Banknote, Flag, Clock, Download, ScrollText, FileText, Stamp, HandCoins, Wallet, Inbox,
   ShieldQuestion, UserCog, LayoutGrid, MessageSquareWarning,
 } from 'lucide-react-native';
@@ -31,8 +31,8 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
   owner: {
     title: 'Organizer tools',
     items: [
+      { icon: Inbox, label: 'Pending actions', to: 'actions' },
       SIGNOFFS,
-      { icon: UserCheck, label: 'Approve members', to: 'members/approvals' },
       LOAN_DECISIONS,
       { icon: ShieldCheck, label: 'Officers', to: 'members/officers' },
       { icon: SlidersHorizontal, label: 'Cycle settings', to: 'cycles/configure' },
@@ -46,6 +46,7 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
   treasurer: {
     title: 'Treasurer tools',
     items: [
+      { icon: Inbox, label: 'Pending actions', to: 'actions' },
       { icon: Inbox, label: 'Confirm contributions', to: 'contributions/confirm' },
       { icon: Repeat, label: 'Loan repayments', to: 'loans/record-repayment' },
       { icon: HandCoins, label: 'Release loans', to: 'loans/disburse' },

@@ -34,7 +34,8 @@ import {
 
 export function useReversalRequests(groupId: string, status?: ReversalRequestStatus) {
   const fn = useCallback(() => listReversalRequests(groupId, status), [groupId, status]);
-  return useQuery(fn, [groupId, status]);
+  // Live, so a reversal the Treasurer sends shows up in an Auditor's open queue without a reload.
+  return useQuery(fn, [groupId, status], { table: 'ledger_reversal_requests', filter: `group_id=eq.${groupId}` });
 }
 
 export function useInitiateReversal(groupId: string) {

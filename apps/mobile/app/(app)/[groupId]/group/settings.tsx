@@ -186,8 +186,6 @@ export default function GroupSettings() {
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Payment channel" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
-
-        <SectionHead title="Payment channel" />
         <View style={[{ backgroundColor: semantic.surface, borderRadius: 18, overflow: 'hidden' }, CARD_SHADOW]}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 15, borderBottomWidth: 1, borderColor: semantic.border }}>
             <View style={{ width: 40, height: 40, borderRadius: 11, backgroundColor: '#007DFE', alignItems: 'center', justifyContent: 'center' }}>
@@ -329,7 +327,18 @@ function OwnerApproveReject({ groupId, onDone }: { groupId: string; onDone: () =
     <>
       <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
         <View style={{ flex: 1 }}>
-          <Button label="Reject" variant="ghost" onPress={() => setRejecting(true)} disabled={approve.loading || reject.loading} style={{ borderColor: intent.danger.base, borderWidth: 1.5 }} />
+          <Pressable
+            onPress={() => setRejecting(true)}
+            disabled={approve.loading || reject.loading}
+            style={({ pressed }) => ({
+              alignItems: 'center', justifyContent: 'center', paddingVertical: 15, borderRadius: 13, backgroundColor: intent.danger.soft,
+              opacity: approve.loading || reject.loading ? 0.45 : pressed ? 0.88 : 1,
+            })}
+          >
+            {reject.loading ? <ActivityIndicator color={intent.danger.text} /> : (
+              <Text variant="label" style={{ color: intent.danger.text, fontSize: 15.5 }}>Reject</Text>
+            )}
+          </Pressable>
         </View>
         <View style={{ flex: 1 }}>
           <Button label="Approve" onPress={onApprove} loading={approve.loading} disabled={reject.loading} />

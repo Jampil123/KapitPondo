@@ -1,22 +1,25 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, TextInput, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Check, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
+import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
+import { useAuth } from '@/context/AuthContext';
 import { can } from '@/constants/roles';
 import { useSummary } from '@/features/reporting/reporting.hooks';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import {
-  useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useFinalizeDistribution, useCancelDistribution,
+  useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useUnverifyDistribution, useReturnDistribution, useFinalizeDistribution, useCancelDistribution,
 } from '@/features/distribution/distribution.hooks';
 
 
@@ -77,11 +80,15 @@ function Gates({ steps }: { steps: { state: GateState; label: string; sub?: stri
 export default function YearEnd() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const { role } = useActiveGroup();
+  const { member } = useAuth();
   const summary = useSummary(groupId!);
   const distributions = useDistributions(groupId!);
   const pendingPenalties = usePenalties(groupId!, 'pending');
   const preview = usePreviewDistribution(groupId!);
   const verify = useVerifyDistribution(groupId!);
+  const unverify = useUnverifyDistribution(groupId!);
+  const returnBack = useReturnDistribution(groupId!);
+  const [returning, setReturning] = useState(false);
   const finalize = useFinalizeDistribution(groupId!);
   const cancel = useCancelDistribution(groupId!);
 
@@ -122,8 +129,38 @@ export default function YearEnd() {
   async function onVerify() {
     if (!current) return;
     const res = await verify.run(current.id);
-    if (res) { distributions.refetch(); detail.refetch(); }
+    if (res) { toast('Distribution verified — the Organizer finalizes it next'); distributions.refetch(); detail.refetch(); }
     else if (verify.error) Alert.alert('Could not verify', verify.error.message);
+  }
+
+  // The Auditor who verified can take it back until the Organizer finalizes.
+  const canUnverify = role === 'auditor' && verified && !!member?.id && current?.verified_by === member.id;
+
+  function onUnverify() {
+    if (!current) return;
+    Alert.alert('Undo your verification?', 'The preview goes back to waiting for verification, and the Organizer can’t finalize it until it’s verified again.', [
+      { text: 'Keep it', style: 'cancel' },
+      {
+        text: 'Undo',
+        style: 'destructive',
+        onPress: async () => {
+          const res = await unverify.run(current.id);
+          if (res) { toast('Verification undone'); distributions.refetch(); detail.refetch(); }
+          else if (unverify.error) Alert.alert('Could not undo', unverify.error.message);
+        },
+      },
+    ]);
+  }
+
+  // The Auditor can send it back before verifying, or after verifying it themselves, until it's finalized.
+  const canReturn = role === 'auditor' && (previewed || canUnverify);
+
+  async function onReturn(reason: string) {
+    setReturning(false);
+    if (!current) return;
+    const res = await returnBack.run(current.id, reason);
+    if (res) { toast('Returned to the Treasurer'); distributions.refetch(); }
+    else if (returnBack.error) Alert.alert('Could not return', returnBack.error.message);
   }
 
   // Only a preview the Auditor hasn't verified yet can be cancelled (server deletes status = 'previewed' only).
@@ -172,7 +209,7 @@ export default function YearEnd() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Year-End Distribution" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: canCancel && role === 'owner' ? 190 : 130, gap: 4 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: (canCancel && role === 'owner') || role === 'auditor' ? 190 : 130, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
         <View style={{ paddingHorizontal: 2 }}>
@@ -277,10 +314,15 @@ export default function YearEnd() {
         ) : null}
       </ScrollView>
 
-      {current && !finalized && (role === 'owner' || (role === 'auditor' && previewed) || canCancel) ? (
+      {current && !finalized && (role === 'owner' || (role === 'auditor' && (previewed || canUnverify)) || canCancel) ? (
         <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 10, backgroundColor: semantic.background, borderTopWidth: 1, borderColor: semantic.border, gap: 10 }}>
           {role === 'auditor' ? (
-            <Button label="Verify preview" onPress={onVerify} loading={verify.loading} />
+            <>
+              {canUnverify
+                ? <Button label="Undo verification" variant="ghost" onPress={onUnverify} loading={unverify.loading} />
+                : <Button label="Verify preview" onPress={onVerify} loading={verify.loading} />}
+              {canReturn ? <Button label="Return to Treasurer" variant="ghost" onPress={() => setReturning(true)} loading={returnBack.loading} /> : null}
+            </>
           ) : role === 'owner' ? (
             <Button
               label={verified ? 'Finalize distribution' : 'Waiting on Auditor verification'}
@@ -294,6 +336,17 @@ export default function YearEnd() {
           ) : null}
         </View>
       ) : null}
+
+      <ReasonPrompt
+        visible={returning}
+        title={`Return the ${current?.period ?? ''} preview?`}
+        placeholder="What needs to be fixed? (shown to the Treasurer)"
+        confirmLabel="Return"
+        destructive
+        required
+        onCancel={() => setReturning(false)}
+        onConfirm={onReturn}
+      />
     </SafeAreaView>
   );
 }

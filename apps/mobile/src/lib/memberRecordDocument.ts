@@ -100,7 +100,7 @@ function groupSection(g: MemberRecordGroup): string {
     `## Group Information — ${g.group.name}`,
     '',
     `- Group Name: ${g.group.name}`,
-    `- Fund Code: ${g.group.fund_code}`,
+    `- Group Code: ${g.group.fund_code}`,
     `- Role in Group: ${g.membership.role.charAt(0).toUpperCase() + g.membership.role.slice(1)}`,
     `- Membership Status: ${statusLabel(g.membership.status)}`,
     `- Date Joined Group: ${dateStr(g.membership.joined_at)}`,

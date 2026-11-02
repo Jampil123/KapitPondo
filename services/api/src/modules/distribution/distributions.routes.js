@@ -4,6 +4,7 @@ const requireAuth = require('../../middleware/auth');
 const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./distributions.service');
 const { logAudit } = require('../../lib/auditLog');
+const officers = require('../../lib/officers');
 
 // Set a member's OWN head count — self-service (member and officers alike),
 // not an owner-configures-everyone action. Affects their own distribution
@@ -120,6 +121,71 @@ router.post(
         before: { status: 'previewed' }, after: { status: 'verified', period: distribution.period, total_amount: distribution.total_amount },
       });
       res.json({ message: 'Distribution verified — awaiting Organizer finalization', distribution: verified });
+    } catch (err) { next(err); }
+  }
+);
+
+// Auditor undoes their verification while it still waits for the Organizer to finalize.
+router.post(
+  '/groups/:groupId/distributions/:id/unverify',
+  requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      if (distribution.verified_by !== req.member.id) {
+        return res.status(403).json({ error: 'Only the Auditor who verified this distribution can undo it' });
+      }
+      const reopened = await service.unverifyDistribution({ distributionId: req.params.id, memberId: req.member.id });
+      if (!reopened) return res.status(409).json({ error: 'This distribution is no longer waiting to be finalized' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'unverified', entityType: 'distribution', entityId: req.params.id,
+        before: { status: 'verified' }, after: { status: 'previewed', period: distribution.period, total_amount: distribution.total_amount },
+      });
+      res.json({ message: 'Verification undone — the preview is back for review', distribution: reopened });
+    } catch (err) { next(err); }
+  }
+);
+
+// Auditor returns the preview to the Treasurer with a reason — before verifying it, or after verifying it themselves
+// as long as the Organizer hasn't finalized. The preview is removed; the Treasurer rebuilds it.
+router.post(
+  '/groups/:groupId/distributions/:id/return',
+  requireAuth,
+  requireGroupRole(['auditor']),
+  async (req, res, next) => {
+    try {
+      const reason = (req.body?.reason ?? '').trim();
+      if (!reason) return res.status(400).json({ error: 'reason is required to return a distribution' });
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      if (distribution.status === 'verified') {
+        if (distribution.verified_by !== req.member.id) {
+          return res.status(403).json({ error: 'Only the Auditor who verified this distribution can return it' });
+        }
+        const reopened = await service.unverifyDistribution({ distributionId: req.params.id, memberId: req.member.id });
+        if (!reopened) return res.status(409).json({ error: 'This distribution is no longer waiting to be finalized' });
+      } else if (distribution.status !== 'previewed') {
+        return res.status(409).json({ error: 'This distribution can no longer be returned' });
+      }
+      await service.cancelPreview(req.params.id);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'returned', entityType: 'distribution', entityId: req.params.id,
+        before: { status: distribution.status }, after: { status: 'returned', reason, period: distribution.period, total_amount: distribution.total_amount },
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'treasurer', skip: [req.member.id],
+        type: 'distribution.returned', title: 'Year-end distribution returned',
+        message: `The Auditor returned the ${distribution.period} preview. Reason: ${reason}`,
+      });
+      res.json({ message: 'Returned to the Treasurer' });
     } catch (err) { next(err); }
   }
 );

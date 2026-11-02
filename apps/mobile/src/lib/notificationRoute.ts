@@ -47,6 +47,7 @@ const GROUP_SCREEN: Record<string, string> = {
   'loan.repayment_rejected': 'loans/repayments',
   'ledger.reversed': 'reports/my-transactions',
   'distribution.finalized': 'distribution/year-end',
+  'distribution.returned': 'distribution/year-end',
 
   // group
   'gcash.proposed': 'group/settings',

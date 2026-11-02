@@ -338,10 +338,10 @@ function FundLegend({ color, label, amount, pct }: { color: string; label: strin
   );
 }
 
-const RING_SIZE = 68;
-const RING_STROKE = 9;
+const RING_SIZE = 58;
+const RING_STROKE = 8;
 
-/** Donut of the fund's cash / on-loan split with the cash share in the middle; segments start at 12 o'clock, cash first. */
+/** Donut of the fund's cash / on-loan split — cash share in the middle, its label under the ring; segments start at 12 o'clock, cash first. */
 function FundRing({ cash, onLoan, cashPct }: { cash: number; onLoan: number; cashPct: number }) {
   const total = cash + onLoan;
   const radius = (RING_SIZE - RING_STROKE) / 2;
@@ -352,16 +352,18 @@ function FundRing({ cash, onLoan, cashPct }: { cash: number; onLoan: number; cas
   const arc = { cx: RING_SIZE / 2, cy: RING_SIZE / 2, r: radius, fill: 'none', strokeWidth: RING_STROKE } as const;
 
   return (
-    <View style={{ width: RING_SIZE, height: RING_SIZE }}>
-      <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
-        <Circle {...arc} stroke={semantic.surfaceAlt} />
-        {cashLen > 0 ? <Circle {...arc} stroke={CASH_COLOR} strokeDasharray={`${Math.max(cashLen - gap, 0)} ${circumference}`} /> : null}
-        {loanLen > 0 ? <Circle {...arc} stroke={LOAN_COLOR} strokeDasharray={`${Math.max(loanLen - gap, 0)} ${circumference}`} strokeDashoffset={-cashLen} /> : null}
-      </Svg>
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.3 }}>{total > 0 ? `${cashPct}%` : '—'}</Text>
-        <Text variant="caption" color="secondary" style={{ fontSize: 9, lineHeight: 11 }}>in cash</Text>
+    <View style={{ alignItems: 'center', gap: 3 }}>
+      <View style={{ width: RING_SIZE, height: RING_SIZE }}>
+        <Svg width={RING_SIZE} height={RING_SIZE} style={{ transform: [{ rotate: '-90deg' }] }}>
+          <Circle {...arc} stroke={semantic.surfaceAlt} />
+          {cashLen > 0 ? <Circle {...arc} stroke={CASH_COLOR} strokeDasharray={`${Math.max(cashLen - gap, 0)} ${circumference}`} /> : null}
+          {loanLen > 0 ? <Circle {...arc} stroke={LOAN_COLOR} strokeDasharray={`${Math.max(loanLen - gap, 0)} ${circumference}`} strokeDashoffset={-cashLen} /> : null}
+        </Svg>
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.3 }}>{total > 0 ? `${cashPct}%` : '—'}</Text>
+        </View>
       </View>
+      <Text variant="caption" color="secondary" style={{ fontSize: 10, lineHeight: 12 }}>in cash</Text>
     </View>
   );
 }

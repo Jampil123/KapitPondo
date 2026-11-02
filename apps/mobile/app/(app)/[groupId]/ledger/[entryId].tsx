@@ -5,18 +5,20 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Flag, Undo2, Check, Clock3 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { CloseHeader } from '@/features/payments/PaymentPage';
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
+import { useAuth } from '@/context/AuthContext';
 import { useLedgerEntryDetail } from '@/features/ledger/ledger.hooks';
 import { useFlagPosting } from '@/features/auditlog/auditlog.hooks';
 import { FlagPrompt } from '@/features/flags/FlagPrompt';
 import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import { ENTRY_TYPE_LABEL } from '@/features/audit/GroupLedgerView';
-import { entryRef, initiateReversal, type ReversalRequest } from '@/api/ledger';
+import { entryRef, initiateReversal, unverifyReversal, type ReversalRequest } from '@/api/ledger';
 import { loanRef } from '@/api/loanAudits';
 
 const CHANNEL: Record<string, string> = { gcash: 'GCash', cash: 'Cash', bank_transfer: 'Bank transfer', other: 'Other' };
@@ -103,10 +105,13 @@ export default function LedgerEntryPage() {
   const router = useRouter();
   const close = () => router.back();
   const { role } = useActiveGroup();
+  const { member } = useAuth();
   const q = useLedgerEntryDetail(groupId!, entryId!);
   const flag = useFlagPosting(groupId!);
   const [flagging, setFlagging] = useState(false);
   const [reversing, setReversing] = useState(false);
+  const [undoing, setUndoing] = useState(false);
+  const [undoBusy, setUndoBusy] = useState(false);
   const [viewingProof, setViewingProof] = useState(false);
   const d = q.data;
 
@@ -139,7 +144,9 @@ export default function LedgerEntryPage() {
   const rr = d.reversal_request;
   const reversalOpen = rr && (rr.status === 'pending_verification' || rr.status === 'verified');
   const canReverse = role === 'treasurer' && d.can_reverse && !reversalOpen;
-  const hasAction = canFlag || canReverse;
+  // Only the officer who verified can take it back, and only until the Organizer decides.
+  const canUndoVerify = rr?.status === 'verified' && !!member?.id && rr.verified_by === member.id;
+  const hasAction = canFlag || canReverse || canUndoVerify;
 
   async function onReverse(reason: string) {
     setReversing(false);
@@ -149,6 +156,22 @@ export default function LedgerEntryPage() {
       q.refetch();
     } catch (err) {
       Alert.alert('Could not start the reversal', (err as Error).message);
+    }
+  }
+
+  async function onUndoVerify() {
+    if (!rr) return;
+    setUndoBusy(true);
+    try {
+      await unverifyReversal(groupId!, rr.id);
+      setUndoing(false);
+      toast('Verification undone — back in your queue');
+      q.refetch();
+    } catch (err) {
+      setUndoing(false);
+      Alert.alert('Could not undo', (err as Error).message);
+    } finally {
+      setUndoBusy(false);
     }
   }
 
@@ -216,6 +239,30 @@ export default function LedgerEntryPage() {
           </Pressable>
         </View>
       ) : null}
+
+      {canUndoVerify ? (
+        <View style={{ position: 'absolute', left: 16, right: 16, bottom: Math.max(insets.bottom, 12) + 4 }}>
+          <Pressable
+            onPress={() => setUndoing(true)}
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 15, borderRadius: 16, backgroundColor: semantic.surface, borderWidth: 1, borderColor: intent.danger.soft }, shadowToken.soft]}
+          >
+            <Undo2 size={17} color={intent.danger.text} />
+            <Text style={{ fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>Undo verification</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <ConfirmDialog
+        visible={undoing}
+        icon={Undo2}
+        title="Undo your verification?"
+        message="The reversal goes back to waiting for verification, and the Organizer can't approve it until it's verified again."
+        confirmLabel="Undo"
+        destructive
+        loading={undoBusy}
+        onConfirm={onUndoVerify}
+        onCancel={() => setUndoing(false)}
+      />
 
       <ReasonPrompt
         visible={reversing}

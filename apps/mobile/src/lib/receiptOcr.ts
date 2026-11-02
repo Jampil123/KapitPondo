@@ -39,9 +39,17 @@ function findAmount(text: string): number | null {
   return all.length ? Math.max(...all) : null;
 }
 
+// A reference mixing letters and digits (e.g. "GCPH20261012A7K3Q9") — at least
+// 8 chars with 3+ digits and a letter, so plain words and short codes don't match.
+const ALNUM_REF_RE = /\b(?=[A-Z0-9]*[A-Z])(?=(?:[A-Z]*\d){3})[A-Z0-9]{8,30}\b/g;
+
 function findReference(text: string): string | null {
-  const labeled = text.match(/ref(?:erence)?\.?\s*(?:no\.?|number|#)?\s*[:\-]?\s*([0-9][0-9 \-]{7,20}[0-9])/i);
-  if (labeled) return labeled[1].replace(/[\s-]/g, '');
+  const labeled = text.match(/ref(?:erence)?\.?\s*(?:no\.?|number|#)?\s*[:\-]?\s*([0-9][0-9 \-]{7,20}[0-9]|[A-Z0-9]{8,30})\b/i);
+  if (labeled && /\d{3}/.test(labeled[1].replace(/\D/g, ''))) return labeled[1].replace(/[\s-]/g, '').toUpperCase();
+  // Vision often reads a two-column receipt as all labels, then all values,
+  // so the reference isn't next to its label — take any letter+digit code.
+  const alnum = text.toUpperCase().match(ALNUM_REF_RE);
+  if (alnum) return alnum.reduce((longest, run) => (run.length > longest.length ? run : longest));
   // No labeled reference found — fall back to the longest digit run on the
   // receipt (GCash reference numbers are typically its longest number).
   const digitRuns = [...text.matchAll(/\d[\d \-]{9,20}\d/g)].map((m) => m[0].replace(/[\s-]/g, ''));

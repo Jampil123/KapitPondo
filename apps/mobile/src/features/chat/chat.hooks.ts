@@ -61,7 +61,9 @@ export function useMessages(groupId: string | undefined, channel: ChatChannel, m
     // Realtime: one subscription per group (filter is group_id only — Realtime
     // doesn't support a compound filter), channel checked client-side.
     const sub = supabase
-      .channel(`messages:group:${groupId}`)
+      // Unique per subscription — same reason as useDirectMessages: a re-run before the async
+      // removeChannel() finishes would get back the old, already-subscribed channel and throw.
+      .channel(`messages:group:${groupId}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages', filter: `group_id=eq.${groupId}` },

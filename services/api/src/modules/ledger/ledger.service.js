@@ -139,6 +139,20 @@ async function verifyReversal({ requestId, verifiedBy, notes }) {
   return data;
 }
 
+// The verifier takes their verification back before the Organizer decides — the request returns to the Auditor's queue.
+async function unverifyReversal({ requestId, memberId }) {
+  const { data, error } = await supabase
+    .from('ledger_reversal_requests')
+    .update({ status: 'pending_verification', verified_by: null, verified_at: null, verify_notes: null, updated_at: new Date().toISOString() })
+    .eq('id', requestId)
+    .eq('status', 'verified')
+    .eq('verified_by', memberId)
+    .select()
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
 // Rejected by the Auditor (while pending verification) or the Organizer (once
 // verified) — nothing is posted, and the Treasurer who started it hears why.
 async function rejectReversal({ requestId, rejectedBy, reason, fromStatus }) {
@@ -283,6 +297,7 @@ module.exports = {
   listReversalRequests,
   getReversalRequest,
   reversalReviewBlock,
+  unverifyReversal,
   verifyReversal,
   rejectReversal,
   finalizeReversal,

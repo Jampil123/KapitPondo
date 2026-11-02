@@ -117,7 +117,7 @@ export function GroupsPage() {
           </span>
           <div className="flex items-center gap-2 bg-surface border border-line rounded-xl px-3.5 py-2.5 w-72">
             <Search size={17} className="text-muted" />
-            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search group, fund code, organizer…"
+            <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search group, group code, organizer…"
               className="flex-1 bg-transparent text-sm text-ink outline-none" />
           </div>
         </div>

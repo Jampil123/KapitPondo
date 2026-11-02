@@ -9,18 +9,20 @@ import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/shared/ScreenHeader';
 import { semantic } from '@/theme/colors';
-import { toE164PH } from '@/lib/phone';
+import { toE164PH, phoneFormatError, isSmsSendError, SMS_SEND_FAILED } from '@/lib/phone';
 import { supabase } from '@/lib/supabase';
 
 export default function Forgot() {
   const router = useRouter();
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
+  const [phoneError, setPhoneError] = useState<string | undefined>();
 
   async function onSend() {
+    const formatError = phoneFormatError(phone);
     const e164 = toE164PH(phone);
-    if (!e164) {
-      Alert.alert('Invalid number', 'Enter a valid Philippine mobile number.');
+    if (formatError || !e164) {
+      setPhoneError(formatError ?? 'Enter a valid Philippine mobile number.');
       return;
     }
     setLoading(true);
@@ -30,6 +32,7 @@ export default function Forgot() {
       router.push({ pathname: '/(auth)/otp', params: { phone, purpose: 'reset' } });
     } catch (e) {
       const message = (e as Error).message;
+      if (isSmsSendError(e)) { setPhoneError(SMS_SEND_FAILED); return; }
       Alert.alert(
         'Could not send code',
         /signups not allowed|user not found/i.test(message) ? 'No account is registered with this number.' : message,
@@ -57,7 +60,8 @@ export default function Forgot() {
           placeholder="+63 900 000 0000"
           keyboardType="phone-pad"
           value={phone}
-          onChangeText={setPhone}
+          onChangeText={(t) => { setPhone(t); setPhoneError(undefined); }}
+          error={phoneError}
           leading={<Phone size={18} color={semantic.textMuted} />}
         />
         <View style={{ height: 6 }} />

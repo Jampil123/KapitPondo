@@ -86,6 +86,16 @@ export function previewDistribution(groupId: string, period: string) {
 }
 
 /** POST — Auditor verifies a previewed distribution; proceeds to the Owner for finalization. */
+/** POST — the Auditor who verified takes it back before the Organizer finalizes; it returns to 'previewed'. */
+export function unverifyDistribution(groupId: string, id: string) {
+  return api.post<{ message: string; distribution: Distribution }>(`/api/groups/${groupId}/distributions/${id}/unverify`);
+}
+
+/** POST — the Auditor sends the preview back to the Treasurer with a reason (even after verifying it, until finalized). The preview is removed. */
+export function returnDistribution(groupId: string, id: string, reason: string) {
+  return api.post<{ message: string }>(`/api/groups/${groupId}/distributions/${id}/return`, { reason });
+}
+
 export function verifyDistribution(groupId: string, id: string, notes?: string) {
   return api.post<{ message: string; distribution: Distribution }>(
     `/api/groups/${groupId}/distributions/${id}/verify`,

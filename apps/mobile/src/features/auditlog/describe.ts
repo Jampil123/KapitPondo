@@ -74,6 +74,7 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       return { title: `Returned ${whose}`, from: b.status === 'confirmed' ? 'Pending verification' : 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
     }
     case 'membership_role':
+      if (a.role === 'owner') return { title: 'Handed over the Organizer role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: 'Organizer' };
       return { title: 'Changed a member’s role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: ROLE_LABEL[a.role] ?? a.role };
     case 'membership_heads':
       return { title: 'Changed heads', from: `${b.heads ?? '—'} head${b.heads === 1 ? '' : 's'}`, to: `${a.heads ?? '—'} head${a.heads === 1 ? '' : 's'}` };
@@ -82,6 +83,8 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
         ? { title: 'Approved a membership request', from: 'Pending', to: 'Active', toGood: true }
         : { title: 'Rejected a membership request', from: 'Pending', to: 'Rejected', toBad: true, reason: a.reason };
     case 'distribution':
+      if (e.action === 'unverified') return { title: 'Undid the verification of the year-end distribution', from: 'Verified', to: 'Preview' };
+      if (e.action === 'returned') return { title: 'Returned the year-end distribution to the Treasurer', from: b.status === 'verified' ? 'Verified' : 'Preview', to: 'Returned', reason: a.reason };
       return e.action === 'verified'
         ? { title: 'Verified the year-end distribution', from: 'Preview', to: `Verified · ${fmtValue(a.total_amount)}`, toGood: true }
         : { title: 'Finalized the year-end distribution', from: 'Verified', to: `Finalized · ${fmtValue(a.total_amount)}`, toGood: true };
@@ -94,6 +97,7 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       const titles: Record<string, string> = {
         initiated: `Started a reversal${of}`,
         verified: `Verified the reversal${of}`,
+        unverified: `Undid the verification of the reversal${of}`,
         rejected: `Rejected the reversal${of}`,
         finalized: s?.reversing_entry_ref ? `Approved reversal ${s.reversing_entry_ref}${of}` : `Approved the reversal${of}`,
       };

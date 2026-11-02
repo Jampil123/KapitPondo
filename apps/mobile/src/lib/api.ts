@@ -8,6 +8,7 @@
 // on both physical devices and emulators without any manual config.
 
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
 function resolveApiUrl(): string {
@@ -15,6 +16,7 @@ function resolveApiUrl(): string {
     // Expo embeds the bundler host in several places depending on the SDK/client.
     // Try each in order of reliability.
     const host =
+      (Platform.OS === 'web' ? window.location.hostname : '') ||
       Constants.expoGoConfig?.debuggerHost?.split(':')[0] ||
       (Constants as any).manifest?.debuggerHost?.split(':')[0] ||
       Constants.expoConfig?.hostUri?.split(':')[0] ||

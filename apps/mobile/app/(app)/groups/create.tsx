@@ -78,7 +78,7 @@ export default function CreateGroup() {
           </View>
           <Text variant="h1" style={{ fontSize: 24, textAlign: 'center', marginBottom: 8 }}>Group Created</Text>
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginBottom: 24 }}>
-            Share this fund code so members can join your group:
+            Share this group code so members can join your group:
           </Text>
           <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 16, paddingHorizontal: 32, paddingVertical: 20, marginBottom: 32 }}>
             <Text variant="h1" style={{ letterSpacing: 4 }}>{created.fund_code}</Text>
@@ -130,7 +130,7 @@ export default function CreateGroup() {
                 style={[inputStyle, typography.body, { height: 56, marginBottom: 20 }]}
               />
 
-              <Label>Fund Code</Label>
+              <Label>Group Code</Label>
               <View style={{ flexDirection: 'row', gap: 12, marginBottom: 20 }}>
                 <TextInput
                   value={fundCode}

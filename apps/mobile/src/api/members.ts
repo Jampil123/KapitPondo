@@ -95,6 +95,12 @@ export async function updateProfile(input: UpdateProfileInput) {
   return res.member;
 }
 
+/** POST — copy the confirmed sign-in phone onto my member row, after a phone change (Supabase updateUser + SMS code). */
+export async function syncPhone() {
+  const res = await api.post<{ message: string; member: Member }>('/api/me/phone/sync');
+  return res.member;
+}
+
 export interface SubmitIdentityInput {
   id_document_url: string;
   id_document_back_url?: string;

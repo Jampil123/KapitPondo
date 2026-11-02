@@ -1,15 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight, FileDown, Repeat, AlertTriangle, PiggyBank } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownRight, Repeat, AlertTriangle, PiggyBank } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterTabs } from '@/components/shared/FilterTabs';
 import { semantic, intent, type IntentName, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
-import { shareCsv } from '@/lib/csv';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
@@ -17,7 +15,7 @@ import { buildTimeline } from '@/features/contributions/periods';
 import { useMyBalance, useFundSummary, useLedger } from '@/features/reporting/reporting.hooks';
 import { useLoans } from '@/features/lending/lending.hooks';
 import { useMyPenalties } from '@/features/penalties/penalties.hooks';
-import { signoffLine, signoffs } from '@/features/activity/entryCopy';
+import { signoffLine } from '@/features/activity/entryCopy';
 import type { LedgerEntry, LedgerEntryType } from '@/api/ledger';
 
 
@@ -90,11 +88,10 @@ function StatementRow({ e }: { e: LedgerEntry }) {
 export default function MyLedger() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
-  const { group, membership } = useActiveGroup();
+  const { membership } = useActiveGroup();
   const { cycle } = useActiveCycle(groupId!);
   const heads = membership?.heads ?? 1;
   const [period, setPeriod] = useState<Period>('cycle');
-  const [exporting, setExporting] = useState(false);
 
   // Officers get every member's rows back from these endpoints, so scope to my own membership.
   const contribs = useContributions(groupId!, { ...(cycle?.id ? { cycle_id: cycle.id } : {}), membership_id: membership?.id });
@@ -149,23 +146,6 @@ export default function MyLedger() {
   const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
   const perHead = totalHeads > 0 ? (cash + onLoan) / totalHeads : 0;
   const myShareEstimate = perHead * heads;
-
-  async function onExport() {
-    setExporting(true);
-    try {
-      const rows: (string | number)[][] = [['Date', 'Entry', 'Direction', 'Amount', 'Confirmed by', 'Verified by']];
-      for (const e of entries) {
-        const s = signoffs(e);
-        rows.push([shortDate(e.posted_at), ACTION_COPY[e.entry_type] ?? e.entry_type, e.direction, e.amount, s.confirmedBy ?? '', s.verifiedBy ?? '']);
-      }
-      const label = period === 'cycle' ? (cycle?.name ?? 'this-cycle') : 'all-time';
-      await shareCsv(`${(group?.name ?? 'kapitpondo').replace(/\s+/g, '-')}-ledger-${label}.csv`, rows);
-    } catch (e) {
-      Alert.alert('Could not export', (e as Error).message);
-    } finally {
-      setExporting(false);
-    }
-  }
 
   const loading = contribs.loading || balAll.loading;
 
@@ -244,16 +224,6 @@ export default function MyLedger() {
             </Pressable>
           </View>
         )}
-
-        {/* ---------------- Export ---------------- */}
-        <Pressable
-          onPress={onExport}
-          disabled={exporting || entries.length === 0}
-          style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: semantic.border, opacity: exporting || entries.length === 0 ? 0.5 : 1 }}
-        >
-          {exporting ? <ActivityIndicator color={semantic.brandDark} /> : <FileDown size={17} color={semantic.brandDark} />}
-          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Download ledger (CSV)</Text>
-        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

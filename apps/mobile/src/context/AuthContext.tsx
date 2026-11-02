@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, useCallback, ty
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { toE164PH } from '../lib/phone';
+import { toE164PH, isSmsSendError, SMS_SEND_FAILED } from '../lib/phone';
 import { getMyProfile, type Member } from '../api/members';
 import { API_BASE_URL } from '../api/client';
 import { clearChatCache } from '../features/chat/chatCache';
@@ -28,6 +28,14 @@ export class PhoneAlreadyRegisteredError extends Error {
   constructor() {
     super('This number is already registered. Sign in instead.');
     this.name = 'PhoneAlreadyRegisteredError';
+  }
+}
+
+/** The number passed the format check but the SMS couldn't be sent to it (the provider refused it). */
+export class SmsSendError extends Error {
+  constructor() {
+    super(SMS_SEND_FAILED);
+    this.name = 'SmsSendError';
   }
 }
 
@@ -239,6 +247,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
     });
     if (error?.code === 'phone_exists' || error?.code === 'user_already_exists') throw new PhoneAlreadyRegisteredError();
+    if (error && isSmsSendError(error)) throw new SmsSendError();
     if (error) throw error;
     // Supabase answers a signup for an already-confirmed number with a fake
     // success (no identities, no SMS) instead of an error.

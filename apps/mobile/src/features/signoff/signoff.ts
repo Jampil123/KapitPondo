@@ -31,7 +31,7 @@ export const ACTION_LABEL: Record<SignoffAction, string> = {
   confirm: 'Confirm',
   verify: 'Verify',
   review: 'Review',
-  release: 'Release',
+  release: 'Disburse',
   verify_release: 'Verify release',
   approve: 'Approve',
 };
@@ -82,6 +82,8 @@ export interface SignoffItem {
   cycleId?: string | null;
   /** Reversals: the ledger entry being reversed. */
   entryId?: string;
+  /** Reversals: I verified it and it now waits on the Organizer — I can still undo that from the entry. */
+  verifiedByMe?: boolean;
 }
 
 /** Everything waiting on a sign-off in the group, each marked with whose step it is. */
@@ -165,6 +167,7 @@ export function useSignoffQueue(groupId: string) {
         amount: r.entry ? r.entry.amount : null, since: (verifying ? r.initiated_at : r.verified_at) ?? r.initiated_at,
         note: `${r.reason}${r.initiator?.full_name ? ` (${r.initiator.full_name})` : ''}${!verifying && r.verifier?.full_name ? `\nVerified by ${r.verifier.full_name}${r.verify_notes ? `: ${r.verify_notes}` : ''}` : ''}`,
         entryId: r.entry_id,
+        verifiedByMe: !verifying && !!me && r.verified_by === me,
       });
     });
 
@@ -176,7 +179,7 @@ export function useSignoffQueue(groupId: string) {
       if (l.status === 'approved' && l.review_required && !l.reviewed_at) {
         out.push({ key: `lr-${l.id}`, kind: 'loan', id: l.id, action: 'review', ...withHolder(decide(loanRole.review(b), [borrower, l.approved_by], 'Your loan, or you approved it')), own: borrower === me, name, label: 'Officer loan', amount, since: l.approved_at ?? l.applied_at, note: l.purpose });
       } else if (l.status === 'approved') {
-        out.push({ key: `ll-${l.id}`, kind: 'loan', id: l.id, action: 'release', ...withHolder(decide(loanRole.release(b), [borrower], 'This is your loan')), own: borrower === me, name, label: 'Loan to release', amount, since: l.reviewed_at ?? l.approved_at ?? l.applied_at, note: l.purpose });
+        out.push({ key: `ll-${l.id}`, kind: 'loan', id: l.id, action: 'release', ...withHolder(decide(loanRole.release(b), [borrower], 'This is your loan')), own: borrower === me, name, label: 'Disburse loan', amount, since: l.reviewed_at ?? l.approved_at ?? l.applied_at, note: l.purpose });
       } else if (l.disbursed_at && !l.disbursed_ledger_entry_id) {
         out.push({ key: `lv-${l.id}`, kind: 'loan', id: l.id, action: 'verify_release', ...withHolder(decide(loanRole.verify(b), [borrower, l.disbursed_by], 'Your loan, or you released it')), own: borrower === me, name, label: 'Loan release', amount, since: l.disbursed_at });
       }
@@ -207,7 +210,7 @@ export function useSignoffQueue(groupId: string) {
 
   const loading = contribs.loading || repayments.loading || reversals.loading || loans.loading || members.loading || withdrawals.loading;
   const members_ = members.data ?? [];
-  return { items, mine: items.filter((i) => i.mine), own: items.filter((i) => i.own), members: members_, loading, refetch };
+  return { items, mine: items.filter((i) => i.mine), own: items.filter((i) => i.own), verifiedByMe: items.filter((i) => i.verifiedByMe), members: members_, loading, refetch };
 }
 
 /** Who confirms and who verifies a payer's own submission — for the member's Progress steps ("Confirmed by the Treasurer"). */

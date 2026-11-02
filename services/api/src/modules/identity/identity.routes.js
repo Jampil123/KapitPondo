@@ -172,6 +172,18 @@ router.patch('/me/profile', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// After the app changes the sign-in phone (Supabase updateUser + SMS code to
+// the new number), copy it onto the member row. The number comes from the
+// auth record (req.authUser, read fresh in requireAuth), never the request body.
+router.post('/me/phone/sync', requireAuth, async (req, res, next) => {
+  try {
+    const phone = req.authUser?.phone;
+    if (!phone) return res.status(400).json({ error: 'No confirmed phone number on this account.' });
+    const member = await service.syncPhone(req.member.id, phone);
+    res.json({ message: 'Phone number updated', member });
+  } catch (err) { next(err); }
+});
+
 // Submit / resubmit identity document
 router.post('/me/identity', requireAuth, async (req, res, next) => {
   try {

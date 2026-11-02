@@ -35,28 +35,20 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Pull-up loan details — what the Organizer should review before deciding
- * (TC-014/TC-034) — with Reject / Approve for a pending request. Used by Loan
- * Decisions and the Organizer dashboard's loan request card.
+ * Approve / Reject for a pending loan, shared by the pull-up sheet and the
+ * full loan request page. Approving uses this cycle's default rate (set in
+ * cycles/configure.tsx) and confirms with a dialog, not another screen; a
+ * shortfall in fund cash approves what's available. Render `prompt` once.
  */
-export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
-  groupId: string;
-  loan: Loan | null;
-  onClose: () => void;
-  /** After an approve or reject goes through — refresh the lists. */
-  onDecided: () => void;
-}) {
+export function useLoanDecision(groupId: string, { onDecided, beforePrompt }: { onDecided: () => void; beforePrompt?: () => void }) {
   const liquidity = useLiquidity(groupId);
   const { cycle } = useActiveCycle(groupId);
-  const eligibility = useLoanEligibility(groupId, loan?.id);
   const approve = useApproveLoan(groupId);
   const reject = useRejectLoan(groupId);
   const [rejectTarget, setRejectTarget] = useState<Loan | null>(null);
   const available = Number(liquidity.data?.available_cash ?? 0);
   const hasCycleRate = cycle?.default_interest_rate != null;
 
-  // Approving needs a rate — sourced from this cycle's configured default
-  // (cycles/configure.tsx) and confirmed with a dialog, not another screen.
   function onApprovePress(l: Loan) {
     if (!hasCycleRate) {
       Alert.alert('No interest rate set', "This cycle has no default interest rate configured yet — set one in Configure Cycle before approving loans.");
@@ -65,7 +57,7 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
     const rate = Number(cycle!.default_interest_rate);
     const amount = available > 0 && available < Number(l.principal) ? available : Number(l.principal);
     const partial = amount < Number(l.principal);
-    onClose();
+    beforePrompt?.();
     Alert.alert(
       'Approve this loan?',
       `${formatPeso(amount)}${partial ? ` of the ${formatPeso(l.principal)} requested (fund cash is short)` : ''} at ${(rate * 100).toFixed(2)}% monthly, ${l.term_months} month${l.term_months === 1 ? '' : 's'}, for ${loanName(l)}.`,
@@ -82,6 +74,11 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
     else if (approve.error) Alert.alert('Could not approve', approve.error.message);
   }
 
+  function onRejectPress(l: Loan) {
+    beforePrompt?.();
+    setRejectTarget(l);
+  }
+
   async function onRejectConfirm(reason: string) {
     if (!rejectTarget) return;
     const ok = await reject.run(rejectTarget.id, reason || undefined);
@@ -89,6 +86,35 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
     if (ok !== undefined) onDecided();
     else if (reject.error) Alert.alert('Could not reject', reject.error.message);
   }
+
+  const prompt = (
+    <ReasonPrompt
+      visible={!!rejectTarget}
+      title={rejectTarget ? `Reject ${loanName(rejectTarget)}'s loan?` : 'Reject loan'}
+      confirmLabel="Reject"
+      destructive
+      onCancel={() => setRejectTarget(null)}
+      onConfirm={onRejectConfirm}
+    />
+  );
+
+  return { onApprovePress, onRejectPress, prompt, available, liquidity, busy: approve.loading || reject.loading };
+}
+
+/**
+ * Pull-up loan details — what the Organizer should review before deciding
+ * (TC-014/TC-034) — with Reject / Approve for a pending request. Used by Loan
+ * Decisions; the Organizer's Pending actions open the full page instead (loans/[loanId]).
+ */
+export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
+  groupId: string;
+  loan: Loan | null;
+  onClose: () => void;
+  /** After an approve or reject goes through — refresh the lists. */
+  onDecided: () => void;
+}) {
+  const eligibility = useLoanEligibility(groupId, loan?.id);
+  const { onApprovePress, onRejectPress, prompt, available, busy } = useLoanDecision(groupId, { onDecided, beforePrompt: onClose });
 
   return (
     <>
@@ -144,7 +170,7 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Pressable
-                    onPress={() => { onClose(); setRejectTarget(d); }}
+                    onPress={() => onRejectPress(d)}
                     style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: '#F7E5E5' }}
                   >
                     <Text variant="label" style={{ color: '#C25C5E' }}>Reject</Text>
@@ -153,8 +179,8 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
                 <View style={{ flex: 1 }}>
                   <Pressable
                     onPress={() => onApprovePress(d)}
-                    disabled={approve.loading}
-                    style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand, opacity: approve.loading ? 0.6 : 1 }}
+                    disabled={busy}
+                    style={{ alignItems: 'center', paddingVertical: 13, borderRadius: 12, backgroundColor: semantic.brand, opacity: busy ? 0.6 : 1 }}
                   >
                     <Text variant="label" style={{ color: '#fff' }}>Approve</Text>
                   </Pressable>
@@ -165,14 +191,7 @@ export function LoanDecisionSheet({ groupId, loan, onClose, onDecided }: {
         )}
       </SlideSheet>
 
-      <ReasonPrompt
-        visible={!!rejectTarget}
-        title={rejectTarget ? `Reject ${loanName(rejectTarget)}'s loan?` : 'Reject loan'}
-        confirmLabel="Reject"
-        destructive
-        onCancel={() => setRejectTarget(null)}
-        onConfirm={onRejectConfirm}
-      />
+      {prompt}
     </>
   );
 }

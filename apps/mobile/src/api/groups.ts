@@ -273,6 +273,10 @@ export function rejectMember(groupId: string, memberId: string, reason?: string)
 export function setMemberRole(groupId: string, memberId: string, role: GroupRole) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/role`, { role });
 }
+/** Hand the Organizer role to another member; the caller becomes a regular member. */
+export function transferOrganizer(groupId: string, memberId: string) {
+  return api.post(`/api/groups/${groupId}/organizer/transfer`, { member_id: memberId });
+}
 export function removeMember(groupId: string, memberId: string) {
   return api.del(`/api/groups/${groupId}/members/${memberId}`);
 }

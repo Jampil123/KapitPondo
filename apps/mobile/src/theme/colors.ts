@@ -76,4 +76,7 @@ export const shadowToken = {
   button: { shadowColor: '#7FA6B8', shadowOpacity: 0.32, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 6, boxShadow: '0px 8px 18px rgba(127,166,184,0.32)' },
 } as const;
 
+/** Verified-account green — the Profile badge, photo check and the Personal Information banner. Same green as the rest of the app (e.g. Recent activity). */
+export const verifiedGreen = { base: green[500], soft: green[50], text: green[700] } as const;
+
 export const colors = { steel, slate, gold, green, amber, red, intent, semantic, shadowToken } as const;

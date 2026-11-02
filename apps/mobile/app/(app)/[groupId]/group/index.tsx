@@ -79,7 +79,7 @@ export default function GroupOverview() {
   function onLeave() {
     Alert.alert(
       'Leave this group?',
-      'Your capital is settled at cycle end, not immediately. This can’t be undone from here — you’d need to rejoin with the fund code.',
+      'Your capital is settled at cycle end, not immediately. This can’t be undone from here — you’d need to rejoin with the group code.',
       [
         { text: 'Stay', style: 'cancel' },
         {
@@ -223,9 +223,9 @@ export default function GroupOverview() {
           </View>
 
           <Pressable
-            onPress={onLeave}
-            disabled={leave.loading || membership?.role === 'owner'}
-            style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12, paddingHorizontal: 2, opacity: membership?.role === 'owner' ? 0.5 : 1 }}
+            onPress={membership?.role === 'owner' ? () => go('members/officers') : onLeave}
+            disabled={leave.loading}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 13, paddingVertical: 12, paddingHorizontal: 2 }}
           >
             <View style={{ width: 36, height: 36, borderRadius: 11, backgroundColor: intent.danger.soft, alignItems: 'center', justifyContent: 'center' }}>
               {leave.loading ? <ActivityIndicator size="small" color={intent.danger.text} /> : <LogOut size={17} color={intent.danger.text} />}
@@ -233,10 +233,10 @@ export default function GroupOverview() {
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: intent.danger.text }}>Leave this group</Text>
               <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>
-                {membership?.role === 'owner' ? 'Hand over the Organizer role first — you can’t leave' : 'Your capital is settled at cycle end'}
+                {membership?.role === 'owner' ? 'Hand over the Organizer role first' : 'Your capital is settled at cycle end'}
               </Text>
             </View>
-            {membership?.role !== 'owner' ? <ChevronRight size={16} color={semantic.textMuted} /> : null}
+            <ChevronRight size={16} color={semantic.textMuted} />
           </Pressable>
         </View>
       </ScrollView>

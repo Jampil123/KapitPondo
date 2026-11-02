@@ -64,7 +64,8 @@ router.patch('/groups/:groupId/memberships/:id/role', requireAuth,
   async (req, res, next) => {
     try {
       const { role } = req.body;
-      const allowed = ['member', 'treasurer', 'auditor', 'owner'];
+      // The Organizer role moves only through POST /groups/:groupId/organizer/transfer.
+      const allowed = ['member', 'treasurer', 'auditor'];
       if (!allowed.includes(role)) {
         return res.status(400).json({ error: 'Invalid role' });
       }

@@ -64,7 +64,10 @@ export function useDirectMessages(
       .finally(() => !cancelled && setLoading(false));
 
     const sub = supabase
-      .channel(`dm:${groupId}:${[myMemberId, otherMemberId].sort().join(':')}`)
+      // Unique per subscription: removeChannel() is async, so if this effect re-runs (reopening the
+      // chat, a re-render) before the old channel is gone, supabase.channel() returns that
+      // still-subscribed channel and .on() throws "cannot add postgres_changes callbacks after subscribe()".
+      .channel(`dm:${groupId}:${[myMemberId, otherMemberId].sort().join(':')}:${Math.random().toString(36).slice(2, 8)}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `group_id=eq.${groupId}` },

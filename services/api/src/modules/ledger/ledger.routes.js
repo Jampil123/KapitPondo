@@ -105,6 +105,28 @@ router.post(
   }
 );
 
+// Undo a verification while the reversal still waits for the Organizer — only the officer who verified it.
+router.post(
+  '/groups/:groupId/reversal-requests/:id/unverify',
+  requireAuth,
+  requireGroupRole(['auditor', 'treasurer', 'owner']),
+  async (req, res, next) => {
+    try {
+      const current = await service.getReversalRequest(req.params.id);
+      if (current.group_id !== req.params.groupId) return res.status(400).json({ error: 'Reversal request does not belong to this group' });
+      if (current.verified_by !== req.member.id) return res.status(403).json({ error: 'Only the officer who verified this reversal can undo it' });
+      const request = await service.unverifyReversal({ requestId: req.params.id, memberId: req.member.id });
+      if (!request) return res.status(409).json({ error: 'The Organizer has already decided this reversal' });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'unverified', entityType: 'reversal_request', entityId: req.params.id,
+        before: { status: 'verified' }, after: { status: 'pending_verification' },
+      });
+      res.json({ message: 'Verification undone — the reversal is back for review', request });
+    } catch (err) { next(err); }
+  }
+);
+
 // Reject a reversal, with a reason — the Auditor while it's pending
 // verification (step 2), or the Organizer once verified (step 3). Nothing is
 // posted either way; the Treasurer is told why.

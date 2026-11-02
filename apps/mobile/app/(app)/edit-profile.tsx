@@ -11,6 +11,7 @@ import { DateField } from '@/components/shared/DateInput';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
+import { VerificationBanner } from '@/features/profile/VerificationBanner';
 import { semantic, intent } from '@/theme/colors';
 import { updateProfile } from '@/api/members';
 import { submitProfileUpdateRequest, listMyProfileUpdateRequests, type ProfileUpdateField, type ProfileUpdateReason, type ProfileUpdateRequest } from '@/api/profileUpdateRequests';
@@ -282,8 +283,20 @@ export default function EditProfile() {
     return <Field key={f.key} label={f.label} placeholder={f.placeholder} value={value} onChangeText={setValue} />;
   }
 
-  function renderLockedField(f: FieldConfig) {
+  function renderLockedField(f: FieldConfig, readOnly = false) {
     const rawValue = f.key === 'source_of_funds' ? member?.source_of_funds : f.key === 'employment_status' ? member?.employment_status : (member as any)?.[f.key];
+    // Verified identity details (name, birthday…) can't be changed at all — no request option.
+    if (readOnly) {
+      return (
+        <View key={f.key} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 13 }}>
+          <View style={{ flex: 1 }}>
+            <Text variant="caption" color="muted">{f.label}</Text>
+            <Text variant="body" style={{ marginTop: 2 }} numberOfLines={1}>{displayValue(f, rawValue)}</Text>
+          </View>
+          <Lock size={13} color={semantic.textMuted} />
+        </View>
+      );
+    }
     return (
       <Pressable
         key={f.key}
@@ -302,7 +315,7 @@ export default function EditProfile() {
     );
   }
 
-  function renderSection(title: string, fields: FieldConfig[]) {
+  function renderSection(title: string, fields: FieldConfig[], readOnlyWhenVerified = false) {
     return (
       <View style={{ marginBottom: 18 }}>
         <SectionLabel>{title}</SectionLabel>
@@ -310,7 +323,7 @@ export default function EditProfile() {
           <View>
             {fields.map((f, i) => (
               <View key={f.key} style={{ borderTopWidth: i > 0 ? 1 : 0, borderTopColor: semantic.border }}>
-                {renderLockedField(f)}
+                {renderLockedField(f, readOnlyWhenVerified)}
               </View>
             ))}
           </View>
@@ -351,7 +364,7 @@ export default function EditProfile() {
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BAND_TOP }} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}>
       <SafeAreaView style={{ flex: 1, backgroundColor: BAND_TOP }} edges={['top']}>
-        <AppBar title="Edit Profile" backgroundColor={BAND_TOP} tintColor="#fff" />
+        <AppBar title="Personal Information" backgroundColor={BAND_TOP} tintColor="#fff" />
 
         <View style={{ flex: 1 }}>
           <View onLayout={(e) => setBandHeight(e.nativeEvent.layout.height)} style={HEADER_STYLE}>
@@ -361,13 +374,14 @@ export default function EditProfile() {
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <View style={{ height: bandHeight }} />
             <View style={{ flex: 1, backgroundColor: semantic.background, borderTopLeftRadius: 24, borderTopRightRadius: 24, marginTop: -18, padding: 20, paddingBottom: 40 }}>
+              <VerificationBanner style={{ marginBottom: 18 }} />
 
               {isVerified ? (
                 <>
                   <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
                     <Lock size={14} color={intent.warning.text} style={{ marginTop: 2 }} />
                     <Text variant="caption" style={{ color: intent.warning.text, flex: 1, lineHeight: 18 }}>
-                      Verified information is locked. Tap a field below to request a change.
+                      Personal details and address can’t be changed once verified. For financial info, tap a field to request a change.
                     </Text>
                   </View>
 
@@ -386,26 +400,34 @@ export default function EditProfile() {
                 </>
               ) : null}
 
-              {renderSection('Personal Information', PERSONAL_FIELDS)}
+              {renderSection('Personal Information', PERSONAL_FIELDS, true)}
 
               <SectionLabel>Contact Information</SectionLabel>
               <View style={{ marginBottom: 18, gap: 4 }}>
-                <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Phone size={16} color={semantic.textMuted} />
-                  <Text variant="body" style={{ flexShrink: 1 }}>{member?.phone ? formatPH(member.phone) : '—'}</Text>
-                </View>
-                <Text variant="caption" color="secondary" style={{ marginBottom: 10 }}>Cannot be changed</Text>
+                <Pressable onPress={() => router.push('/(app)/mobile-number' as any)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Mobile Number</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Phone size={16} color={semantic.textMuted} />
+                      <Text variant="body" style={{ flexShrink: 1 }}>{member?.phone ? formatPH(member.phone) : '—'}</Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={18} color={semantic.textMuted} />
+                </Pressable>
 
-                <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Email Address</Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Mail size={16} color={semantic.textMuted} />
-                  <Text variant="body" style={{ flexShrink: 1 }} numberOfLines={1}>{member?.email || '—'}</Text>
-                </View>
-                <Text variant="caption" color="secondary">Manage from the Email Address screen</Text>
+                <Pressable onPress={() => router.push('/(app)/email-address' as any)} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text variant="label" color="secondary" style={{ fontSize: 12.5 }}>Email Address</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Mail size={16} color={semantic.textMuted} />
+                      <Text variant="body" style={{ flexShrink: 1 }} numberOfLines={1}>{member?.email || '—'}</Text>
+                    </View>
+                  </View>
+                  <ChevronRight size={18} color={semantic.textMuted} />
+                </Pressable>
               </View>
 
-              {renderSection('Residential Address', ADDRESS_FIELDS)}
+              {renderSection('Residential Address', ADDRESS_FIELDS, true)}
               {renderSection('Financial Information', FINANCIAL_FIELDS)}
 
               {!isVerified ? <Button label="Save Changes" onPress={onSave} loading={saving} disabled={!canSave} /> : null}

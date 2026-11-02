@@ -217,7 +217,7 @@ export default function ConfigureCycle() {
         )}
 
         {/* ---------------- New cycle form ---------------- */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 22, marginBottom: 4 }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: primaryCycle || otherCycles.length > 0 ? 22 : 0, marginBottom: 4 }}>
           <Text variant="overline" color="secondary">Set up the next cycle</Text>
           {latestCycle ? (
             <Pressable onPress={onCopySettings} style={{ backgroundColor: copied ? intent.success.soft : semantic.surfaceAlt, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10 }}>

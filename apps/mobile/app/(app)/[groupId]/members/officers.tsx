@@ -2,15 +2,17 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Modal, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
-import { ChevronRight, Check, AlertTriangle, X } from 'lucide-react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { ChevronRight, Check, AlertTriangle, X, Crown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useQuery, useAction } from '@/hooks/useApi';
-import { listMembers, listPendingMembers, setMemberRole, type GroupMember } from '@/api/groups';
+import { listMembers, listPendingMembers, setMemberRole, transferOrganizer, type GroupMember } from '@/api/groups';
+import { useGroups } from '@/context/GroupContext';
 import type { GroupRole } from '@/constants/roles';
 
 const CARD_SHADOW = {
@@ -20,10 +22,16 @@ const CARD_SHADOW = {
 
 type Tab = 'all' | 'officers' | 'members';
 type AppointRole = 'treasurer' | 'auditor';
+type SheetRole = AppointRole | 'owner';
 
 const ROLE_LABEL: Record<GroupRole, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
 
-const DUTY: Record<AppointRole, string[]> = {
+const DUTY: Record<SheetRole, string[]> = {
+  owner: [
+    'Approves members and appoints officers',
+    'Decides loans and runs the cycle',
+    'You become a regular member once you hand it over',
+  ],
   treasurer: [
     'Confirms contributions and loan repayments',
     'Releases approved loans to members',
@@ -77,11 +85,15 @@ function Pill({ tone, children }: { tone: 'role' | 'heads' | 'warn' | 'pend'; ch
 export default function MembersOfficers() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [tab, setTab] = useState<Tab>('all');
-  const [sheetRole, setSheetRole] = useState<AppointRole | null>(null);
+  const [sheetRole, setSheetRole] = useState<SheetRole | null>(null);
+  const [handoverTo, setHandoverTo] = useState<GroupMember | null>(null);
+  const router = useRouter();
+  const { refresh: refreshGroups } = useGroups();
 
   const members = useQuery(() => listMembers(groupId!), [groupId]);
   const pending = useQuery(() => listPendingMembers(groupId!), [groupId]);
   const changeRole = useAction((memberId: string, role: GroupRole) => setMemberRole(groupId!, memberId, role));
+  const handover = useAction((memberId: string) => transferOrganizer(groupId!, memberId));
 
   const roster = members.data ?? [];
   const pendingRows = (pending.data ?? []) as { member_id: string; members: { full_name: string | null; avatar_url?: string | null; verification_status: string } | null }[];
@@ -122,6 +134,21 @@ export default function MembersOfficers() {
     }
   }
 
+  async function onHandover() {
+    if (!handoverTo) return;
+    const ok = await handover.run(handoverTo.member_id);
+    if (ok === undefined && handover.error) {
+      setHandoverTo(null);
+      Alert.alert('Could not hand over', handover.error.message);
+      return;
+    }
+    setHandoverTo(null);
+    setSheetRole(null);
+    // This screen is Organizer-only — once the role is gone, go back to the group with the refreshed role.
+    await refreshGroups();
+    router.replace({ pathname: '/(app)/[groupId]' as any, params: { groupId } });
+  }
+
   function onPressPerson(m: GroupMember) {
     if (m.role === 'owner') return;
     Alert.alert(name(m), 'Change role', [
@@ -140,7 +167,7 @@ export default function MembersOfficers() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
-      <BandHeader title="Members & officers" />
+      <BandHeader title="Manage officers" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Tabs ---------------- */}
@@ -156,7 +183,7 @@ export default function MembersOfficers() {
               <>
                 <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>Officer slots</Text>
                 <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
+                  <Pressable onPress={() => setSheetRole('owner')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
                     <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Organizer</Text>
                     {owner ? (
                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -167,7 +194,8 @@ export default function MembersOfficers() {
                     <View style={{ backgroundColor: semantic.surfaceAlt, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 }}>
                       <Text style={{ fontSize: 10, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>You</Text>
                     </View>
-                  </View>
+                    <ChevronRight size={16} color={semantic.textMuted} />
+                  </Pressable>
 
                   {(['treasurer', 'auditor'] as AppointRole[]).map((role) => {
                     const holder = role === 'treasurer' ? treasurer : auditor;
@@ -253,7 +281,9 @@ export default function MembersOfficers() {
             <View style={{ width: 38, height: 4, borderRadius: 2, backgroundColor: semantic.borderStrong, alignSelf: 'center', marginTop: 10 }} />
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', padding: 20, paddingBottom: 12 }}>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>Appoint {sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'}</Text>
+                <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
+                  {sheetRole === 'owner' ? 'Hand over Organizer role' : `Appoint ${sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'}`}
+                </Text>
               </View>
               <Pressable onPress={() => setSheetRole(null)} hitSlop={8}><X size={20} color={semantic.textSecondary} /></Pressable>
             </View>
@@ -261,14 +291,14 @@ export default function MembersOfficers() {
             {sheetRole ? (
               <ScrollView contentContainerStyle={{ paddingHorizontal: 18, paddingBottom: 20 }}>
                 <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 15, gap: 6 }, CARD_SHADOW]}>
-                  <Text variant="overline" color="muted" style={{ marginBottom: 3 }}>What {sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'} does</Text>
+                  <Text variant="overline" color="muted" style={{ marginBottom: 3 }}>What {sheetRole === 'owner' ? 'the Organizer' : sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'} does</Text>
                   {DUTY[sheetRole].map((d) => (
                     <Text key={d} variant="caption" color="secondary" style={{ lineHeight: 17 }}>· {d}</Text>
                   ))}
                 </View>
 
                 {(() => {
-                  const currentHolder = sheetRole === 'auditor' ? auditor : treasurer;
+                  const currentHolder = sheetRole === 'owner' ? owner : sheetRole === 'auditor' ? auditor : treasurer;
                   const eligible = roster.filter((m) => m.member_id !== currentHolder?.member_id && m.members?.verification_status === 'verified');
                   const ineligibleActive = roster.filter((m) => m.member_id !== currentHolder?.member_id && m.members?.verification_status !== 'verified');
                   return (
@@ -278,18 +308,22 @@ export default function MembersOfficers() {
                         {eligible.length === 0 ? (
                           <Text variant="body" color="muted" style={{ padding: 18, textAlign: 'center' }}>No eligible members.</Text>
                         ) : eligible.map((m, i) => {
-                          const otherSeat = filledSlots.find((f) => f.member_id === m.member_id && f.role !== sheetRole);
+                          const otherSeat = sheetRole === 'owner' ? undefined : filledSlots.find((f) => f.member_id === m.member_id && f.role !== sheetRole);
+                          const seatNote = sheetRole === 'owner' && m.role !== 'member' ? `${ROLE_LABEL[m.role]} · this seat becomes empty` : null;
                           return (
                             <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < eligible.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                               <AvatarBadge m={m} size={38} />
                               <View style={{ flex: 1, minWidth: 0 }}>
                                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
                                 <Text variant="caption" color={otherSeat ? undefined : 'secondary'} style={{ marginTop: 3, lineHeight: 15, color: otherSeat ? intent.warning.text : undefined }}>
-                                  {otherSeat ? `Already ${ROLE_LABEL[otherSeat.role]} · allowed but reduces separation` : `Verified · ${m.heads} head${m.heads === 1 ? '' : 's'}`}
+                                  {otherSeat ? `Already ${ROLE_LABEL[otherSeat.role]} · allowed but reduces separation` : seatNote ?? `Verified · ${m.heads} head${m.heads === 1 ? '' : 's'}`}
                                 </Text>
                               </View>
-                              <Pressable onPress={() => onAppoint(m.member_id, sheetRole)} style={{ backgroundColor: semantic.dashCard, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10 }}>
-                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>Appoint</Text>
+                              <Pressable
+                                onPress={() => (sheetRole === 'owner' ? setHandoverTo(m) : onAppoint(m.member_id, sheetRole))}
+                                style={{ backgroundColor: semantic.dashCard, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10 }}
+                              >
+                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{sheetRole === 'owner' ? 'Hand over' : 'Appoint'}</Text>
                               </Pressable>
                             </View>
                           );
@@ -329,6 +363,18 @@ export default function MembersOfficers() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ConfirmDialog
+        visible={!!handoverTo}
+        icon={Crown}
+        title={`Make ${handoverTo ? name(handoverTo) : ''} the Organizer?`}
+        message="You'll become a regular member and lose Organizer access right away. Only the new Organizer can give it back."
+        confirmLabel="Hand over"
+        destructive
+        loading={handover.loading}
+        onConfirm={onHandover}
+        onCancel={() => setHandoverTo(null)}
+      />
     </SafeAreaView>
   );
 }

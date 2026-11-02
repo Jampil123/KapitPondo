@@ -13,7 +13,8 @@ import { PasswordRules, passwordMeetsRules } from '@/components/ui/PasswordRules
 import { PrivacyPolicyModal } from '@/components/shared/PrivacyPolicyModal';
 import { DateField, parseIsoDate } from '@/components/shared/DateInput';
 import { semantic } from '@/theme/colors';
-import { useAuth, PhoneAlreadyRegisteredError } from '@/context/AuthContext';
+import { useAuth, PhoneAlreadyRegisteredError, SmsSendError } from '@/context/AuthContext';
+import { phoneFormatError, SMS_SEND_FAILED } from '@/lib/phone';
 
 const PREFIX = '+63 ';
 
@@ -49,6 +50,8 @@ export default function SignUp() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState(PREFIX);
   const [phoneTaken, setPhoneTaken] = useState(false);
+  const [phoneSendFailed, setPhoneSendFailed] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
   const [password, setPassword] = useState('');
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -63,7 +66,8 @@ export default function SignUp() {
   const firstNameValid = !isBlank(firstName);
   const lastNameValid = !isBlank(lastName);
   const birthdayValid = !!parsedBirthday && calculateAge(parsedBirthday) >= MIN_SIGNUP_AGE;
-  const phoneValid = phoneDigits.length === 10;
+  const phoneFormat = phoneFormatError(phone);
+  const phoneValid = !phoneFormat;
   const emailValid = isBlank(email) || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordValid = passwordMeetsRules(password);
 
@@ -76,7 +80,14 @@ export default function SignUp() {
         ? `You must be at least ${MIN_SIGNUP_AGE} years old to sign up.`
         : undefined
     : undefined;
-  const phoneError = phoneTaken ? 'This number is already registered. Sign in instead.' : undefined;
+  // Format problems show once the number is complete or the field is left; a send failure comes back from the SMS provider.
+  const phoneError = phoneTaken
+    ? 'This number is already registered. Sign in instead.'
+    : phoneSendFailed
+      ? SMS_SEND_FAILED
+      : phoneFormat && (phoneTouched || phoneDigits.length >= 10) && phoneDigits.length > 0
+        ? phoneFormat
+        : undefined;
 
   const canSubmit =
     firstNameValid &&
@@ -84,6 +95,7 @@ export default function SignUp() {
     birthdayValid &&
     phoneValid &&
     !phoneTaken &&
+    !phoneSendFailed &&
     emailValid &&
     passwordValid &&
     agreed;
@@ -104,6 +116,7 @@ export default function SignUp() {
       router.push({ pathname: '/(auth)/otp', params: { phone } });
     } catch (e) {
       if (e instanceof PhoneAlreadyRegisteredError) setPhoneTaken(true);
+      else if (e instanceof SmsSendError) setPhoneSendFailed(true);
       else Alert.alert('Sign up failed', (e as Error).message);
     } finally {
       setLoading(false);
@@ -171,7 +184,8 @@ export default function SignUp() {
             placeholder="+63 900 000 0000"
             keyboardType="phone-pad"
             value={phone}
-            onChangeText={(t) => { setPhone(formatPhone(t)); setPhoneTaken(false); }}
+            onChangeText={(t) => { setPhone(formatPhone(t)); setPhoneTaken(false); setPhoneSendFailed(false); }}
+            onBlur={() => setPhoneTouched(true)}
             error={phoneError}
             leading={<Phone size={18} color={semantic.textMuted} />}
           />

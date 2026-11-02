@@ -23,7 +23,7 @@ export default function JoinGroup() {
 
   async function handleJoin() {
     setError('');
-    if (code.trim().length < 4) { setError('Please enter a valid fund code.'); return; }
+    if (code.trim().length < 4) { setError('Please enter a valid group code.'); return; }
     setLoading(true);
     try {
       await joinByCode(code.trim());
@@ -63,7 +63,7 @@ export default function JoinGroup() {
 
         <ScrollView style={{ flex: 1, backgroundColor: semantic.background }} contentContainerStyle={{ paddingHorizontal: 20, flexGrow: 1 }} keyboardShouldPersistTaps="handled">
           <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 24, padding: 20, gap: 16, marginTop: 24 }}>
-            <Text variant="overline" color="secondary">Fund Code</Text>
+            <Text variant="overline" color="secondary">Group Code</Text>
             <TextInput
               value={code}
               onChangeText={(t) => setCode(t.toUpperCase())}
@@ -74,15 +74,27 @@ export default function JoinGroup() {
               style={[typography.h2, { backgroundColor: semantic.background, borderRadius: 16, paddingVertical: 16, paddingHorizontal: 16, color: semantic.textPrimary, textAlign: 'center', letterSpacing: 4 }]}
             />
 
+            <Text variant="bodySmall" color="secondary" style={{ textAlign: 'center' }}>
+              Don't have a code? Ask your group's organizer to share it with you.
+            </Text>
+
             {error ? <Text variant="bodySmall" style={{ color: '#C25C5E' }}>{error}</Text> : null}
 
             <Button label="Join Group" onPress={handleJoin} loading={loading} disabled={code.trim().length < 4} />
           </View>
 
           <View style={{ marginTop: 24, gap: 16, paddingBottom: 32 }}>
-            <Pressable onPress={() => router.replace('/(app)/groups/create')} style={{ backgroundColor: semantic.surface, borderWidth: 1, borderColor: semantic.borderStrong, padding: 16, borderRadius: 24 }}>
-              <Plus size={28} color={semantic.textPrimary} style={{ marginBottom: 4 }} />
-              <Text variant="label">Need a new group?</Text>
+            <Pressable onPress={() => router.replace('/(app)/groups/create')} style={{ backgroundColor: semantic.surface, borderWidth: 1, borderColor: semantic.borderStrong, padding: 16, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
+                <Plus size={24} color={semantic.brandDark} />
+              </View>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text variant="label">Need a new group?</Text>
+                <Text variant="bodySmall" color="secondary">
+                  Start your own fund, set the rules, and invite family or friends with your code.
+                </Text>
+                <Text variant="bodySmall" style={{ color: semantic.brandDark, fontWeight: '700', marginTop: 4 }}>Create a group</Text>
+              </View>
             </Pressable>
           </View>
         </ScrollView>

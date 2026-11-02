@@ -120,6 +120,11 @@ export function rejectReversal(groupId: string, requestId: string, reason?: stri
   );
 }
 
+/** POST — the officer who verified takes it back while it still waits for the Organizer; it returns to pending verification. */
+export function unverifyReversal(groupId: string, requestId: string) {
+  return api.post<{ message: string; request: ReversalRequest }>(`/api/groups/${groupId}/reversal-requests/${requestId}/unverify`);
+}
+
 /** POST — the Organizer approves a verified request. This is the step that posts the reversing entry and undoes the record behind it. */
 export function finalizeReversal(groupId: string, requestId: string) {
   return api.post<{ message: string; request: ReversalRequest; reversalEntry: LedgerEntry }>(

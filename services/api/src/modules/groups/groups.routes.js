@@ -294,6 +294,24 @@ router.patch('/groups/:groupId/members/:memberId/role', requireAuth,
   }
 );
 
+// Hand the Organizer role to another member — the caller becomes a regular member (owner only)
+router.post('/groups/:groupId/organizer/transfer', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const { member_id: toMemberId } = req.body;
+      if (!toMemberId) return res.status(400).json({ error: 'member_id is required' });
+      const { previousRole } = await service.transferOrganizer(req.params.groupId, req.member.id, toMemberId);
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'role_changed', entityType: 'membership_role', entityId: toMemberId,
+        before: { role: previousRole }, after: { role: 'owner' },
+      });
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  }
+);
+
 // Officer sends a reminder push to a specific member (e.g. behind on
 // contributions). Treasurer/Auditor/Owner — any officer, not owner-only.
 router.post('/groups/:groupId/members/:memberId/nudge', requireAuth,

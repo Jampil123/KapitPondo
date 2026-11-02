@@ -22,6 +22,8 @@ import {
   getDistribution,
   previewDistribution,
   verifyDistribution,
+  unverifyDistribution,
+  returnDistribution,
   finalizeDistribution,
   cancelDistribution,
   setHeads,
@@ -62,6 +64,14 @@ export function useVerifyDistribution(groupId: string) {
 /** finalize(id) — returns the finalized detail, or sets error.status 409 if the fund moved. */
 export function useFinalizeDistribution(groupId: string) {
   return useAction((id: string) => finalizeDistribution(groupId, id));
+}
+
+export function useUnverifyDistribution(groupId: string) {
+  return useAction((id: string) => unverifyDistribution(groupId, id));
+}
+
+export function useReturnDistribution(groupId: string) {
+  return useAction((id: string, reason: string) => returnDistribution(groupId, id, reason));
 }
 
 export function useCancelDistribution(groupId: string) {

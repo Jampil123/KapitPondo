@@ -229,8 +229,9 @@ export function SuccessView({ heading, amount, note, phrase, rows, onClose, view
   note: string;
   rows: { label: string; value: ReactNode }[];
   onClose: () => void;
-  viewAllLabel: string;
-  onViewAll: () => void;
+  /** Optional secondary button under Done. */
+  viewAllLabel?: string;
+  onViewAll?: () => void;
 }) {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
@@ -259,7 +260,7 @@ export function SuccessView({ heading, amount, note, phrase, rows, onClose, view
 
       <View style={{ paddingHorizontal: 20, paddingTop: 10, paddingBottom: 12, gap: 8 }}>
         <Button label="Done" onPress={onClose} />
-        <Button label={viewAllLabel} variant="ghost" onPress={onViewAll} />
+        {viewAllLabel && onViewAll ? <Button label={viewAllLabel} variant="ghost" onPress={onViewAll} /> : null}
       </View>
     </SafeAreaView>
   );

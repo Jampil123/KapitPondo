@@ -457,8 +457,22 @@ async function getMyProfile(memberId) {
   return getMember(memberId);
 }
 
+// Copy the sign-in phone onto the member row after a phone change. Supabase
+// only switches auth.users.phone once the SMS code to the new number is
+// confirmed, so the number written here is always a verified one.
+async function syncPhone(memberId, phone) {
+  const { data, error } = await supabase
+    .from('members')
+    .update({ phone })
+    .eq('id', memberId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 module.exports = {
-  submitDocument, updateProfile, listForReview, getMember,
+  submitDocument, updateProfile, syncPhone, listForReview, getMember,
   approveMember, requestResubmission, rejectMember, getMyProfile,
   suspendMember, reinstateMember, isPlatformAdmin,
 };
