@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Wallet, ShieldCheck } from 'lucide-react-native';
@@ -8,7 +9,7 @@ import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
-import { CloseHeader, SuccessView } from '@/features/payments/PaymentPage';
+import { CloseHeader } from '@/features/payments/PaymentPage';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso, toAmountString } from '@/lib/money';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
@@ -73,7 +74,6 @@ export default function RequestLoan() {
   const [purpose, setPurpose] = useState('');
   const [term, setTerm] = useState('6');
   // Set once the application goes through — swaps the form for the success page.
-  const [submitted, setSubmitted] = useState<{ principal: number; months: number; perMonth: number; headNo: number; borrower: string; at: Date } | null>(null);
 
   // One loan per head — default to the head the hub passed in, else the first free one.
   const slots = eligibility.data?.slots ?? [];
@@ -120,6 +120,7 @@ export default function RequestLoan() {
     const amt = toAmountString(amount);
     if (!amt || Number(amt) <= 0) return Alert.alert('Invalid amount', 'Enter a valid loan amount.');
     if (!months) return Alert.alert('Invalid term', 'Enter the number of months.');
+    if (overCapacity) return Alert.alert('Not enough in the fund', `Enter ${formatPeso(availableCash)} or less.`);
     if (headNo > 1) {
       const name = borrowerName.trim();
       if (!name) return Alert.alert('Name required', `Enter the name of the person this loan is for.`);
@@ -128,33 +129,14 @@ export default function RequestLoan() {
         if (saved === undefined) return Alert.alert('Could not save the name', saveNames.error?.message ?? 'Try again.');
       }
     }
-    const ok = await apply.run({ principal: amt, term_months: months, purpose: purpose || undefined, head_no: headNo });
-    if (ok !== undefined) {
-      setSubmitted({ principal: Number(amt), months, perMonth, headNo, borrower: headNo > 1 ? borrowerName.trim() : 'You', at: new Date() });
+    const res = await apply.run({ principal: amt, term_months: months, purpose: purpose || undefined, head_no: headNo });
+    if (res !== undefined) {
+      // Straight to the request's own page, where its progress is tracked.
+      toast('Loan request sent');
+      router.replace({ pathname: '/(app)/[groupId]/loans/my-loan' as any, params: { groupId, ...(res?.loan?.id ? { loanId: res.loan.id } : {}) } });
     } else if (apply.error) {
       Alert.alert('Could not submit', apply.error.message);
     }
-  }
-
-  if (submitted) {
-    // The Organizer decides loans — except their own, which goes to the Treasurer.
-    const decider = role === 'owner' ? 'the Treasurer' : 'the Organizer';
-    return (
-      <SuccessView
-        heading="Loan request sent"
-        amount={submitted.principal}
-        note={`${decider[0].toUpperCase()}${decider.slice(1)} will review it. You'll be notified once it's decided.`}
-        phrase="Borrow with purpose, repay with pride — every peso you return helps the whole group grow."
-        rows={[
-          { label: 'Term', value: `${submitted.months} month${submitted.months === 1 ? '' : 's'}` },
-          { label: 'About per month', value: `${formatPeso(submitted.perMonth)} + interest` },
-          { label: 'For', value: submitted.headNo > 1 ? `Head ${submitted.headNo} · ${submitted.borrower}` : 'You (Head 1)' },
-          { label: 'Status', value: 'Waiting for review' },
-          { label: 'Sent', value: submitted.at.toLocaleString('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) },
-        ]}
-        onClose={() => router.back()}
-      />
-    );
   }
 
   // Loans need a verified account — explain that here, with the way to fix it, instead of the form.
@@ -255,8 +237,8 @@ export default function RequestLoan() {
               </Text>
             </View>
             {overCapacity ? (
-              <Text variant="caption" style={{ color: intent.warning.text, marginTop: -11, marginBottom: 15 }}>
-                This is more than the fund currently has on hand — the Organizer may need to approve a smaller amount.
+              <Text variant="caption" style={{ color: intent.danger.text, marginTop: -11, marginBottom: 15 }}>
+                More than the fund has right now. Enter {formatPeso(availableCash)} or less.
               </Text>
             ) : null}
           </View>
@@ -273,7 +255,7 @@ export default function RequestLoan() {
           <TermRow k="Est. total repayable" v={amortization ? formatPeso(amortization.totalRepayable) : 'Depends on approved rate'} muted={!amortization} />
         </View>
 
-        <Button label="Submit request" onPress={onSubmit} loading={apply.loading || saveNames.loading} style={{ marginTop: 18 }} />
+        <Button label="Submit request" onPress={onSubmit} disabled={overCapacity || eligibility.loading} loading={apply.loading || saveNames.loading} style={{ marginTop: 18 }} />
       </ScrollView>
     </SafeAreaView>
   );

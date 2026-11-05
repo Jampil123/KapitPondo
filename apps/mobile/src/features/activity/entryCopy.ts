@@ -16,7 +16,7 @@ export const ENTRY_LABEL: Record<LedgerEntryType, string> = {
 
 export const ACTION_COPY: Partial<Record<LedgerEntryType, string>> = {
   contribution: 'Your contribution was approved',
-  loan_disbursement: 'Your loan was approved & disbursed',
+  loan_disbursement: 'Your loan was approved & released',
   loan_repayment: 'Your repayment was recorded',
   penalty: 'A penalty was applied',
   distribution: 'Your year-end share was paid out',

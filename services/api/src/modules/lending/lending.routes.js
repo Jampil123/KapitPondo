@@ -215,12 +215,10 @@ router.post(
       });
       const borrowerRole = loan.membership?.role;
       const skip = [loan.membership?.member_id, req.member.id].filter(Boolean);
-      if (approvedLoan.review_required) {
-        await officers.notifyRole({ groupId: req.params.groupId, role: officers.LOAN_DUTY.review(borrowerRole), skip, type: 'loan.to_review', title: 'Loan to review before release', message: `An officer's loan of ${peso(approvedLoan.approved_principal)} needs your review before it can be released.` });
-      } else {
-        await officers.notifyRole({ groupId: req.params.groupId, role: officers.LOAN_DUTY.release(borrowerRole), skip, type: 'loan.to_release', title: 'Loan ready to release', message: `A loan of ${peso(approvedLoan.approved_principal)} was approved and is ready to release.` });
-      }
-      res.json({ message: approvedLoan.review_required ? 'Loan approved — waiting for review before release' : 'Loan approved — ready to release', loan: approvedLoan });
+      // No before-release review (0071). The Treasurer releases their own loan too, so they're told even as the borrower.
+      const releaseSkip = borrowerRole === 'treasurer' ? [req.member.id] : skip;
+      await officers.notifyRole({ groupId: req.params.groupId, role: officers.LOAN_DUTY.release(borrowerRole), skip: releaseSkip, type: 'loan.to_release', title: 'Loan ready to release', message: `A loan of ${peso(approvedLoan.approved_principal)} was approved and is ready to release.` });
+      res.json({ message: 'Loan approved — ready to release', loan: approvedLoan });
     } catch (err) {
       if (err.message && (err.message.includes('liquidity') || err.status === 409)) {
         return res.status(409).json({ error: err.message });

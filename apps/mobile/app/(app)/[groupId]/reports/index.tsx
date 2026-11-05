@@ -143,7 +143,7 @@ export default function MyLedger() {
   const totalHeads = Number(fund.data?.total_heads ?? 0);
   // Whole fund = cash on hand + money out on loan (same total as the dashboard), split per head, times my heads.
   const cash = Number(fund.data?.available_cash ?? 0);
-  const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
+  const onLoan = Number(fund.data?.out_on_loan ?? 0);
   const perHead = totalHeads > 0 ? (cash + onLoan) / totalHeads : 0;
   const myShareEstimate = perHead * heads;
 

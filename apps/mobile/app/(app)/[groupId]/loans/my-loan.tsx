@@ -94,7 +94,7 @@ export default function MyLoan() {
   const { groupId, loanId } = useLocalSearchParams<{ groupId: string; loanId?: string }>();
   const router = useRouter();
   const { membership } = useActiveGroup();
-  // Who decides / reviews / releases depends on who's borrowing (an officer's loan skips the officer and adds a review).
+  // Who decides and who releases depends on who's borrowing (an officer's loan skips that officer).
   const chain = loanChain(membership?.role);
   const { cycle } = useActiveCycle(groupId!);
   const allLoans = useLoans(groupId!, {});
@@ -296,11 +296,10 @@ export default function MyLoan() {
                 { title: 'You sent the request', sub: shortDate(pendingLoan.applied_at), done: true },
                 {
                   title: `${chain.approver} is deciding`,
-                  sub: pendingLoan.review_note ? `Sent back at review: ${pendingLoan.review_note}` : 'Reviews the amount against your record and the fund’s cash',
+                  sub: pendingLoan.review_note ? `Sent back: ${pendingLoan.review_note}` : 'Reviews the amount against your record and the fund’s cash',
                   done: false, now: true,
                 },
-                ...(chain.reviewer ? [{ title: `${chain.reviewer} reviews before release`, sub: 'Officer loans get a second check', done: false }] : []),
-                { title: `${chain.releaser} releases the money`, sub: 'Sent outside the app, with a reference number', done: false },
+                { title: chain.selfRelease ? 'You release the money' : `${chain.releaser} releases the money`, sub: 'Sent outside the app, with a reference number', done: false },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
               ];
               return (
@@ -336,7 +335,7 @@ export default function MyLoan() {
             <View style={{ paddingHorizontal: 4, paddingTop: 4 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Approved</Text>
-                <Badge tone="neutral" label={approvedLoan.review_required && !approvedLoan.reviewed_at ? 'In review' : 'Awaiting release'} Icon={Check} />
+                <Badge tone="neutral" label="Awaiting release" Icon={Check} />
               </View>
               <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)}</Text>
               <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5 }}>
@@ -346,14 +345,10 @@ export default function MyLoan() {
             </View>
 
             {(() => {
-              const inReview = !!approvedLoan.review_required && !approvedLoan.reviewed_at;
               const steps = [
                 { title: 'You sent the request', sub: shortDate(approvedLoan.applied_at), done: true },
                 { title: `${chain.approver} approved`, sub: `${shortDate(approvedLoan.approved_at)} · ${formatPeso(approvedLoan.approved_principal ?? approvedLoan.principal)} approved`, done: true },
-                ...(approvedLoan.review_required ? [inReview
-                  ? { title: `${chain.reviewer ?? 'Auditor'} is reviewing`, sub: 'A second check on officer loans before any money moves', done: false, now: true }
-                  : { title: `${chain.reviewer ?? 'Auditor'} cleared it`, sub: shortDate(approvedLoan.reviewed_at), done: true }] : []),
-                { title: inReview ? `${chain.releaser} releases the money` : `${chain.releaser} is releasing the money`, sub: 'Sent outside the app, with a reference number recorded', done: false, now: !inReview },
+                { title: chain.selfRelease ? 'You release the money' : `${chain.releaser} is releasing the money`, sub: 'Sent outside the app, with a reference number recorded', done: false, now: true },
                 { title: 'Repayments begin', sub: 'Whenever you’re ready, once released', done: false },
               ];
               const current = steps.findIndex((s) => !s.done) + 1;

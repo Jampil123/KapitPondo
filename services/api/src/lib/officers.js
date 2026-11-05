@@ -36,7 +36,7 @@ async function verifyRole(groupId, payerRole, recorderRole = null) {
 const LOAN_DUTY = {
   approve: (b) => (b === 'owner' ? 'treasurer' : 'owner'),
   review: (b) => (b === 'auditor' ? 'treasurer' : 'auditor'),
-  release: (b) => (b === 'treasurer' ? 'owner' : 'treasurer'),
+  release: () => 'treasurer', // the Treasurer releases their own loan too (0070)
   verify: (b) => (b === 'auditor' ? 'owner' : 'auditor'),
 };
 

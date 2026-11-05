@@ -10,7 +10,7 @@ import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { semantic, intent, shadowToken } from '@/theme/colors';
-import { useQuery, useAction } from '@/hooks/useApi';
+import { useQuery } from '@/hooks/useApi';
 import { listMembers, listPendingMembers, setMemberRole, transferOrganizer, type GroupMember } from '@/api/groups';
 import { useGroups } from '@/context/GroupContext';
 import type { GroupRole } from '@/constants/roles';
@@ -92,8 +92,7 @@ export default function MembersOfficers() {
 
   const members = useQuery(() => listMembers(groupId!), [groupId]);
   const pending = useQuery(() => listPendingMembers(groupId!), [groupId]);
-  const changeRole = useAction((memberId: string, role: GroupRole) => setMemberRole(groupId!, memberId, role));
-  const handover = useAction((memberId: string) => transferOrganizer(groupId!, memberId));
+  const [handingOver, setHandingOver] = useState(false);
 
   const roster = members.data ?? [];
   const pendingRows = (pending.data ?? []) as { member_id: string; members: { full_name: string | null; avatar_url?: string | null; verification_status: string } | null }[];
@@ -118,10 +117,13 @@ export default function MembersOfficers() {
   async function onAppoint(memberId: string, role: GroupRole) {
     const alreadyOfficer = role !== 'member' && filledSlots.some((m) => m.member_id === memberId && m.role !== role);
     const doAppoint = async () => {
-      const ok = await changeRole.run(memberId, role);
       setSheetRole(null);
-      if (ok === undefined && changeRole.error) Alert.alert('Could not appoint', changeRole.error.message);
-      else { members.refetch(); }
+      try {
+        await setMemberRole(groupId!, memberId, role);
+        members.refetch();
+      } catch (e) {
+        Alert.alert('Could not appoint', (e as Error).message);
+      }
     };
     if (alreadyOfficer) {
       Alert.alert(
@@ -136,12 +138,16 @@ export default function MembersOfficers() {
 
   async function onHandover() {
     if (!handoverTo) return;
-    const ok = await handover.run(handoverTo.member_id);
-    if (ok === undefined && handover.error) {
+    setHandingOver(true);
+    try {
+      await transferOrganizer(groupId!, handoverTo.member_id);
+    } catch (e) {
+      setHandingOver(false);
       setHandoverTo(null);
-      Alert.alert('Could not hand over', handover.error.message);
+      Alert.alert('Could not hand over', (e as Error).message);
       return;
     }
+    setHandingOver(false);
     setHandoverTo(null);
     setSheetRole(null);
     // This screen is Organizer-only — once the role is gone, go back to the group with the refreshed role.
@@ -362,19 +368,20 @@ export default function MembersOfficers() {
             ) : null}
           </Pressable>
         </Pressable>
+        {/* Inside the sheet's Modal: iOS won't present a second Modal over one that's open. */}
+        <ConfirmDialog
+          visible={!!handoverTo}
+          icon={Crown}
+          title={`Make ${handoverTo ? name(handoverTo) : ''} the Organizer?`}
+          message="You'll become a regular member and lose Organizer access right away. Only the new Organizer can give it back."
+          confirmLabel="Hand over"
+          destructive
+          loading={handingOver}
+          onConfirm={onHandover}
+          onCancel={() => setHandoverTo(null)}
+        />
       </Modal>
 
-      <ConfirmDialog
-        visible={!!handoverTo}
-        icon={Crown}
-        title={`Make ${handoverTo ? name(handoverTo) : ''} the Organizer?`}
-        message="You'll become a regular member and lose Organizer access right away. Only the new Organizer can give it back."
-        confirmLabel="Hand over"
-        destructive
-        loading={handover.loading}
-        onConfirm={onHandover}
-        onCancel={() => setHandoverTo(null)}
-      />
     </SafeAreaView>
   );
 }

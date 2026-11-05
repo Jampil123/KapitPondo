@@ -3,11 +3,96 @@
 
 const supabase = require('../../config/supabase');
 
-// Group-wide financial snapshot (officers)
-async function groupSummary(groupId) {
-  const { data, error } = await supabase.rpc('group_summary', { p_group_id: groupId });
+// Contributions the treasurer approved (confirmed) but not yet verified. They
+// show on dashboards as pending; only verify posts them to the ledger. A
+// submitted one doesn't count until the treasurer approves it.
+async function pendingContributions(column, id) {
+  const { data, error } = await supabase
+    .from('contributions')
+    .select('amount')
+    .eq(column, id)
+    .eq('status', 'confirmed');
   if (error) throw error;
-  return Array.isArray(data) ? data[0] : data;
+  return Math.round((data ?? []).reduce((sum, r) => sum + Number(r.amount), 0) * 100) / 100;
+}
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// The principal part of a repayment, split the way verify_repayment does it
+// (flat rate, 0063): interest is the payment's share of the monthly interest.
+function principalPortion(amount, loan) {
+  const loanAmount = Number(loan.approved_principal ?? loan.principal);
+  const rate = Number(loan.interest_rate ?? 0);
+  if (!(rate > 0) || !(loan.term_months > 0)) return amount;
+  const monthInterest = round2(loanAmount * rate);
+  const monthly = loanAmount / loan.term_months + monthInterest;
+  return amount - Math.min(round2((amount * monthInterest) / monthly), amount);
+}
+
+// Loan repayments the treasurer approved (confirmed) but not yet verified:
+// the full amount (it's cash in) and the principal part (it comes off what's
+// on loan). loan_payments has no group_id of its own, so filter through the loan.
+async function pendingLoanRepayments(groupId) {
+  const { data, error } = await supabase
+    .from('loan_payments')
+    .select('amount, loans!inner(group_id, principal, approved_principal, interest_rate, term_months)')
+    .eq('loans.group_id', groupId)
+    .eq('status', 'confirmed');
+  if (error) throw error;
+  const rows = data ?? [];
+  return {
+    amount: round2(rows.reduce((sum, r) => sum + Number(r.amount), 0)),
+    principal: round2(rows.reduce((sum, r) => sum + principalPortion(Number(r.amount), r.loans), 0)),
+  };
+}
+
+// Principal still out with borrowers. outstanding_balance is set when a loan is
+// released (before the release is verified) and lowered when a repayment is
+// verified — so this counts released loans right away, and takes off approved
+// repayments that haven't been verified yet.
+async function outOnLoan(groupId, pendingPrincipal) {
+  const { data, error } = await supabase
+    .from('loans')
+    .select('outstanding_balance')
+    .eq('group_id', groupId)
+    .eq('status', 'active');
+  if (error) throw error;
+  const outstanding = (data ?? []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
+  return Math.max(round2(outstanding - pendingPrincipal), 0);
+}
+
+// Loans released but not yet verified. available_cash already holds them back
+// (group_available_cash); this is the same amount, so dashboards can show it as
+// out on loan before the disbursement posts to the ledger.
+async function pendingLoanReleases(groupId) {
+  const { data, error } = await supabase
+    .from('loans')
+    .select('principal, approved_principal')
+    .eq('group_id', groupId)
+    .not('disbursed_at', 'is', null)
+    .is('disbursed_ledger_entry_id', null);
+  if (error) throw error;
+  return Math.round((data ?? []).reduce((sum, r) => sum + Number(r.approved_principal ?? r.principal), 0) * 100) / 100;
+}
+
+// Group-wide financial snapshot (officers). The ledger figures stay posted-only;
+// the pending_* totals are reported alongside, never mixed into them.
+async function groupSummary(groupId) {
+  const [{ data, error }, pending_contributions, repaid, pending_loan_releases] = await Promise.all([
+    supabase.rpc('group_summary', { p_group_id: groupId }),
+    pendingContributions('group_id', groupId),
+    pendingLoanRepayments(groupId),
+    pendingLoanReleases(groupId),
+  ]);
+  if (error) throw error;
+  const out_on_loan = await outOnLoan(groupId, repaid.principal);
+  return {
+    ...(Array.isArray(data) ? data[0] : data),
+    pending_contributions,
+    pending_loan_repayments: repaid.amount,
+    pending_loan_releases,
+    out_on_loan,
+  };
 }
 
 // Member-safe fund aggregate — same RPC/fields as groupSummary (already
@@ -15,9 +100,7 @@ async function groupSummary(groupId) {
 // kept as its own function so the officer-only groupSummary can grow
 // officer-sensitive fields later without automatically exposing them here.
 async function fundSummary(groupId) {
-  const { data, error } = await supabase.rpc('group_summary', { p_group_id: groupId });
-  if (error) throw error;
-  return Array.isArray(data) ? data[0] : data;
+  return groupSummary(groupId);
 }
 
 // A single membership's net balance
@@ -33,16 +116,17 @@ async function membershipBalance(membershipId) {
 // net figure, but the client shows contributions/loan_outstanding separately,
 // so compute those directly rather than fabricating them.
 async function myBalance(membershipId) {
-  const [contribRes, loanRes, balance] = await Promise.all([
+  const [contribRes, loanRes, balance, contributions_pending] = await Promise.all([
     supabase.from('ledger_entries').select('amount').eq('membership_id', membershipId).eq('entry_type', 'contribution'),
     supabase.from('loans').select('outstanding_balance').eq('membership_id', membershipId).eq('status', 'active'),
     membershipBalance(membershipId),
+    pendingContributions('membership_id', membershipId),
   ]);
   if (contribRes.error) throw contribRes.error;
   if (loanRes.error) throw loanRes.error;
   const contributions = (contribRes.data ?? []).reduce((sum, r) => sum + Number(r.amount), 0);
   const loan_outstanding = (loanRes.data ?? []).reduce((sum, r) => sum + Number(r.outstanding_balance), 0);
-  return { contributions, loan_outstanding, balance };
+  return { contributions, contributions_pending, loan_outstanding, balance };
 }
 
 // The ledger feed for a group, with optional filters

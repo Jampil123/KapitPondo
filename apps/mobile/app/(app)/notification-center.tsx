@@ -12,7 +12,7 @@ const BAND_TOP = '#4C7C90';
 
 const CATEGORIES: { key: keyof NotificationPreferences; label: string; sub: string }[] = [
   { key: 'payments', label: 'Payments', sub: 'Contributions, GCash proofs, and reminders' },
-  { key: 'loans', label: 'Loans', sub: 'Approvals, disbursements, and repayments' },
+  { key: 'loans', label: 'Loans', sub: 'Approvals, loan releases, and repayments' },
   { key: 'group_announcements', label: 'Group Announcements', sub: 'Membership, roles, and distributions' },
   { key: 'direct_messages', label: 'Direct Messages', sub: 'New messages from group members' },
   { key: 'account_security', label: 'Account & Security', sub: 'Identity verification and account changes' },

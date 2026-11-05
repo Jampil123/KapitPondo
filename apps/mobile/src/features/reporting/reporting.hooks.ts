@@ -25,11 +25,16 @@ import {
 // only place a claim becomes real cash — see contributions/loans/expenses
 // services) plus loans.outstanding_balance, which is written directly on
 // approve/disburse/repay rather than summed live. Watching both keeps these
-// numbers live the instant any officer action posts.
+// numbers live the instant any officer action posts. Contributions and
+// loan_payments are watched too: once the treasurer approves one it shows as
+// pending before it ever reaches the ledger. loan_payments has no group_id to filter on, so
+// that watch is unscoped (RLS limits it to the caller's groups).
 function fundWatch(groupId: string) {
   return [
     { table: 'ledger_entries', filter: `group_id=eq.${groupId}` },
     { table: 'loans', filter: `group_id=eq.${groupId}` },
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+    { table: 'loan_payments' },
   ];
 }
 

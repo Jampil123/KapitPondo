@@ -19,7 +19,7 @@ const CATEGORIES: { key: Category; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'contribution', label: 'Contributions' },
   { key: 'loan_repayment', label: 'Loan repayments' },
-  { key: 'loan_disbursement', label: 'Disbursements' },
+  { key: 'loan_disbursement', label: 'Loan releases' },
 ];
 
 const OWNER_CATEGORIES: { key: Category; label: string }[] = [
@@ -50,7 +50,7 @@ export default function MyTransactions() {
   const isOwner = role === 'owner';
   // The Owner confirms contributions and repayments the Treasurer recorded and
   // finalizes year-end shares, but never releases loans — so the Treasurer's
-  // "Disbursements" chip and "Loans disbursed" caption don't apply to them.
+  // "Loan releases" chip and "Loans released" caption don't apply to them.
   const categories = isOwner ? OWNER_CATEGORIES : CATEGORIES;
   const ledger = useLedger(groupId!, { limit: 500 });
   const [category, setCategory] = useState<Category>('all');
@@ -104,7 +104,7 @@ export default function MyTransactions() {
               <View style={{ flex: 1, paddingLeft: 14, borderLeftWidth: 1, borderColor: semantic.border }}>
                 <Text variant="overline" color="muted">{isOwner ? 'Paid out' : 'Released'}</Text>
                 <Text style={{ fontSize: 18, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 4 }}>{formatPeso(releasedTotal)}</Text>
-                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{isOwner ? 'Year-end shares' : 'Loans disbursed'}</Text>
+                <Text variant="caption" color="muted" style={{ marginTop: 2 }}>{isOwner ? 'Year-end shares' : 'Loans released'}</Text>
               </View>
             </View>
           )}

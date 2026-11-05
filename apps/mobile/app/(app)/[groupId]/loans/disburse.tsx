@@ -12,6 +12,7 @@ import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useLoans, useLiquidity, useDisburseLoan } from '@/features/lending/lending.hooks';
+import { useSummary } from '@/features/reporting/reporting.hooks';
 import { headLabel, type Loan } from '@/api/lending';
 
 function loanName(l: Loan): string {
@@ -44,16 +45,17 @@ export default function Disburse() {
 
   // Why a loan can't be released from here yet (migration 0075), or null when it can.
   function heldBack(l: Loan): string | null {
-    if (l.membership?.member_id === member?.id) return 'This is your loan — the Organizer releases it.';
-    if (l.review_required && !l.reviewed_at) {
-      const reviewer = l.membership?.role === 'auditor' ? 'your' : "the Auditor's";
-      return `Officer loan — waiting for ${reviewer} review before release.`;
-    }
+    // The Treasurer releases their own loan (0070); anyone else's own loan isn't theirs to release.
+    if (l.membership?.member_id === member?.id && l.membership?.role !== 'treasurer') return 'This is your loan — the Treasurer releases it.';
     return null;
   }
 
   const list = loans.data ?? [];
+  // `available` is verified cash — what a release can use (disburse_loan checks it). The header
+  // shows the dashboard's cash on hand, which also counts money approved but not yet verified.
+  const summary = useSummary(groupId!);
   const available = Number(liquidity.data?.available_cash ?? 0);
+  const unverified = Number(summary.data?.pending_contributions ?? 0) + Number(summary.data?.pending_loan_repayments ?? 0);
   const totalToRelease = useMemo(() => list.reduce((s, l) => s + Number(l.approved_principal ?? l.principal), 0), [list]);
   const coversAll = available >= totalToRelease;
 
@@ -76,18 +78,24 @@ export default function Disburse() {
     const ok = await disburse.run(l.id);
     setDisbursingId(null);
     if (ok !== undefined) { loans.refetch(); liquidity.refetch(); toast('Loan released — waiting for verification'); }
-    else if (disburse.error) Alert.alert('Could not disburse', disburse.error.message);
+    else if (disburse.error) Alert.alert('Could not release', disburse.error.message);
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <AppBar title="Disbursement" />
+      <AppBar title="Loan release" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 12 }}>
         <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 18, padding: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View style={{ gap: 2 }}>
-              <Text variant="caption" style={{ opacity: 0.7, color: semantic.textSecondary }}>Available fund balance</Text>
-              {liquidity.loading ? <ActivityIndicator /> : <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold' }}>{formatPeso(available)}</Text>}
+              <Text variant="caption" style={{ opacity: 0.7, color: semantic.textSecondary }}>Cash on hand</Text>
+              {liquidity.loading ? <ActivityIndicator /> : <Text style={{ fontSize: 22, fontFamily: 'Poppins_700Bold' }}>{formatPeso(available + unverified)}</Text>}
+              {!liquidity.loading && unverified > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Clock3 size={11} color={intent.info.text} />
+                  <Text variant="caption" style={{ color: intent.info.text }}>{formatPeso(unverified)} not verified yet · {formatPeso(available)} can be released</Text>
+                </View>
+              ) : null}
             </View>
             <Wallet size={26} color={semantic.brandDark} />
           </View>
@@ -111,7 +119,7 @@ export default function Disburse() {
               <Coins size={26} color={semantic.textMuted} />
             </View>
             <Text variant="h3" style={{ fontSize: 16 }}>Nothing to release</Text>
-            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>All approved loans are already disbursed.</Text>
+            <Text variant="body" color="secondary" style={{ textAlign: 'center' }}>All approved loans are already released.</Text>
           </View>
         ) : (
           <>
@@ -171,7 +179,7 @@ export default function Disburse() {
                     style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11, opacity: busy || heldBack(l) ? 0.5 : 1 }}
                   >
                     {busy ? <ActivityIndicator size="small" color="#3E8E66" /> : <Banknote size={16} color="#3E8E66" strokeWidth={2.4} />}
-                    <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Disburse</Text>
+                    <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Release</Text>
                   </Pressable>
                 </View>
               );

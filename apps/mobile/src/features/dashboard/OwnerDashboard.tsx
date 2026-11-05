@@ -16,6 +16,7 @@ import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import { CollectionBlock } from './CollectionBlock';
+import { PendingNote } from './PendingNote';
 import { PendingActionsCard, shortDate } from './OrganizerActions';
 
 function SectionHead({ title, aside, hot, onAsidePress, top = 14 }: { title: string; aside?: string; hot?: boolean; onAsidePress?: () => void; top?: number }) {
@@ -35,8 +36,10 @@ function FundCard({ groupId }: { groupId: string }) {
   const { data, loading } = useSummary(groupId);
   const { cycle } = useActiveCycle(groupId);
 
-  const cash = Number(data?.available_cash ?? 0);
-  const onLoan = Math.max(0, Number(data?.total_loan_disbursements ?? 0) - Number(data?.total_loan_repayments ?? 0));
+  const pendingRepaid = Number(data?.pending_loan_repayments ?? 0);
+  const pending = Number(data?.pending_contributions ?? 0) + pendingRepaid;
+  const cash = Number(data?.available_cash ?? 0) + pending;
+  const onLoan = Number(data?.out_on_loan ?? 0);
   const total = cash + onLoan;
   const cashPct = total > 0 ? (cash / total) * 100 : 100;
   const lentPct = 100 - cashPct;
@@ -56,7 +59,10 @@ function FundCard({ groupId }: { groupId: string }) {
       {loading ? (
         <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
       ) : (
-        <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(total)}</Text>
+        <>
+          <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(total)}</Text>
+          {pending > 0 ? <PendingNote amount={pending} /> : null}
+        </>
       )}
 
       <View style={[glassPanel, { padding: 12, marginTop: 12 }]}>

@@ -91,7 +91,7 @@ export default function LoanDecisions() {
                 {l.status === 'approved' ? (
                   <View style={{ gap: 10, marginTop: 12 }}>
                     <Text variant="caption" color="secondary">
-                      Approved{l.approved_principal && Number(l.approved_principal) !== Number(l.principal) ? ` for ${formatPeso(l.approved_principal)} (partial)` : ''} — awaiting disbursement
+                      Approved{l.approved_principal && Number(l.approved_principal) !== Number(l.principal) ? ` for ${formatPeso(l.approved_principal)} (partial)` : ''} — awaiting release
                     </Text>
                     {canDisburse ? (
                       <Pressable
@@ -99,7 +99,7 @@ export default function LoanDecisions() {
                         style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, backgroundColor: '#E2F0E8', borderRadius: 12, paddingVertical: 11 }}
                       >
                         <Banknote size={16} color="#3E8E66" strokeWidth={2.4} />
-                        <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Go to disbursement</Text>
+                        <Text variant="label" style={{ color: '#3E8E66', fontSize: 13.5 }}>Go to loan release</Text>
                       </Pressable>
                     ) : (
                       // The Owner decides (approves); the Treasurer releases the

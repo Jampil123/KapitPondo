@@ -9,6 +9,7 @@ import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useContributions } from '@/features/contributions/contributions.hooks';
 import { buildTimeline, currentPeriodIndex } from '@/features/contributions/periods';
 import { listMembers } from '@/api/groups';
+import { PendingNote } from './PendingNote';
 
 function shortDate(iso: string | null) {
   if (!iso) return '';
@@ -51,6 +52,7 @@ export function CollectionBlock({ groupId, go, head }: { groupId: string; go: (r
     const expected = totalHeads * Number(cycle.contribution_amount);
 
     let collected = 0;
+    let pending = 0;
     let collectedCount = 0;
     let lateCount = 0;
     let latestDue: string | null = null;
@@ -65,12 +67,16 @@ export function CollectionBlock({ groupId, go, head }: { groupId: string; go: (r
       const timeline = buildTimeline(cycle, rowsByMember.get(m.id) ?? [], m.heads);
       const entry = periodIdx !== null ? (timeline[periodIdx] ?? null) : (timeline[timeline.length - 1] ?? null);
       if (!entry) continue; // open-ended cycle, this member has no rows yet — nothing to compare against
-      if (entry.kind === 'paid') { collected += entry.amount; collectedCount++; }
+      // Approved by the treasurer counts as collected right away; it reaches the
+      // ledger once verified. Submitted but not yet approved doesn't count.
+      const approved = entry.kind === 'review' && (entry.topUp ?? entry.row)?.status === 'confirmed';
+      if (entry.kind === 'paid' || approved) { collected += entry.amount; collectedCount++; }
+      if (approved) pending += entry.amount;
       if (entry.kind === 'late') lateCount++;
       if (!latestDue) latestDue = entry.dueDate.toISOString(); // same period for everyone now, so the same due date
     }
 
-    return { expected, collected, collectedCount, lateCount, latestDue, totalMembers: roster.length };
+    return { expected, collected, pending, collectedCount, lateCount, latestDue, totalMembers: roster.length };
   }, [cycle, roster, rows]);
 
   if (!cycle || !summary) return null;
@@ -87,6 +93,7 @@ export function CollectionBlock({ groupId, go, head }: { groupId: string; go: (r
           </Text>
           <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_400Regular', color: semantic.textSecondary }}>{summary.collectedCount} of {summary.totalMembers} members</Text>
         </View>
+        {summary.pending > 0 ? <View style={{ marginTop: -6, marginBottom: 9 }}><PendingNote amount={summary.pending} /></View> : null}
         <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
           <View style={{ height: '100%', width: (pct + '%') as any, borderRadius: 5, backgroundColor: semantic.brand }} />
         </View>

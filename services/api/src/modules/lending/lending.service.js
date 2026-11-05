@@ -224,7 +224,7 @@ async function approveLoan({ loanId, approverId, interestRate, approvedPrincipal
       groupId: data.group_id,
       type: 'loan.approved',
       title: 'Loan approved',
-      message: `Your loan request for ${data.approved_principal ?? data.principal} was approved and now awaits disbursement.`,
+      message: `Your loan request for ${data.approved_principal ?? data.principal} was approved and now awaits release.`,
     });
   }
 
@@ -267,8 +267,8 @@ async function disburseLoan({ loanId, disburserId }) {
         memberId: membership.member_id,
         groupId: loan.group_id,
         type: 'loan.disbursed',
-        title: 'Loan disbursed',
-        message: `Your loan of ${loan.outstanding_balance} has been disbursed.`,
+        title: 'Loan released',
+        message: `Your loan of ${loan.outstanding_balance} has been released.`,
       });
     }
   }

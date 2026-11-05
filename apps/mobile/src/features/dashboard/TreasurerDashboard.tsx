@@ -1,7 +1,7 @@
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
-  ScrollText, ArrowUpCircle, PiggyBank, HandCoins, CalendarClock, Clock, Download,
+  ScrollText, ArrowUpCircle, PiggyBank, HandCoins, CalendarClock, Clock, Clock3, Download,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { ScrollTileRow, type TileAction } from '@/components/shared/ScrollTileRow';
@@ -26,13 +26,22 @@ function SectionHead({ title, aside, tone, onAsidePress, top = 14 }: { title: st
 }
 
 /* ---------------- Cash card: one reconciled statement ---------------- */
-function CashRow({ label, amount, tone }: { label: string; amount: number; tone: 'pos' | 'neg' }) {
+/** One statement line. `pending` is already counted in the amount, and noted under it until verified. */
+function CashRow({ label, amount, tone, pending = 0 }: { label: string; amount: number; tone: 'pos' | 'neg'; pending?: number }) {
   const sign = tone === 'pos' ? '+' : '−';
   const color = tone === 'pos' ? intent.success.text : intent.danger.text;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{label}</Text>
-      <Text style={{ marginLeft: 'auto', fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_700Bold', color }}>{sign}{formatPeso(amount)}</Text>
+    <View>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Text style={{ fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{label}</Text>
+        <Text style={{ marginLeft: 'auto', fontSize: 12, lineHeight: 15, fontFamily: 'Poppins_700Bold', color }}>{sign}{formatPeso(amount + pending)}</Text>
+      </View>
+      {pending > 0 ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3 }}>
+          <Clock3 size={9} color={intent.info.text} strokeWidth={2.4} />
+          <Text style={{ fontSize: 10, lineHeight: 13, fontFamily: 'Poppins_500Medium', color: intent.info.text }}>{formatPeso(pending)} not verified yet</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -45,7 +54,11 @@ function CashCard({ groupId }: { groupId: string }) {
   const repayments = Number(data?.total_loan_repayments ?? 0);
   const disbursed = Number(data?.total_loan_disbursements ?? 0);
   const distributed = Number(data?.total_distributions ?? 0);
-  const owedBack = Math.max(0, disbursed - repayments);
+  const pendingContrib = Number(data?.pending_contributions ?? 0);
+  const pendingRepaid = Number(data?.pending_loan_repayments ?? 0);
+  const pendingReleased = Number(data?.pending_loan_releases ?? 0);
+  const pending = pendingContrib + pendingRepaid;
+  const owedBack = Number(data?.out_on_loan ?? 0);
 
   return (
     <View style={{ paddingTop: 6 }}>
@@ -62,13 +75,13 @@ function CashCard({ groupId }: { groupId: string }) {
       {loading ? (
         <ActivityIndicator color={semantic.brand} style={{ alignSelf: 'flex-start', marginVertical: 4 }} />
       ) : (
-        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.7 }}>{formatPeso(data?.available_cash)}</Text>
+        <Text style={{ fontSize: 26, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.7 }}>{formatPeso(Number(data?.available_cash ?? 0) + pending)}</Text>
       )}
 
       <View style={[glassPanel, { marginTop: 10, padding: 12, gap: 4 }]}>
-        <CashRow label="Contributions received" amount={contributions} tone="pos" />
-        <CashRow label="Loan repayments received" amount={repayments} tone="pos" />
-        <CashRow label="Loans released" amount={disbursed} tone="neg" />
+        <CashRow label="Contributions received" amount={contributions} pending={pendingContrib} tone="pos" />
+        <CashRow label="Loan repayments received" amount={repayments} pending={pendingRepaid} tone="pos" />
+        <CashRow label="Loans released" amount={disbursed} pending={pendingReleased} tone="neg" />
         {distributed > 0 ? <CashRow label="Distributions paid" amount={distributed} tone="neg" /> : null}
 
         {owedBack > 0 ? (

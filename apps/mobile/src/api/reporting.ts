@@ -15,6 +15,14 @@ export interface GroupSummary {
   total_expenses: Money;
   total_distributions: Money;
   available_cash: Money;
+  /** Contributions the treasurer approved but not yet verified — shown on dashboards as pending, never in the ledger figures above. */
+  pending_contributions: Money;
+  /** Loan repayments approved by the treasurer but not yet verified — same treatment as pending_contributions. */
+  pending_loan_repayments: Money;
+  /** Loans released but not yet verified. Already taken out of available_cash; not yet in total_loan_disbursements. */
+  pending_loan_releases: Money;
+  /** Principal still with borrowers: active loans' outstanding balance (released counts before it's verified), less approved repayments' principal. */
+  out_on_loan: Money;
   active_members: number;
   /** Sum of heads across active members — NOT active_members (a plain count). What year-end distribution actually splits available_cash by. */
   total_heads: number;
@@ -34,6 +42,8 @@ export interface MemberBalance {
 /** The caller's own balance in this group. Shape — verify. */
 export interface MyBalance {
   contributions: Money;
+  /** The caller's contributions approved by the treasurer, still awaiting verification. */
+  contributions_pending: Money;
   loan_outstanding: Money;
   balance: Money;
 }

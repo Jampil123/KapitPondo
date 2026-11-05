@@ -52,7 +52,7 @@ function loanRows(g: MemberRecordGroup): string {
     .map((l) => [
       `**Loan Details (${l.id.slice(0, 8).toUpperCase()})**`,
       `- Approved By: ${l.approver?.full_name ?? '—'}`,
-      `- Date Disbursed: ${dateStr(l.disbursed_at)}`,
+      `- Date Released: ${dateStr(l.disbursed_at)}`,
       `- Ledger Reference: ${l.disbursed_ledger_entry_id ? l.disbursed_ledger_entry_id.slice(0, 8).toUpperCase() : '—'}`,
       `- Loan Term: ${l.term_months ? `${l.term_months} months` : '—'}`,
       `- Interest Rate: ${l.interest_rate != null ? `${(l.interest_rate * 100).toFixed(2)}% per month` : '—'}`,

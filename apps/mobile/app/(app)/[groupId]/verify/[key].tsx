@@ -2,16 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, X, ScanLine, Receipt } from 'lucide-react-native';
+import { Check, X, ScanLine, Receipt, Info } from 'lucide-react-native';
+import { Alert } from '@/lib/alert';
+import { toast } from '@/components/ui/Toast';
+import { useAuth } from '@/context/AuthContext';
+import { useActiveGroup } from '@/context/GroupContext';
 import { Text } from '@/components/ui/Text';
 import { CloseHeader } from '@/features/payments/PaymentPage';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
 import { readContributionProof } from '@/api/contributions';
-import { readRepaymentProof } from '@/api/lending';
+import { readRepaymentProof, headLabel } from '@/api/lending';
+import { useLoans, useLoan, useLiquidity } from '@/features/lending/lending.hooks';
+import { totalInterest } from '@/features/lending/remainingInterest';
+import { useSummary } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
-import { useSignoffQueue, type SignoffItem } from '@/features/signoff/signoff';
+import { useSignoffQueue, ROLE_NAME, loanRole, type SignoffItem, type Role } from '@/features/signoff/signoff';
 import { useSignoffActions, PRIMARY_LABEL, canSendBack, sendBackLabel } from '@/features/signoff/useSignoffActions';
 import { itemMatch } from '@/features/audit/VerificationQueue';
 import type { ProofField } from '@/features/signoff/proofMatch';
@@ -52,18 +59,261 @@ function CompareRow({ f, last }: { f: ProofField; last: boolean }) {
   );
 }
 
+function shortDate(iso: string | null | undefined) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function dateTime(iso: string | null | undefined) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? '' : `${shortDate(iso)}, ${d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
+}
+
+/** What this step is and what tapping the button does — one line under the amount. */
+function stepNote(i: SignoffItem): string | null {
+  const l = i.loan;
+  if (!l) return null;
+  const amount = formatPeso(l.approved_principal ?? l.principal);
+  if (i.action === 'review') return 'Officer loan — check it before any cash goes out.';
+  if (i.action === 'release') return `Hand ${amount} to ${i.name}, then tap Release.`;
+  if (i.action === 'verify_release') return `Check that ${i.name} received ${amount}${l.disburser?.full_name ? ` from ${l.disburser.full_name}` : ''}. Verifying posts it to the group ledger.`;
+  return null;
+}
+
+/** Label on the left, value on the right; `strong` for the bottom line. */
+function TermRow({ label, value, strong, last }: { label: string; value: string; strong?: boolean; last?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <Text style={{ fontSize: 12.5, color: semantic.textSecondary }}>{label}</Text>
+      <Text style={{ marginLeft: 'auto', fontSize: strong ? 14 : 13, fontFamily: strong ? 'Poppins_700Bold' : 'Poppins_600SemiBold', color: semantic.textPrimary }}>{value}</Text>
+    </View>
+  );
+}
+
+/** One pass/fail line, same marks as the contribution rule check. */
+function CheckRow({ ok, title, sub, last }: { ok: boolean; title: string; sub?: string; last?: boolean }) {
+  return (
+    <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', paddingVertical: 10, borderBottomWidth: last ? 0 : 1, borderColor: semantic.border }}>
+      <View style={{ width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: ok ? intent.success.soft : intent.danger.base, marginTop: 1 }}>
+        {ok ? <Check size={12} color={intent.success.text} strokeWidth={3} /> : <X size={12} color="#fff" strokeWidth={3} />}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{title}</Text>
+        {sub ? <Text variant="caption" style={{ color: ok ? semantic.textSecondary : intent.danger.text, marginTop: 1 }}>{sub}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+/** Loan sign-offs (review, release, verify release): the terms, the purpose, and the checks behind the decision. */
+function LoanDetails({ groupId, i }: { groupId: string; i: SignoffItem }) {
+  const l = i.loan!;
+  const loans = useLoans(groupId);
+  const liquidity = useLiquidity(groupId);
+
+  const amount = Number(l.approved_principal ?? l.principal);
+  const partial = l.approved_principal != null && Number(l.approved_principal) !== Number(l.principal);
+  const rate = l.interest_rate != null ? Number(l.interest_rate) : null;
+  const interest = totalInterest(l);
+  const months = l.term_months;
+
+  // Cash is already out once released — the cover check only matters before that.
+  const released = i.action === 'verify_release';
+  const cash = Number(liquidity.data?.available_cash ?? 0);
+  const covers = cash >= amount;
+  const others = (loans.data ?? []).filter((x) => x.id !== l.id && x.membership_id === l.membership_id && x.status === 'active');
+  const owed = others.reduce((s, x) => s + Number(x.outstanding_balance), 0);
+
+  return (
+    <>
+      <Title>Loan terms</Title>
+      <Card style={{ paddingVertical: 6 }}>
+        {partial ? <TermRow label="Requested" value={formatPeso(l.principal)} /> : null}
+        <TermRow label={partial ? 'Approved' : 'Amount'} value={formatPeso(amount)} />
+        <TermRow label="Interest" value={rate != null ? `${+(rate * 100).toFixed(2)}% a month` : '—'} />
+        <TermRow label="Term" value={`${months} month${months === 1 ? '' : 's'}`} />
+        {months ? <TermRow label="Monthly payment" value={formatPeso(Math.round(((amount + interest) / months) * 100) / 100)} /> : null}
+        <TermRow label="Total to repay" value={formatPeso(amount + interest)} strong last />
+      </Card>
+
+      {i.note ? (
+        <>
+          <Title>Purpose</Title>
+          <Card>
+            <Text style={{ fontSize: 13.5, lineHeight: 19, color: semantic.textPrimary }}>{i.note}</Text>
+          </Card>
+        </>
+      ) : null}
+
+      <Title>Checks</Title>
+      <Card style={{ paddingVertical: 4 }}>
+        {!released ? (
+          liquidity.loading ? <ActivityIndicator color={semantic.brand} style={{ marginVertical: 12 }} /> : (
+            <CheckRow
+              ok={covers}
+              title={covers ? 'The fund can cover it' : "The fund can't cover it"}
+              sub={`${formatPeso(cash)} cash on hand${covers ? ` · ${formatPeso(cash - amount)} left after release` : ` · short by ${formatPeso(amount - cash)}`}`}
+            />
+          )
+        ) : null}
+        <CheckRow
+          ok={others.length === 0}
+          title={others.length === 0 ? 'No other active loan' : `${others.length} other active loan${others.length === 1 ? '' : 's'}`}
+          sub={others.length ? `${formatPeso(owed)} still owed` : undefined}
+        />
+        <CheckRow
+          ok
+          title={`Approved by ${l.approver?.full_name ?? 'an officer'}`}
+          sub={[shortDate(l.approved_at), l.disburser?.full_name ? `released by ${l.disburser.full_name} ${shortDate(l.disbursed_at)}` : ''].filter(Boolean).join(' · ') || undefined}
+          last
+        />
+      </Card>
+    </>
+  );
+}
+
+type Step = { title: string; sub?: string; state: 'done' | 'now' | 'next' };
+
+/** Vertical sign-off trail: what's done, the step on this page, and what follows. */
+function Steps({ steps }: { steps: Step[] }) {
+  return (
+    <View>
+      {steps.map((st, idx) => {
+        const last = idx === steps.length - 1;
+        const dot = st.state === 'done' ? intent.success.base : st.state === 'now' ? semantic.brandDark : semantic.surfaceAlt;
+        return (
+          <View key={st.title} style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ alignItems: 'center', width: 22 }}>
+              <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: dot, alignItems: 'center', justifyContent: 'center', borderWidth: st.state === 'next' ? 1 : 0, borderColor: semantic.border }}>
+                {st.state === 'done' ? <Check size={12} color="#fff" strokeWidth={3} /> : st.state === 'now' ? <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' }} /> : null}
+              </View>
+              {!last ? <View style={{ flex: 1, width: 2, minHeight: 14, backgroundColor: st.state === 'done' ? intent.success.soft : semantic.border }} /> : null}
+            </View>
+            <View style={{ flex: 1, paddingBottom: last ? 0 : 14 }}>
+              <Text style={{ fontSize: 13.5, lineHeight: 22, fontFamily: st.state === 'now' ? 'Poppins_700Bold' : 'Poppins_500Medium', color: st.state === 'next' ? semantic.textMuted : semantic.textPrimary }}>{st.title}</Text>
+              {st.sub ? <Text variant="caption" color="secondary">{st.sub}</Text> : null}
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Loan release and verify-release: the cash going out, the sign-off trail, and the terms in short. */
+function ReleaseDetails({ groupId, i, nameOf }: { groupId: string; i: SignoffItem; nameOf: (memberId?: string | null) => string | null }) {
+  const l = i.loan!;
+  const summary = useSummary(groupId);
+  const releasing = i.action === 'release';
+
+  const amount = Number(l.approved_principal ?? l.principal);
+  const interest = totalInterest(l);
+  const rate = l.interest_rate != null ? `${+(Number(l.interest_rate) * 100).toFixed(2)}% a month` : null;
+  // Same cash on hand as the dashboard: verified cash plus money approved but not yet verified.
+  // Only the verified part can be released (group_available_cash, what disburse_loan checks).
+  const releasable = Number(summary.data?.available_cash ?? 0);
+  const unverified = Number(summary.data?.pending_contributions ?? 0) + Number(summary.data?.pending_loan_repayments ?? 0);
+  const cash = releasable + unverified;
+  const short = amount - releasable;
+  const borrower = (l.membership?.role ?? 'member') as Role;
+
+  const steps: Step[] = [
+    { title: `Approved by ${l.approver?.full_name ?? 'an officer'}`, sub: shortDate(l.approved_at), state: 'done' },
+    // Only a review that actually happened (older loans) — there's no review step any more.
+    ...(l.reviewed_at ? [{ title: `Cleared by ${nameOf(l.reviewed_by) ?? ROLE_NAME[loanRole.review(borrower)]}`, sub: shortDate(l.reviewed_at), state: 'done' as const }] : []),
+    releasing
+      ? { title: 'Release — you', sub: 'Hand over the cash or send it', state: 'now' }
+      : { title: `Released by ${l.disburser?.full_name ?? ROLE_NAME[loanRole.release(borrower)]}`, sub: shortDate(l.disbursed_at), state: 'done' },
+    releasing
+      ? { title: `${ROLE_NAME[loanRole.verify(borrower)]} verifies`, sub: 'Posts to the ledger', state: 'next' }
+      : { title: 'Verify — you', sub: 'Posts to the ledger', state: 'now' },
+  ];
+
+  return (
+    <>
+      {releasing ? (
+        <Card style={{ marginTop: 14, paddingVertical: 6 }}>
+          {summary.loading ? <ActivityIndicator color={semantic.brand} style={{ marginVertical: 12 }} /> : (
+            <>
+              <TermRow label="Cash on hand" value={formatPeso(cash)} />
+              {unverified > 0 ? (
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9, borderBottomWidth: 1, borderColor: semantic.border }}>
+                  <Text style={{ fontSize: 12.5, color: intent.info.text }}>Not verified yet — can't be released</Text>
+                  <Text style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: intent.info.text }}>−{formatPeso(unverified)}</Text>
+                </View>
+              ) : null}
+              <TermRow label="This release" value={`−${formatPeso(amount)}`} />
+              <View style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 9 }}>
+                <Text style={{ fontSize: 12.5, color: short > 0 ? intent.danger.text : semantic.textSecondary }}>{short > 0 ? 'Short by' : 'Left to release'}</Text>
+                <Text style={{ marginLeft: 'auto', fontSize: 14, fontFamily: 'Poppins_700Bold', color: short > 0 ? intent.danger.text : semantic.textPrimary }}>{formatPeso(Math.abs(short))}</Text>
+              </View>
+            </>
+          )}
+        </Card>
+      ) : null}
+
+      {!releasing ? (
+        <>
+          <Title>Release to verify</Title>
+          <Card style={{ paddingVertical: 6 }}>
+            <TermRow label="Paid to" value={i.name} />
+            <TermRow label="Borrower's role" value={`${ROLE_NAME[borrower]}${l.head_no > 1 ? ` · ${headLabel(l.head_no, l.head_name)}` : ''}`} />
+            <TermRow label="Released by" value={l.disburser?.full_name ?? ROLE_NAME[loanRole.release(borrower)]} />
+            <TermRow label="Released on" value={dateTime(l.disbursed_at) || '—'} />
+            <TermRow label="Amount released" value={formatPeso(amount)} strong last />
+          </Card>
+          <Text variant="caption" color="secondary" style={{ marginTop: 8 }}>
+            Already taken out of cash on hand — the ledger entry is made when you verify.
+          </Text>
+        </>
+      ) : null}
+
+      <Title>Sign-offs</Title>
+      <Card><Steps steps={steps} /></Card>
+
+      <Title>Terms</Title>
+      <Card style={{ paddingVertical: 6 }}>
+        {rate ? <TermRow label="Interest" value={rate} /> : null}
+        <TermRow label="Term" value={`${l.term_months} month${l.term_months === 1 ? '' : 's'}`} />
+        {l.term_months ? <TermRow label="Monthly payment" value={formatPeso(Math.round(((amount + interest) / l.term_months) * 100) / 100)} /> : null}
+        <TermRow label="Total interest" value={formatPeso(interest)} />
+        <TermRow label="Total to repay" value={formatPeso(amount + interest)} strong last={!i.note} />
+        {i.note ? (
+          <View style={{ paddingVertical: 9 }}>
+            <Text style={{ fontSize: 12.5, color: semantic.textSecondary }}>Purpose</Text>
+            <Text style={{ fontSize: 13, lineHeight: 18, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginTop: 2 }}>{i.note}</Text>
+          </View>
+        ) : null}
+      </Card>
+    </>
+  );
+}
+
 export default function VerifyRecord() {
   const { groupId, key } = useLocalSearchParams<{ groupId: string; key: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const queue = useSignoffQueue(groupId!);
   const { cycle } = useActiveCycle(groupId!);
-  const actions = useSignoffActions(groupId!, () => { queue.refetch(); router.back(); });
+  const me = useAuth().member?.id ?? null;
+  const myRole = useActiveGroup().membership?.role;
+  // Set before a step runs: where to go once it succeeds, instead of back.
+  const nextKey = useRef<string | null>(null);
+  const actions = useSignoffActions(groupId!, () => {
+    if (nextKey.current) router.replace({ pathname: '/(app)/[groupId]/verify/[key]' as any, params: { groupId, key: nextKey.current } });
+    else { queue.refetch(); router.back(); }
+  });
   const [rejecting, setRejecting] = useState(false);
   const [viewing, setViewing] = useState(false);
   const readRequested = useRef(false);
 
-  const i = queue.items.find((x) => x.key === key && x.mine);
+  const found = queue.items.find((x) => x.key === key && x.mine);
+  // Loan steps carry their loan; if one ever doesn't, load it so the page never shows only a name and amount.
+  const loanQ = useLoan(groupId!, found?.kind === 'loan' && !found.loan ? found.id : undefined);
+  const fetchedLoan = loanQ.data?.loan;
+  const i = found && found.kind === 'loan' && !found.loan && fetchedLoan ? { ...found, loan: fetchedLoan } : found;
   const money = i && (i.kind === 'contribution' || i.kind === 'repayment');
 
   // Older records were never read: ask the server to read the proof now, once.
@@ -86,6 +336,33 @@ export default function VerifyRecord() {
     );
   }
 
+  const nameOf = (memberId?: string | null) => (memberId ? queue.members.find((m) => m.member_id === memberId)?.members?.full_name ?? null : null);
+
+  function onPrimary() {
+    if (!i) return;
+    nextKey.current = null;
+    if (i.action === 'review' && i.loan) {
+      // Cleared: straight on to the release step when it's this officer's, else say who has it.
+      const borrower = (i.loan.membership?.role ?? 'member') as Role;
+      const releaser = loanRole.release(borrower);
+      if (myRole === releaser && i.loan.membership?.member_id !== me) nextKey.current = `ll-${i.id}`;
+      else {
+        const holder = queue.members.find((m) => m.status === 'active' && m.role === releaser)?.members?.full_name;
+        actions.approve(i).then((ok) => { if (ok) toast(`${holder ?? `The ${ROLE_NAME[releaser]}`} releases it next`); });
+        return;
+      }
+    }
+    if (i.action === 'release') {
+      // Money leaves for real here, with no undo — confirm first.
+      Alert.alert('Release these funds?', `${formatPeso(i.amount)} to ${i.name}. It posts to the ledger once the release is verified.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Release', onPress: () => actions.approve(i) },
+      ]);
+      return;
+    }
+    actions.approve(i);
+  }
+
   const match = money ? itemMatch(i) : null;
   const fields = match && 'fields' in match ? match.fields : [];
   const allMatch = match?.kind === 'match' && fields.every((f) => f.state === 'match');
@@ -103,6 +380,18 @@ export default function VerifyRecord() {
         <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{i.name}</Text>
         {i.amount !== null ? <Text style={{ fontSize: 32, lineHeight: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(i.amount)}</Text> : null}
         {money && recordedLine(i) ? <Text variant="caption" color="secondary">{recordedLine(i)}</Text> : null}
+        {i.loan ? (
+          <Text variant="caption" color="secondary">
+            {ROLE_NAME[(i.loan.membership?.role ?? 'member') as Role]}{i.loan.head_no > 1 ? ` · ${headLabel(i.loan.head_no, i.loan.head_name)}` : ''} · applied {shortDate(i.loan.applied_at)}
+          </Text>
+        ) : null}
+
+        {stepNote(i) ? (
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'flex-start', backgroundColor: intent.info.soft, borderRadius: 12, padding: 11, marginTop: 12 }}>
+            <Info size={14} color={intent.info.text} style={{ marginTop: 2 }} />
+            <Text style={{ flex: 1, fontSize: 12.5, lineHeight: 18, color: intent.info.text }}>{stepNote(i)}</Text>
+          </View>
+        ) : null}
 
         {money ? (
           <>
@@ -183,6 +472,8 @@ export default function VerifyRecord() {
               </>
             ) : null}
           </>
+        ) : i.loan ? (
+          i.action === 'review' ? <LoanDetails groupId={groupId!} i={i} /> : <ReleaseDetails groupId={groupId!} i={i} nameOf={nameOf} />
         ) : (
           i.note ? (
             <Card style={{ marginTop: 14 }}>
@@ -215,8 +506,8 @@ export default function VerifyRecord() {
             <Text style={{ fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>{sendBackLabel(i)}</Text>
           </Pressable>
         ) : null}
-        <Pressable onPress={() => actions.approve(i)} disabled={actions.busy} style={{ flex: 1.6, paddingVertical: 15, borderRadius: 16, alignItems: 'center', backgroundColor: semantic.brandDark, opacity: actions.busy ? 0.6 : 1 }}>
-          {actions.busy ? <ActivityIndicator color="#fff" /> : <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{PRIMARY_LABEL[i.action]}</Text>}
+        <Pressable onPress={onPrimary} disabled={actions.busy} style={{ flex: 1.6, paddingVertical: 15, borderRadius: 16, alignItems: 'center', backgroundColor: semantic.brandDark, opacity: actions.busy ? 0.6 : 1 }}>
+          {actions.busy ? <ActivityIndicator color="#fff" /> : <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{i.action === 'release' && i.amount != null ? `Release ${formatPeso(i.amount)}` : PRIMARY_LABEL[i.action]}</Text>}
         </Pressable>
       </View>
 

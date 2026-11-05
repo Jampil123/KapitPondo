@@ -23,6 +23,7 @@ import { usePenaltyDue } from '@/features/contributions/penalty';
 import type { Contribution } from '@/api/contributions';
 import { LedgerTimeline } from '@/features/activity/LedgerTimeline';
 import { signoffLine } from '@/features/activity/entryCopy';
+import { PendingNote } from './PendingNote';
 
 
 function SectionHead({ title, aside, onAsidePress }: { title: string; aside?: string; onAsidePress?: () => void }) {
@@ -280,7 +281,8 @@ function PositionPanel({ groupId }: { groupId: string }) {
   const bal = useMyBalance(groupId);
   const { cycle } = useActiveCycle(groupId);
   const heads = membership?.heads ?? null;
-  const capital = bal.loading ? '…' : formatPeso(bal.data?.contributions);
+  const pending = Number(bal.data?.contributions_pending ?? 0);
+  const capital = bal.loading ? '…' : formatPeso(Number(bal.data?.contributions ?? 0) + pending);
 
   function goToHeads() {
     router.push({ pathname: '/(app)/[groupId]/heads' as any, params: { groupId } });
@@ -303,7 +305,9 @@ function PositionPanel({ groupId }: { groupId: string }) {
           <Text variant="overline" color="secondary">My capital</Text>
         </View>
         <Text style={{ fontSize: 18, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, marginTop: 4, letterSpacing: -0.4 }}>{capital}</Text>
-        <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }}>contributions</Text>
+        <Text variant="caption" color="secondary" style={{ fontSize: 10.5, marginTop: 1 }} numberOfLines={1}>
+          {pending > 0 ? `incl. ${formatPeso(pending)} pending` : 'contributions'}
+        </Text>
       </View>
       <View style={{ width: 1, backgroundColor: semantic.border }} />
       <Pressable onPress={goToHeads} style={{ flex: 1, padding: 12 }}>
@@ -380,8 +384,10 @@ function FundComposition({ groupId }: { groupId: string }) {
     );
   }
 
-  const cash = Number(fund.data?.available_cash ?? 0);
-  const onLoan = Math.max(0, Number(fund.data?.total_loan_disbursements ?? 0) - Number(fund.data?.total_loan_repayments ?? 0));
+  const pendingRepaid = Number(fund.data?.pending_loan_repayments ?? 0);
+  const pending = Number(fund.data?.pending_contributions ?? 0) + pendingRepaid;
+  const cash = Number(fund.data?.available_cash ?? 0) + pending;
+  const onLoan = Number(fund.data?.out_on_loan ?? 0);
   const total = cash + onLoan;
   const cashPct = total > 0 ? Math.round((cash / total) * 100) : 0;
   const lentPct = total > 0 ? 100 - cashPct : 0;
@@ -393,6 +399,7 @@ function FundComposition({ groupId }: { groupId: string }) {
       <View style={{ flex: 1, minWidth: 0 }}>
         <Text variant="overline" color="muted">Total group fund</Text>
         <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4 }} numberOfLines={1}>{formatPeso(total)}</Text>
+        {pending > 0 ? <PendingNote amount={pending} /> : null}
 
         <View style={{ gap: 2, marginTop: 6 }}>
           <FundLegend color={CASH_COLOR} label="Cash on hand" amount={cash} pct={cashPct} />

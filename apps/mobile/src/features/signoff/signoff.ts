@@ -8,7 +8,7 @@
  * is the one that enforces them; this only decides what to show whom.
  *
  *   Money in:  submitted ─confirm─▶ confirmed ─verify─▶ posted
- *   Loans:     approved ─(review, officer loans)─▶ release ─verify release─▶ posted
+ *   Loans:     approved ─▶ release ─verify release─▶ posted (no before-release review, 0071)
  */
 import { useCallback, useMemo } from 'react';
 import { useQuery } from '../../hooks/useApi';
@@ -20,6 +20,7 @@ import { useLoans, useRepayments } from '../lending/lending.hooks';
 import { useReversalRequests } from '../ledger/ledger.hooks';
 import type { Money } from '../../lib/money';
 import type { ProofReading } from '../../api/contributions';
+import type { Loan } from '../../api/lending';
 
 export type Role = 'owner' | 'treasurer' | 'auditor' | 'member';
 export type SignoffAction = 'confirm' | 'verify' | 'review' | 'release' | 'verify_release' | 'approve';
@@ -31,7 +32,7 @@ export const ACTION_LABEL: Record<SignoffAction, string> = {
   confirm: 'Confirm',
   verify: 'Verify',
   review: 'Review',
-  release: 'Disburse',
+  release: 'Release',
   verify_release: 'Verify release',
   approve: 'Approve',
 };
@@ -41,7 +42,8 @@ export const confirmRole = (payer: Role): Role => (payer === 'treasurer' ? 'owne
 export const verifyRole = (payer: Role, recorder: Role, hasAuditor: boolean): Role => (payer === 'auditor' || recorder === 'auditor' || !hasAuditor ? 'owner' : 'auditor');
 export const loanRole = {
   review: (b: Role): Role => (b === 'auditor' ? 'treasurer' : 'auditor'),
-  release: (b: Role): Role => (b === 'treasurer' ? 'owner' : 'treasurer'),
+  // The Treasurer holds the cash, so they release their own loan too (0070).
+  release: (_b: Role): Role => 'treasurer',
   verify: (b: Role): Role => (b === 'auditor' ? 'owner' : 'auditor'),
 };
 
@@ -84,6 +86,8 @@ export interface SignoffItem {
   entryId?: string;
   /** Reversals: I verified it and it now waits on the Organizer — I can still undo that from the entry. */
   verifiedByMe?: boolean;
+  /** Loans: the full record, for the terms and checks on the detail page. */
+  loan?: Loan;
 }
 
 /** Everything waiting on a sign-off in the group, each marked with whose step it is. */
@@ -176,12 +180,10 @@ export function useSignoffQueue(groupId: string) {
       const b = roleOf(borrower);
       const amount = l.approved_principal ?? l.principal;
       const name = l.membership?.members?.full_name ?? 'Member';
-      if (l.status === 'approved' && l.review_required && !l.reviewed_at) {
-        out.push({ key: `lr-${l.id}`, kind: 'loan', id: l.id, action: 'review', ...withHolder(decide(loanRole.review(b), [borrower, l.approved_by], 'Your loan, or you approved it')), own: borrower === me, name, label: 'Officer loan', amount, since: l.approved_at ?? l.applied_at, note: l.purpose });
-      } else if (l.status === 'approved') {
-        out.push({ key: `ll-${l.id}`, kind: 'loan', id: l.id, action: 'release', ...withHolder(decide(loanRole.release(b), [borrower], 'This is your loan')), own: borrower === me, name, label: 'Disburse loan', amount, since: l.reviewed_at ?? l.approved_at ?? l.applied_at, note: l.purpose });
+      if (l.status === 'approved') {
+        out.push({ key: `ll-${l.id}`, kind: 'loan', id: l.id, action: 'release', ...withHolder(decide(loanRole.release(b), b === 'treasurer' ? [] : [borrower], 'This is your loan')), own: borrower === me && b !== 'treasurer', name, label: 'Loan release', amount, since: l.reviewed_at ?? l.approved_at ?? l.applied_at, note: l.purpose, loan: l });
       } else if (l.disbursed_at && !l.disbursed_ledger_entry_id) {
-        out.push({ key: `lv-${l.id}`, kind: 'loan', id: l.id, action: 'verify_release', ...withHolder(decide(loanRole.verify(b), [borrower, l.disbursed_by], 'Your loan, or you released it')), own: borrower === me, name, label: 'Loan release', amount, since: l.disbursed_at });
+        out.push({ key: `lv-${l.id}`, kind: 'loan', id: l.id, action: 'verify_release', ...withHolder(decide(loanRole.verify(b), [borrower, l.disbursed_by], 'Your loan, or you released it')), own: borrower === me, name, label: 'Verify loan release', amount, since: l.disbursed_at, note: l.purpose, loan: l });
       }
     });
 
@@ -244,15 +246,14 @@ export function progressSteps(
 
 /**
  * A borrower's loan journey, in the words of their own "My loan" screen: who
- * decides, who reviews (officer loans only), who releases. Mirrors 0075's
- * loan_duty_role table.
+ * decides and who releases. No loan has a before-release review (0071).
  */
 export function loanChain(borrowerRole: string | null | undefined) {
   const b = (borrowerRole ?? 'member') as Role;
-  const officer = b === 'owner' || b === 'treasurer' || b === 'auditor';
   return {
     approver: ROLE_NAME[b === 'owner' ? 'treasurer' : 'owner'],
-    reviewer: officer ? ROLE_NAME[loanRole.review(b)] : null,
     releaser: ROLE_NAME[loanRole.release(b)],
+    /** The Treasurer releases their own loan. */
+    selfRelease: b === 'treasurer',
   };
 }
