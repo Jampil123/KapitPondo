@@ -3,16 +3,16 @@ import { View, ScrollView, Pressable, Modal, ActivityIndicator } from 'react-nat
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronRight, Check, AlertTriangle, X, Crown } from 'lucide-react-native';
+import { ChevronRight, Check, AlertTriangle, X, UserMinus } from 'lucide-react-native';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { toast } from '@/components/ui/Toast';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { FilterChips } from '@/components/shared/FilterChips';
-import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { useQuery } from '@/hooks/useApi';
-import { listMembers, listPendingMembers, setMemberRole, transferOrganizer, type GroupMember } from '@/api/groups';
-import { useGroups } from '@/context/GroupContext';
+import { listMembers, listPendingMembers, setMemberRole, revokeOfficer, type GroupMember } from '@/api/groups';
 import type { GroupRole } from '@/constants/roles';
 
 const CARD_SHADOW = {
@@ -86,13 +86,12 @@ export default function MembersOfficers() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [tab, setTab] = useState<Tab>('all');
   const [sheetRole, setSheetRole] = useState<SheetRole | null>(null);
-  const [handoverTo, setHandoverTo] = useState<GroupMember | null>(null);
+  const [revoking, setRevoking] = useState<GroupMember | null>(null);
+  const [revokeBusy, setRevokeBusy] = useState(false);
   const router = useRouter();
-  const { refresh: refreshGroups } = useGroups();
 
   const members = useQuery(() => listMembers(groupId!), [groupId]);
   const pending = useQuery(() => listPendingMembers(groupId!), [groupId]);
-  const [handingOver, setHandingOver] = useState(false);
 
   const roster = members.data ?? [];
   const pendingRows = (pending.data ?? []) as { member_id: string; members: { full_name: string | null; avatar_url?: string | null; verification_status: string } | null }[];
@@ -101,6 +100,7 @@ export default function MembersOfficers() {
   const treasurer = roster.find((m) => m.role === 'treasurer') ?? null;
   const auditor = roster.find((m) => m.role === 'auditor') ?? null;
   const totalHeads = roster.reduce((s, m) => s + m.heads, 0);
+  const sheetHolder = sheetRole === 'treasurer' ? treasurer : sheetRole === 'auditor' ? auditor : null;
   const officerCount = [owner, treasurer, auditor].filter(Boolean).length;
 
   // Staffing-level segregation: does one member hold 2+ of the 3 seats?
@@ -114,53 +114,41 @@ export default function MembersOfficers() {
     ? { pass: false, t1: 'One person records and verifies', t2: 'Someone holds two officer seats, so they can end up approving their own postings. Workable for a small group, but worth knowing.' }
     : { pass: true, t1: 'Recorder and approver are different people', t2: "Every posting is recorded by one officer and verified by another, as the group's rules require." };
 
-  async function onAppoint(memberId: string, role: GroupRole) {
-    const alreadyOfficer = role !== 'member' && filledSlots.some((m) => m.member_id === memberId && m.role !== role);
-    const doAppoint = async () => {
-      setSheetRole(null);
-      try {
-        await setMemberRole(groupId!, memberId, role);
-        members.refetch();
-      } catch (e) {
-        Alert.alert('Could not appoint', (e as Error).message);
-      }
-    };
-    if (alreadyOfficer) {
-      Alert.alert(
-        'This puts one person in two seats',
-        'They would record and verify their own work. Fine for a small group running single-admin, but worth confirming.',
-        [{ text: 'Cancel', style: 'cancel' }, { text: 'Appoint anyway', onPress: doAppoint }],
-      );
-    } else {
-      doAppoint();
-    }
-  }
-
-  async function onHandover() {
-    if (!handoverTo) return;
-    setHandingOver(true);
+  async function onRevoke() {
+    if (!revoking) return;
+    setRevokeBusy(true);
     try {
-      await transferOrganizer(groupId!, handoverTo.member_id);
+      await revokeOfficer(groupId!, revoking.member_id);
     } catch (e) {
-      setHandingOver(false);
-      setHandoverTo(null);
-      Alert.alert('Could not hand over', (e as Error).message);
+      setRevokeBusy(false);
+      setRevoking(null);
+      Alert.alert('Could not revoke', (e as Error).message);
       return;
     }
-    setHandingOver(false);
-    setHandoverTo(null);
-    setSheetRole(null);
-    // This screen is Organizer-only — once the role is gone, go back to the group with the refreshed role.
-    await refreshGroups();
-    router.replace({ pathname: '/(app)/[groupId]' as any, params: { groupId } });
+    setRevokeBusy(false);
+    toast(`${name(revoking)} is now a regular member`);
+    setRevoking(null);
+    members.refetch();
   }
 
+  async function onAppoint(memberId: string, role: GroupRole) {
+    setSheetRole(null);
+    try {
+      await setMemberRole(groupId!, memberId, role);
+      members.refetch();
+    } catch (e) {
+      Alert.alert('Could not appoint', (e as Error).message);
+    }
+  }
+
+  // An officer opens their seat (to revoke); a member can only fill an empty seat.
   function onPressPerson(m: GroupMember) {
     if (m.role === 'owner') return;
-    Alert.alert(name(m), 'Change role', [
-      { text: 'Make Treasurer', onPress: () => onAppoint(m.member_id, 'treasurer') },
-      { text: 'Make Auditor', onPress: () => onAppoint(m.member_id, 'auditor') },
-      ...(m.role !== 'member' ? [{ text: 'Make Member', onPress: () => onAppoint(m.member_id, 'member') }] : []),
+    if (m.role === 'treasurer' || m.role === 'auditor') return setSheetRole(m.role);
+    const open = ([['treasurer', treasurer], ['auditor', auditor]] as const).filter(([, holder]) => !holder);
+    if (!open.length) return Alert.alert(name(m), 'Both officer seats are filled. Revoke one first to appoint someone else.');
+    Alert.alert(name(m), 'Appoint as', [
+      ...open.map(([role]) => ({ text: `Make ${ROLE_LABEL[role]}`, onPress: () => onAppoint(m.member_id, role) })),
       { text: 'Cancel', style: 'cancel' as const },
     ]);
   }
@@ -189,7 +177,7 @@ export default function MembersOfficers() {
               <>
                 <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>Officer slots</Text>
                 <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden' }, shadowToken.soft]}>
-                  <Pressable onPress={() => setSheetRole('owner')} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
+                  <Pressable onPress={() => router.push({ pathname: '/(app)/[groupId]/handover' as any, params: { groupId } })} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
                     <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>Organizer</Text>
                     {owner ? (
                       <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -227,7 +215,7 @@ export default function MembersOfficers() {
                         <Text style={{ width: 78, fontSize: 10.5, fontFamily: 'Poppins_500Medium', color: semantic.textMuted, letterSpacing: 0.4, textTransform: 'uppercase' }}>{ROLE_LABEL[role]}</Text>
                         <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 }}>
                           <Avatar name={name(holder)} uri={holder?.members?.avatar_url} size={30} />
-                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(holder)}</Text>
+                          <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary, flexShrink: 1 }} numberOfLines={1}>{name(holder)}</Text>
                         </View>
                         <ChevronRight size={16} color={semantic.textMuted} />
                       </Pressable>
@@ -288,7 +276,9 @@ export default function MembersOfficers() {
             <View style={{ flexDirection: 'row', alignItems: 'flex-start', padding: 20, paddingBottom: 12 }}>
               <View style={{ flex: 1 }}>
                 <Text style={{ fontSize: 17, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>
-                  {sheetRole === 'owner' ? 'Hand over Organizer role' : `Appoint ${sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'}`}
+                  {sheetRole === 'owner' ? 'Hand over Organizer role'
+                    : sheetHolder ? ROLE_LABEL[sheetRole as GroupRole]
+                    : `Appoint ${sheetRole === 'auditor' ? 'an Auditor' : 'a Treasurer'}`}
                 </Text>
               </View>
               <Pressable onPress={() => setSheetRole(null)} hitSlop={8}><X size={20} color={semantic.textSecondary} /></Pressable>
@@ -303,10 +293,28 @@ export default function MembersOfficers() {
                   ))}
                 </View>
 
-                {(() => {
-                  const currentHolder = sheetRole === 'owner' ? owner : sheetRole === 'auditor' ? auditor : treasurer;
-                  const eligible = roster.filter((m) => m.member_id !== currentHolder?.member_id && m.members?.verification_status === 'verified');
-                  const ineligibleActive = roster.filter((m) => m.member_id !== currentHolder?.member_id && m.members?.verification_status !== 'verified');
+                {sheetHolder ? (
+                  <>
+                    <Text variant="overline" color="muted" style={{ marginTop: 18, marginBottom: 9, marginLeft: 2 }}>Current {ROLE_LABEL[sheetRole as GroupRole]}</Text>
+                    <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 }, CARD_SHADOW]}>
+                      <AvatarBadge m={sheetHolder} size={42} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={{ fontSize: 14, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }} numberOfLines={1}>{name(sheetHolder)}</Text>
+                        <Text variant="caption" color="secondary" style={{ marginTop: 2 }}>Verified · {sheetHolder.heads} head{sheetHolder.heads === 1 ? '' : 's'}</Text>
+                      </View>
+                    </View>
+                    <Pressable onPress={() => setRevoking(sheetHolder)}
+                      style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 13, borderRadius: 14, borderWidth: 1, borderColor: intent.danger.soft, backgroundColor: semantic.surface }}>
+                      <UserMinus size={15} color={intent.danger.text} />
+                      <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>Revoke {ROLE_LABEL[sheetRole as GroupRole].toLowerCase()} role</Text>
+                    </Pressable>
+                    <Text variant="caption" color="secondary" style={{ marginTop: 8, textAlign: 'center' }}>Revoke first to appoint someone else.</Text>
+                  </>
+                ) : (() => {
+                  // One person can't hold two officer roles — current officers aren't eligible.
+                  const eligible = roster.filter((m) => m.role === 'member' && m.members?.verification_status === 'verified');
+                  const officersBusy = roster.filter((m) => m.role !== 'member');
+                  const ineligibleActive = roster.filter((m) => m.role === 'member' && m.members?.verification_status !== 'verified');
                   return (
                     <>
                       <Text variant="overline" color="muted" style={{ marginTop: 18, marginBottom: 9, marginLeft: 2 }}>Eligible · {eligible.length}</Text>
@@ -314,32 +322,39 @@ export default function MembersOfficers() {
                         {eligible.length === 0 ? (
                           <Text variant="body" color="muted" style={{ padding: 18, textAlign: 'center' }}>No eligible members.</Text>
                         ) : eligible.map((m, i) => {
-                          const otherSeat = sheetRole === 'owner' ? undefined : filledSlots.find((f) => f.member_id === m.member_id && f.role !== sheetRole);
-                          const seatNote = sheetRole === 'owner' && m.role !== 'member' ? `${ROLE_LABEL[m.role]} · this seat becomes empty` : null;
                           return (
                             <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < eligible.length - 1 ? 1 : 0, borderColor: semantic.border }}>
                               <AvatarBadge m={m} size={38} />
                               <View style={{ flex: 1, minWidth: 0 }}>
                                 <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{name(m)}</Text>
-                                <Text variant="caption" color={otherSeat ? undefined : 'secondary'} style={{ marginTop: 3, lineHeight: 15, color: otherSeat ? intent.warning.text : undefined }}>
-                                  {otherSeat ? `Already ${ROLE_LABEL[otherSeat.role]} · allowed but reduces separation` : seatNote ?? `Verified · ${m.heads} head${m.heads === 1 ? '' : 's'}`}
-                                </Text>
+                                <Text variant="caption" color="secondary" style={{ marginTop: 3, lineHeight: 15 }}>Verified · {m.heads} head{m.heads === 1 ? '' : 's'}</Text>
                               </View>
                               <Pressable
-                                onPress={() => (sheetRole === 'owner' ? setHandoverTo(m) : onAppoint(m.member_id, sheetRole))}
+                                onPress={() => onAppoint(m.member_id, sheetRole as GroupRole)}
                                 style={{ backgroundColor: semantic.dashCard, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10 }}
                               >
-                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>{sheetRole === 'owner' ? 'Hand over' : 'Appoint'}</Text>
+                                <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: '#fff' }}>Appoint</Text>
                               </Pressable>
                             </View>
                           );
                         })}
                       </View>
 
-                      {ineligibleActive.length > 0 || pendingRows.length > 0 ? (
+                      {officersBusy.length > 0 || ineligibleActive.length > 0 || pendingRows.length > 0 ? (
                         <>
-                          <Text variant="overline" color="muted" style={{ marginTop: 18, marginBottom: 9, marginLeft: 2 }}>Not eligible · {ineligibleActive.length + pendingRows.length}</Text>
+                          <Text variant="overline" color="muted" style={{ marginTop: 18, marginBottom: 9, marginLeft: 2 }}>Not eligible · {officersBusy.length + ineligibleActive.length + pendingRows.length}</Text>
                           <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden', opacity: 0.7 }, CARD_SHADOW]}>
+                            {officersBusy.map((m) => (
+                              <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: 1, borderColor: semantic.border }}>
+                                <AvatarBadge m={m} size={38} />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }}>{name(m)}</Text>
+                                  <Text variant="caption" style={{ marginTop: 3, color: intent.warning.text }}>
+                                    {m.role === 'owner' ? 'The Organizer' : `Already the ${ROLE_LABEL[m.role]} — revoke that role first`}
+                                  </Text>
+                                </View>
+                              </View>
+                            ))}
                             {ineligibleActive.map((m, i, arr) => (
                               <View key={m.member_id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, borderBottomWidth: i < arr.length - 1 || pendingRows.length > 0 ? 1 : 0, borderColor: semantic.border }}>
                                 <AvatarBadge m={m} size={38} />
@@ -370,15 +385,15 @@ export default function MembersOfficers() {
         </Pressable>
         {/* Inside the sheet's Modal: iOS won't present a second Modal over one that's open. */}
         <ConfirmDialog
-          visible={!!handoverTo}
-          icon={Crown}
-          title={`Make ${handoverTo ? name(handoverTo) : ''} the Organizer?`}
-          message="You'll become a regular member and lose Organizer access right away. Only the new Organizer can give it back."
-          confirmLabel="Hand over"
+          visible={!!revoking}
+          icon={UserMinus}
+          title={`Revoke ${revoking ? name(revoking) : ''}'s ${revoking ? ROLE_LABEL[revoking.role].toLowerCase() : ''} role?`}
+          message="They stay in the group as a regular member and leave the officers' chat."
+          confirmLabel="Revoke"
           destructive
-          loading={handingOver}
-          onConfirm={onHandover}
-          onCancel={() => setHandoverTo(null)}
+          loading={revokeBusy}
+          onConfirm={onRevoke}
+          onCancel={() => setRevoking(null)}
         />
       </Modal>
 

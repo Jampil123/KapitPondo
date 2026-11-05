@@ -15,7 +15,7 @@ import { formatPeso } from '@/lib/money';
 import { useAuth } from '@/context/AuthContext';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useContributions } from '@/features/contributions/contributions.hooks';
-import { useRepayments } from '@/features/lending/lending.hooks';
+import { useRepayments, useLoans } from '@/features/lending/lending.hooks';
 import { useLoanAudits } from '@/features/loanAudits/loanAudits.hooks';
 import { useSignoffQueue } from '@/features/signoff/signoff';
 import { itemMatch } from '@/features/audit/VerificationQueue';
@@ -411,6 +411,31 @@ export function AuditorHero({ groupId }: { groupId: string }) {
   );
 }
 
+/** The Organizer's own loan request — the Auditor decides it (E6, no self-approval). */
+function OrganizerLoans({ groupId, go }: { groupId: string; go: (r: string, params?: Record<string, string>) => void }) {
+  const { membership } = useActiveGroup();
+  const pending = useLoans(groupId, { status: 'pending' });
+  const loans = (pending.data ?? []).filter((l) => l.membership?.role === 'owner' && l.membership_id !== membership?.id);
+  if (!loans.length) return null;
+  return (
+    <>
+      <SectionHead title="Loan to decide" aside="Organizer's request" tone="hot" />
+      <View style={[{ backgroundColor: semantic.card, borderRadius: 18, overflow: 'hidden', marginTop: 8 }, shadowToken.soft]}>
+        {loans.map((l, i) => (
+          <Pressable key={l.id} onPress={() => go('loans/[loanId]', { loanId: l.id })}
+            style={{ flexDirection: 'row', alignItems: 'center', padding: 14, borderBottomWidth: i < loans.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>{l.membership?.members?.full_name ?? 'Organizer'}</Text>
+              <Text variant="caption" color="secondary">{l.purpose ?? 'No purpose given'} · {l.term_months} mo</Text>
+            </View>
+            <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(l.principal)}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </>
+  );
+}
+
 export function AuditorDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (route: string, params?: Record<string, string>) => router.push({ pathname: `/(app)/[groupId]/${route}` as any, params: { groupId, ...params } });
@@ -419,6 +444,8 @@ export function AuditorDashboard({ groupId }: { groupId: string }) {
 
   return (
     <>
+      <OrganizerLoans groupId={groupId} go={go} />
+
       <YearEndVerification groupId={groupId} go={go} />
 
       <OverviewTiles groupId={groupId} overview={overview} go={go} />

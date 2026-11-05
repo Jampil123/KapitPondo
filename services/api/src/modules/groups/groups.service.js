@@ -346,6 +346,18 @@ async function listMemberDirectory(groupId) {
 
 async function updateMemberRole(groupId, memberId, role) {
   if (role === 'treasurer' || role === 'auditor') {
+    // One person, one officer role; one holder per seat. Revoke first to change either.
+    const { data: seat, error: seatErr } = await supabase
+      .from('memberships').select('member_id, role')
+      .eq('group_id', groupId).eq('status', 'active').in('role', ['owner', 'treasurer', 'auditor']);
+    if (seatErr) throw seatErr;
+    const label = role === 'treasurer' ? 'Treasurer' : 'Auditor';
+    if (seat.some((m) => m.member_id === memberId)) {
+      throw Object.assign(new Error('One person cannot hold two officer roles — revoke their current role first'), { status: 409 });
+    }
+    if (seat.some((m) => m.role === role)) {
+      throw Object.assign(new Error(`This group already has a ${label} — revoke that role first`), { status: 409 });
+    }
     const { data: member, error: memberErr } = await supabase
       .from('members').select('verification_status').eq('id', memberId).single();
     if (memberErr) throw memberErr;
@@ -386,58 +398,31 @@ async function updateMemberRole(groupId, memberId, role) {
   return { membership: data, previousRole: before?.role ?? null };
 }
 
-// The Organizer hands the role to another active, verified member and becomes a regular member. Supabase-js has no
-// transactions, so the steps run promote → owner_id → demote, and each completed step is undone if a later one fails.
-async function transferOrganizer(groupId, fromMemberId, toMemberId) {
-  if (fromMemberId === toMemberId) {
-    throw Object.assign(new Error('You are already the Organizer'), { status: 400 });
-  }
+// The Organizer takes the Treasurer or Auditor role away; the member stays in
+// the group as a regular member. The officers' chat is gated by role (chat
+// routes and the messages RLS), so losing the role is leaving that room.
+async function revokeOfficer(groupId, memberId) {
+  const { data: before, error: readErr } = await supabase
+    .from('memberships').select('role, status')
+    .eq('group_id', groupId).eq('member_id', memberId).maybeSingle();
+  if (readErr) throw readErr;
+  if (!before || before.status !== 'active') throw Object.assign(new Error('Only an active member can have a role revoked'), { status: 409 });
+  if (before.role === 'owner') throw Object.assign(new Error('The Organizer role moves only by hand-over'), { status: 409 });
+  if (before.role === 'member') throw Object.assign(new Error('This member holds no officer role'), { status: 409 });
 
-  const { data: target, error: targetErr } = await supabase
-    .from('memberships')
-    .select('id, role, status, members(full_name, verification_status)')
-    .eq('group_id', groupId).eq('member_id', toMemberId).maybeSingle();
-  if (targetErr) throw targetErr;
-  if (!target || target.status !== 'active') {
-    throw Object.assign(new Error('Only an active member of this group can become the Organizer'), { status: 409 });
-  }
-  if (target.members?.verification_status !== 'verified') {
-    throw Object.assign(new Error('The new Organizer must have a verified account'), { status: 409 });
-  }
-
-  const { error: promoteErr } = await supabase
-    .from('memberships').update({ role: 'owner' })
-    .eq('group_id', groupId).eq('member_id', toMemberId);
-  if (promoteErr) throw promoteErr;
-
-  const undoPromote = () => supabase.from('memberships').update({ role: target.role })
-    .eq('group_id', groupId).eq('member_id', toMemberId);
-
-  const { error: groupErr } = await supabase
-    .from('groups').update({ owner_id: toMemberId }).eq('id', groupId);
-  if (groupErr) {
-    await undoPromote();
-    throw groupErr;
-  }
-
-  const { error: demoteErr } = await supabase
+  const { data, error } = await supabase
     .from('memberships').update({ role: 'member' })
-    .eq('group_id', groupId).eq('member_id', fromMemberId).eq('role', 'owner');
-  if (demoteErr) {
-    await supabase.from('groups').update({ owner_id: fromMemberId }).eq('id', groupId);
-    await undoPromote();
-    throw demoteErr;
-  }
+    .eq('group_id', groupId).eq('member_id', memberId).eq('role', before.role)
+    .select().single();
+  if (error) throw error;
 
+  const label = before.role === 'treasurer' ? 'Treasurer' : 'Auditor';
   await notify({
-    memberId: toMemberId,
-    groupId,
-    type: 'membership.role_changed',
-    title: 'You are now the Organizer',
-    message: 'The Organizer role for this group was handed over to you.',
+    memberId, groupId, type: 'membership.role_changed',
+    title: `Your ${label} role was removed`,
+    message: `You're now a regular member and no longer in the officers' chat.`,
   });
-
-  return { previousRole: target.role, newOrganizerName: target.members?.full_name ?? null };
+  return { membership: data, previousRole: before.role };
 }
 
 // An officer pings a specific member who's behind — the only officer-
@@ -653,7 +638,7 @@ async function listWithdrawals(groupId) {
 
 module.exports = {
   createGroup, listMyGroups, getGroup, joinByCode, listPendingMembers, approveMember, rejectMember,
-  listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, transferOrganizer, removeMember, leaveGroup, nudgeMember,
+  listGroupMembers, listOfficers, listMemberDirectory, updateMemberRole, revokeOfficer, removeMember, leaveGroup, nudgeMember,
   memberStanding, suspendMember, reactivateMember, startWithdrawal, releaseWithdrawal, verifyWithdrawal,
   cancelWithdrawal, listWithdrawals,
   submitGcashProposal, cancelGcashProposal, approveGcashProposal, rejectGcashProposal, listGcashHistory,

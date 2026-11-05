@@ -74,8 +74,20 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       return { title: `Returned ${whose}`, from: b.status === 'confirmed' ? 'Pending verification' : 'Submitted', to: 'Returned', toBad: true, reason: a.reason };
     }
     case 'membership_role':
+      if (e.action === 'role_revoked') return { title: 'Revoked an officer role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Officer', to: 'Member', toBad: true };
       if (a.role === 'owner') return { title: 'Handed over the Organizer role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: 'Organizer' };
       return { title: 'Changed a member’s role', from: ROLE_LABEL[b.role] ?? b.role ?? 'Member', to: ROLE_LABEL[a.role] ?? a.role };
+    case 'organizer_handover': {
+      // UC-GM-10: the request's life — sent, then accepted / declined / cancelled.
+      const title = {
+        handover_requested: a.by_sysadmin ? 'Asked a member to take over as Organizer (System Administrator)' : 'Asked a member to take over as Organizer',
+        handover_accepted: 'Accepted the Organizer role',
+        handover_declined: 'Declined the Organizer role',
+        handover_cancelled: 'Cancelled the Organizer hand-over',
+      }[e.action] ?? 'Organizer hand-over';
+      const to = { handover_requested: 'Pending', handover_accepted: 'Organizer', handover_declined: 'Declined', handover_cancelled: 'Cancelled' }[e.action] ?? a.status;
+      return { title, from: e.action === 'handover_requested' ? 'Organizer' : 'Pending', to, toGood: e.action === 'handover_accepted', toBad: e.action === 'handover_declined', reason: a.reason };
+    }
     case 'membership_heads':
       return { title: 'Changed heads', from: `${b.heads ?? '—'} head${b.heads === 1 ? '' : 's'}`, to: `${a.heads ?? '—'} head${a.heads === 1 ? '' : 's'}` };
     case 'membership_approval':

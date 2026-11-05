@@ -14,7 +14,8 @@ import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLoan, useLoans, useLoanEligibility } from '@/features/lending/lending.hooks';
 import { useLoanDecision, loanName } from '@/features/lending/LoanDecisionSheet';
 import { totalInterest } from '@/features/lending/remainingInterest';
-import { getMemberStanding } from '@/api/groups';
+import { getMemberStanding, listMembers } from '@/api/groups';
+import { loanDecider } from '@/features/signoff/signoff';
 import { headLabel } from '@/api/lending';
 
 const ROLE_NAME: Record<string, string> = { owner: 'Organizer', treasurer: 'Treasurer', auditor: 'Auditor', member: 'Member' };
@@ -82,6 +83,8 @@ export default function LoanRequest() {
     [groupId, loan?.membership_id],
   );
   const decision = useLoanDecision(groupId!, { onDecided: () => router.back() });
+  const roster = useQuery(() => listMembers(groupId!), [groupId]);
+  const hasAuditor = (roster.data ?? []).some((m) => m.role === 'auditor');
 
   if (!loan) {
     return (
@@ -96,8 +99,9 @@ export default function LoanRequest() {
 
   const pending = loan.status === 'pending';
   const own = loan.membership_id === membership?.id;
-  // No self-approval: the Organizer decides members' loans, the Treasurer decides the Organizer's.
-  const canDecide = pending && !own && (role === 'owner' || (role === 'treasurer' && loan.membership?.role === 'owner'));
+  // No self-approval: the Organizer decides members' loans, the Auditor the Organizer's own (E6).
+  const decider = loanDecider(loan.membership?.role, hasAuditor);
+  const canDecide = pending && !own && role === decider;
 
   const principal = Number(loan.principal);
   const available = decision.available;
@@ -254,7 +258,7 @@ export default function LoanRequest() {
         </Card>
 
         {pending && own ? (
-          <Text variant="caption" color="secondary" style={{ marginTop: 16, textAlign: 'center' }}>This is your own loan. The Treasurer decides it.</Text>
+          <Text variant="caption" color="secondary" style={{ marginTop: 16, textAlign: 'center' }}>This is your own loan. The {ROLE_NAME[decider]} decides it.</Text>
         ) : null}
       </ScrollView>
 

@@ -11,7 +11,7 @@ import { useAuditLog } from '@/features/auditlog/auditlog.hooks';
 import { describe, ROLE_LABEL } from '@/features/auditlog/describe';
 
 const AREA: Record<string, string> = {
-  membership_approval: 'Members', membership_role: 'Members', membership_heads: 'Members',
+  membership_approval: 'Members', membership_role: 'Members', organizer_handover: 'Members', membership_heads: 'Members',
   loan_decision: 'Loans', loan_disbursement: 'Loans', loan_payment: 'Loans',
   contribution: 'Contributions', expense: 'Expenses', ledger_adjustment: 'Ledger', penalty: 'Penalties',
   reversal_request: 'Reversals', distribution: 'Year-end', cycle: 'Cycle', group_gcash: 'Payment channel',

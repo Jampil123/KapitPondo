@@ -17,7 +17,7 @@ import { useLoans, useLoanEligibility, useLiquidity } from '@/features/lending/l
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { totalInterest } from '@/features/lending/remainingInterest';
 import { loanName } from '@/features/lending/LoanDecisionSheet';
-import { useSignoffQueue, type SignoffItem } from '@/features/signoff/signoff';
+import { useSignoffQueue, loanDecider, type SignoffItem } from '@/features/signoff/signoff';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import { whenLabel } from '@/features/auditlog/AuditTimeline';
 import { QueueRow, SignoffRow } from '@/features/audit/VerificationQueue';
@@ -95,7 +95,7 @@ function signoffFilter(s: SignoffItem, isOwner: boolean): ActionFilter {
 /**
  * Everything waiting on the signed-in officer, oldest first.
  * Organizer: loan and member requests, penalties, the Treasurer's GCash proposal, their sign-offs.
- * Treasurer: the Organizer's own loan request (no self-approval — the Treasurer decides it) and
+ * Treasurer: the Organizer's own loan request when there's no Auditor (no self-approval) and
  * their sign-offs: payments to confirm, officer loans to review, loans and withdrawals to release.
  */
 export function useOfficerActions(groupId: string) {
@@ -113,10 +113,11 @@ export function useOfficerActions(groupId: string) {
   const signoff = useSignoffQueue(groupId);
 
   // No self-approval (lending.routes.js): the Organizer decides everyone's loan but their own,
-  // which goes to the Treasurer instead.
+  // which the Auditor decides — or the Treasurer when there's no Auditor (E6).
+  const hasAuditor = signoff.members.some((m) => m.status === 'active' && m.role === 'auditor');
   const loans = useMemo(
-    () => (pendingLoans.data ?? []).filter((l) => (isOwner ? l.membership_id !== membership?.id : role === 'treasurer' && l.membership?.role === 'owner')),
-    [pendingLoans.data, membership?.id, isOwner, role],
+    () => (pendingLoans.data ?? []).filter((l) => l.membership_id !== membership?.id && role === loanDecider(l.membership?.role, hasAuditor)),
+    [pendingLoans.data, membership?.id, role, hasAuditor],
   );
   const members = useMemo(() => (Array.isArray(pendingMembersQ.data) ? pendingMembersQ.data : []).map(normalizePendingMember), [pendingMembersQ.data]);
   const penalties = useMemo(() => (isOwner ? pendingPenalties.data ?? [] : []), [pendingPenalties.data, isOwner]);

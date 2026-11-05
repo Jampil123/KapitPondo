@@ -34,11 +34,17 @@ async function verifyRole(groupId, payerRole, recorderRole = null) {
   return (await holdersOf(groupId, 'auditor')).length ? 'auditor' : 'owner';
 }
 const LOAN_DUTY = {
-  approve: (b) => (b === 'owner' ? 'treasurer' : 'owner'),
+  approve: (b) => (b === 'owner' ? 'auditor' : 'owner'), // see loanApproverRole for the no-Auditor fallback (0072)
   review: (b) => (b === 'auditor' ? 'treasurer' : 'auditor'),
   release: () => 'treasurer', // the Treasurer releases their own loan too (0070)
   verify: (b) => (b === 'auditor' ? 'owner' : 'auditor'),
 };
+
+/** Who decides this borrower's loan in this group: the Auditor decides the Organizer's own (E6, 0072), or the Treasurer when there's no Auditor. Mirrors loan_approver_role. */
+async function loanApproverRole(groupId, borrowerRole) {
+  if (borrowerRole !== 'owner') return 'owner';
+  return (await holdersOf(groupId, 'auditor')).length ? 'auditor' : 'treasurer';
+}
 
 /** Notify everyone holding `role` except the people listed in `skip` (payer, recorder...). */
 async function notifyRole({ groupId, role, skip = [], type, title, message }) {
@@ -46,4 +52,4 @@ async function notifyRole({ groupId, role, skip = [], type, title, message }) {
   await Promise.all(ids.map((memberId) => notify({ memberId, groupId, type, title, message })));
 }
 
-module.exports = { ROLE_LABEL, roleOf, holdersOf, confirmRole, verifyRole, LOAN_DUTY, notifyRole };
+module.exports = { ROLE_LABEL, roleOf, holdersOf, confirmRole, verifyRole, LOAN_DUTY, loanApproverRole, notifyRole };

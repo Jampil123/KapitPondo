@@ -245,13 +245,23 @@ export function progressSteps(
 }
 
 /**
+ * Who decides a loan (no self-approval): the Organizer decides members' loans;
+ * the Auditor decides the Organizer's own, or the Treasurer when the group has
+ * no Auditor (E6, 0072). Mirrors loan_approver_role.
+ */
+export function loanDecider(borrowerRole: string | null | undefined, hasAuditor: boolean): Role {
+  if (borrowerRole !== 'owner') return 'owner';
+  return hasAuditor ? 'auditor' : 'treasurer';
+}
+
+/**
  * A borrower's loan journey, in the words of their own "My loan" screen: who
  * decides and who releases. No loan has a before-release review (0071).
  */
-export function loanChain(borrowerRole: string | null | undefined) {
+export function loanChain(borrowerRole: string | null | undefined, hasAuditor = true) {
   const b = (borrowerRole ?? 'member') as Role;
   return {
-    approver: ROLE_NAME[b === 'owner' ? 'treasurer' : 'owner'],
+    approver: ROLE_NAME[loanDecider(b, hasAuditor)],
     releaser: ROLE_NAME[loanRole.release(b)],
     /** The Treasurer releases their own loan. */
     selfRelease: b === 'treasurer',

@@ -18,6 +18,7 @@ import { MemberDashboard, MemberHero } from '@/features/dashboard/MemberDashboar
 import { semantic } from '@/theme/colors';
 import { onBandText } from '@/components/shared/DashboardBand';
 import { GroupSuspendedBanner } from '@/components/shared/GroupSuspendedBanner';
+import { HandoverBanner } from '@/components/shared/HandoverBanner';
 
 const OFFICER_VIEWS = {
   owner: { Hero: OwnerHero, Body: OwnerDashboard },
@@ -198,6 +199,7 @@ export default function GroupDashboard() {
       onRefresh={onRefresh}
     >
       <GroupSuspendedBanner group={group} />
+      <HandoverBanner key={`handover-${refreshKey}`} groupId={groupId!} memberId={member?.id} />
       <Animated.View key={`body-${officerView}`} entering={slideIn}>
         <Body key={refreshKey} groupId={groupId!} />
       </Animated.View>

@@ -180,7 +180,7 @@ router.get(
 router.post(
   '/groups/:groupId/loans/:id/approve',
   requireAuth, notSystemAdmin,
-  requireGroupRole(['owner', 'treasurer']),
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
   async (req, res, next) => {
     try {
       const { interest_rate, approved_principal } = req.body;
@@ -191,15 +191,13 @@ router.post(
       if (loan.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Loan does not belong to this group' });
       }
+      // No self-approval: the Organizer decides members' loans; the Auditor decides the Organizer's own (E6).
+      const decider = await officers.loanApproverRole(req.params.groupId, loan.membership?.role);
       if (loan.membership_id === req.membership.id) {
-        return res.status(403).json({ error: 'You cannot approve your own loan — the Treasurer reviews it instead' });
+        return res.status(403).json({ error: `You cannot approve your own loan — the ${officers.ROLE_LABEL[decider]} decides it` });
       }
-      const borrowerIsOwner = loan.membership?.role === 'owner';
-      if (borrowerIsOwner && req.membership.role !== 'treasurer') {
-        return res.status(403).json({ error: 'The Organizer cannot approve their own loan — the Treasurer reviews it instead' });
-      }
-      if (!borrowerIsOwner && req.membership.role !== 'owner') {
-        return res.status(403).json({ error: 'Only the Organizer can decide on this loan' });
+      if (req.membership.role !== decider) {
+        return res.status(403).json({ error: `Only the ${officers.ROLE_LABEL[decider]} can decide on this loan` });
       }
       const approvedLoan = await service.approveLoan({
         loanId: req.params.id,
@@ -335,22 +333,19 @@ router.post(
 router.post(
   '/groups/:groupId/loans/:id/reject',
   requireAuth, notSystemAdmin,
-  requireGroupRole(['owner', 'treasurer']),
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
   async (req, res, next) => {
     try {
       const target = await service.getLoan(req.params.id);
       if (target.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Loan does not belong to this group' });
       }
+      const decider = await officers.loanApproverRole(req.params.groupId, target.membership?.role);
       if (target.membership_id === req.membership.id) {
-        return res.status(403).json({ error: 'You cannot reject your own loan — the Treasurer reviews it instead' });
+        return res.status(403).json({ error: `You cannot reject your own loan — the ${officers.ROLE_LABEL[decider]} decides it` });
       }
-      const borrowerIsOwner = target.membership?.role === 'owner';
-      if (borrowerIsOwner && req.membership.role !== 'treasurer') {
-        return res.status(403).json({ error: 'The Organizer cannot decide on their own loan — the Treasurer reviews it instead' });
-      }
-      if (!borrowerIsOwner && req.membership.role !== 'owner') {
-        return res.status(403).json({ error: 'Only the Organizer can decide on this loan' });
+      if (req.membership.role !== decider) {
+        return res.status(403).json({ error: `Only the ${officers.ROLE_LABEL[decider]} can decide on this loan` });
       }
       const loan = await service.rejectLoan(req.params.id, req.body?.reason);
       await logAudit({

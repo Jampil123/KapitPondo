@@ -3,7 +3,8 @@
  * from Fund Group Monitoring (GET /admin/monitoring/fund-groups/:groupId).
  *
  * Read-only apart from platform suspension, which the System Administrator
- * may apply for a documented system-policy violation. There is no way from
+ * may apply for a documented system-policy violation, and naming a new
+ * Organizer when the current one can't act (role only, UC-GM-10 A1). There is no way from
  * here to approve contributions or loans, verify repayments, touch the
  * ledger, or change cycle / loan terms — those stay with the group's officers.
  */
@@ -14,6 +15,7 @@ import {
   Activity, MessageSquareWarning, CalendarClock,
 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { HandoverCard } from './HandoverCard';
 import { formatDate, formatDateTime, formatPeso } from '../../lib/format';
 
 type Summary = {
@@ -260,6 +262,9 @@ export function GroupDetailPage() {
             </div>
           )}
         </Card>
+
+        {/* Organizer hand-over (UC-GM-10 A1) — role only */}
+        {groupId ? <HandoverCard groupId={groupId} reports={reports} /> : null}
 
         {/* Fund cycle */}
         <Card title="Fund Cycle" icon={CalendarClock}

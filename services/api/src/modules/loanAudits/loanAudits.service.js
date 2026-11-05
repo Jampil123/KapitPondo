@@ -141,9 +141,11 @@ function auditLoan(loan, ctx) {
   const decision = ctx.decisions.filter((d) => d.entity_id === loan.id).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0];
   const selfApproved = !!loan.approver?.id && loan.approver.id === loan.membership?.member_id;
   const borrowerIsOwner = loan.membership?.role === 'owner';
-  const expectedRole = borrowerIsOwner ? 'treasurer' : 'owner';
-  const wrongRole = !!decision?.actor_role && decision.actor_role !== expectedRole;
-  const roleName = (r) => (r === 'owner' ? 'Organizer' : r === 'treasurer' ? 'Treasurer' : r);
+  // An Organizer's own loan: the Auditor decides it (0072), the Treasurer when there's no Auditor — and before 0072.
+  const expectedRole = borrowerIsOwner ? 'auditor' : 'owner';
+  const allowed = borrowerIsOwner ? ['auditor', 'treasurer'] : ['owner'];
+  const wrongRole = !!decision?.actor_role && !allowed.includes(decision.actor_role);
+  const roleName = (r) => (r === 'owner' ? 'Organizer' : r === 'treasurer' ? 'Treasurer' : r === 'auditor' ? 'Auditor' : r);
   add('decider', 'Decided by the right officer', !selfApproved && !wrongRole,
     selfApproved ? 'Approved by the borrower'
       : wrongRole ? `Decided by the ${roleName(decision.actor_role)} instead of the ${roleName(expectedRole)}`

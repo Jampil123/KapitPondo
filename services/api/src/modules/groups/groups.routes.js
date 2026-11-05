@@ -6,6 +6,9 @@ const service = require('./groups.service');
 const { logAudit } = require('../../lib/auditLog');
 const { notify } = require('../../lib/notifications');
 const officers = require('../../lib/officers');
+const requireSystemAdmin = require('../../middleware/requireSystemAdmin');
+const supabase = require('../../config/supabase');
+const handover = require('./handover.service');
 
 // Create a group — the calling member becomes its owner
 router.post('/groups', requireAuth, async (req, res, next) => {
@@ -294,20 +297,136 @@ router.patch('/groups/:groupId/members/:memberId/role', requireAuth,
   }
 );
 
-// Hand the Organizer role to another member — the caller becomes a regular member (owner only)
-router.post('/groups/:groupId/organizer/transfer', requireAuth,
+// Revoke an officer role (Treasurer or Auditor) — the member stays, as a regular member.
+router.post('/groups/:groupId/members/:memberId/revoke', requireAuth,
   requireGroupRole(['owner']),
   async (req, res, next) => {
     try {
-      const { member_id: toMemberId } = req.body;
-      if (!toMemberId) return res.status(400).json({ error: 'member_id is required' });
-      const { previousRole } = await service.transferOrganizer(req.params.groupId, req.member.id, toMemberId);
+      const { membership, previousRole } = await service.revokeOfficer(req.params.groupId, req.params.memberId);
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
-        action: 'role_changed', entityType: 'membership_role', entityId: toMemberId,
-        before: { role: previousRole }, after: { role: 'owner' },
+        action: 'role_revoked', entityType: 'membership_role', entityId: req.params.memberId,
+        before: { role: previousRole }, after: { role: 'member' },
       });
-      res.json({ ok: true });
+      res.json({ membership });
+    } catch (err) { next(err); }
+  }
+);
+
+// ---------------------------------------------------------------------
+// Organizer hand-over (UC-GM-10). The Organizer keeps the role until the
+// chosen member accepts; see handover.service.js for the request states.
+// ---------------------------------------------------------------------
+
+const handoverAudit = (req, action, h, extra = {}) => logAudit({
+  groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership?.role ?? null,
+  action, entityType: 'organizer_handover', entityId: h.id,
+  after: { status: h.status, to_member_id: h.to_member_id, from_member_id: h.from_member_id, reason: h.reason, ...extra },
+});
+
+// The pending request the caller is part of — the Organizer's own, or one addressed to them.
+router.get('/groups/:groupId/handover', requireAuth,
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      res.json({ request: await handover.currentRequest(req.params.groupId, req.member.id, req.membership.role) });
+    } catch (err) { next(err); }
+  }
+);
+
+// Step 1: eligible members and the pending tasks that move with the role.
+router.get('/groups/:groupId/handover/options', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try { res.json(await handover.options(req.params.groupId)); } catch (err) { next(err); }
+  }
+);
+
+// Steps 3–4: send the request.
+router.post('/groups/:groupId/handover', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const { member_id: toMemberId, reason } = req.body ?? {};
+      if (!toMemberId) return res.status(400).json({ error: 'member_id is required' });
+      if (toMemberId === req.member.id) return res.status(400).json({ error: 'You are already the Organizer' });
+      const { request } = await handover.sendRequest({
+        groupId: req.params.groupId, fromMemberId: req.member.id, toMemberId, reason, requestedBy: req.member.id,
+      });
+      await handoverAudit(req, 'handover_requested', request);
+      res.status(201).json({ request });
+    } catch (err) { next(err); }
+  }
+);
+
+// A2: the Organizer cancels before it's answered.
+router.post('/groups/:groupId/handover/:id/cancel', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const request = await handover.cancelRequest(req.params.groupId, req.params.id);
+      await handoverAudit(req, 'handover_cancelled', request);
+      res.json({ request });
+    } catch (err) { next(err); }
+  }
+);
+
+// Step 5: the chosen member accepts — the role moves.
+router.post('/groups/:groupId/handover/:id/accept', requireAuth,
+  requireGroupRole(['member']),
+  async (req, res, next) => {
+    try {
+      const { request } = await handover.acceptRequest(req.params.groupId, req.params.id, req.member.id);
+      await handoverAudit(req, 'handover_accepted', request, { new_role: 'owner' });
+      res.json({ request });
+    } catch (err) { next(err); }
+  }
+);
+
+// E1: the chosen member declines.
+router.post('/groups/:groupId/handover/:id/decline', requireAuth,
+  requireGroupRole(['member']),
+  async (req, res, next) => {
+    try {
+      const request = await handover.declineRequest(req.params.groupId, req.params.id, req.member.id);
+      await handoverAudit(req, 'handover_declined', request);
+      res.json({ request });
+    } catch (err) { next(err); }
+  }
+);
+
+// A1: the Sysadmin names a new Organizer when the current one can't act
+// (suspended or inactive, raised in a problem report). Role only — this
+// returns names and roles, never the group's money.
+router.get('/admin/fund-groups/:groupId/handover', requireAuth, requireSystemAdmin,
+  async (req, res, next) => {
+    try { res.json(await handover.adminView(req.params.groupId)); } catch (err) { next(err); }
+  }
+);
+
+router.post('/admin/fund-groups/:groupId/handover', requireAuth, requireSystemAdmin,
+  async (req, res, next) => {
+    try {
+      const { member_id: toMemberId, reason, problem_report_id: problemReportId } = req.body ?? {};
+      if (!toMemberId) return res.status(400).json({ error: 'member_id is required' });
+      const { data: owner } = await supabase
+        .from('memberships').select('member_id').eq('group_id', req.params.groupId).eq('role', 'owner').maybeSingle();
+      const { request } = await handover.sendRequest({
+        groupId: req.params.groupId, fromMemberId: owner?.member_id ?? null, toMemberId, reason,
+        requestedBy: req.member.id, bySysadmin: true, problemReportId: problemReportId || null,
+      });
+      await handoverAudit(req, 'handover_requested', request, { by_sysadmin: true, problem_report_id: problemReportId || null });
+      res.status(201).json({ request });
+    } catch (err) { next(err); }
+  }
+);
+
+router.post('/admin/fund-groups/:groupId/handover/:id/cancel', requireAuth, requireSystemAdmin,
+  async (req, res, next) => {
+    try {
+      const request = await handover.cancelRequest(req.params.groupId, req.params.id);
+      await handoverAudit(req, 'handover_cancelled', request, { by_sysadmin: true });
+      res.json({ request });
     } catch (err) { next(err); }
   }
 );

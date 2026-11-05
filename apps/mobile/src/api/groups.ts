@@ -273,9 +273,68 @@ export function rejectMember(groupId: string, memberId: string, reason?: string)
 export function setMemberRole(groupId: string, memberId: string, role: GroupRole) {
   return api.patch(`/api/groups/${groupId}/members/${memberId}/role`, { role });
 }
-/** Hand the Organizer role to another member; the caller becomes a regular member. */
-export function transferOrganizer(groupId: string, memberId: string) {
-  return api.post(`/api/groups/${groupId}/organizer/transfer`, { member_id: memberId });
+/** Organizer: take the Treasurer or Auditor role away — they stay as a regular member and leave the officers' chat. */
+export function revokeOfficer(groupId: string, memberId: string) {
+  return api.post(`/api/groups/${groupId}/members/${memberId}/revoke`, {});
+}
+// --- Organizer hand-over (UC-GM-10) -----------------------------------------
+// The Organizer sends a request; the chosen member accepts or declines. The
+// Organizer keeps the role until they accept. Expires after 7 days.
+
+export type HandoverStatus = 'pending' | 'accepted' | 'declined' | 'cancelled' | 'expired';
+
+export interface HandoverRequest {
+  id: string;
+  group_id: string;
+  from_member_id: string | null;
+  to_member_id: string;
+  reason: string;
+  status: HandoverStatus;
+  by_sysadmin: boolean;
+  expires_at: string;
+  created_at: string;
+  from: { full_name: string | null } | null;
+  to: { full_name: string | null; avatar_url?: string | null } | null;
+}
+
+export interface HandoverCandidate {
+  member_id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  role: GroupRole;
+  heads: number;
+  joined_at: string | null;
+  /** Active, verified and not an officer. */
+  eligible: boolean;
+  /** Why not, when not eligible. */
+  blocked: string | null;
+}
+
+export interface HandoverOptions {
+  members: HandoverCandidate[];
+  /** What moves to the new Organizer with the role. */
+  tasks: { membership_requests: number; loan_requests: number; reversals: number; distribution: boolean };
+}
+
+/** The pending request the caller is part of — the Organizer's own, or one addressed to them. */
+export async function getHandover(groupId: string) {
+  const res = await api.get<{ request: HandoverRequest | null }>(`/api/groups/${groupId}/handover`);
+  return res.request;
+}
+export function getHandoverOptions(groupId: string) {
+  return api.get<HandoverOptions>(`/api/groups/${groupId}/handover/options`);
+}
+export function requestHandover(groupId: string, memberId: string, reason: string) {
+  return api.post<{ request: HandoverRequest }>(`/api/groups/${groupId}/handover`, { member_id: memberId, reason });
+}
+export function cancelHandover(groupId: string, id: string) {
+  return api.post(`/api/groups/${groupId}/handover/${id}/cancel`, {});
+}
+export function acceptHandover(groupId: string, id: string) {
+  return api.post(`/api/groups/${groupId}/handover/${id}/accept`, {});
+}
+export function declineHandover(groupId: string, id: string) {
+  return api.post(`/api/groups/${groupId}/handover/${id}/decline`, {});
 }
 export function removeMember(groupId: string, memberId: string) {
   return api.del(`/api/groups/${groupId}/members/${memberId}`);
