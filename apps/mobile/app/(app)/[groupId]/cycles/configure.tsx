@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform, Modal } from 'react-native';
+import { AlertTriangle, Lock } from 'lucide-react-native';
 import { Alert } from '@/lib/alert';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { DateInput, formatDisplayDate, parseIsoDate } from '@/components/shared/DateInput';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
+import { toast } from '@/components/ui/Toast';
+import { useActiveGroup } from '@/context/GroupContext';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { getStatusMeta } from '@/theme/status';
@@ -15,7 +18,8 @@ import { useQuery } from '@/hooks/useApi';
 import { useKeyboardVisible } from '@/hooks/useKeyboardVisible';
 import { listDistributions } from '@/api/distribution';
 import { selectActiveCycle } from '@/api/cycles';
-import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle } from '@/features/cycles/cycles.hooks';
+import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle, useCycleProgress, useCloseBlockers } from '@/features/cycles/cycles.hooks';
+import type { Cycle } from '@/api/cycles';
 
 function Label({ children }: { children: string }) {
   return <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 4 }}>{children}</Text>;
@@ -48,6 +52,34 @@ function Gate({ done, label }: { done: boolean; label: string }) {
   );
 }
 
+// UC-FC-02 step 3 / A1: close and set up the next cycle, or close only.
+function CloseCycleSheet({ visible, cycleName, loading, onCloseAndNext, onCloseOnly, onCancel }: {
+  visible: boolean; cycleName: string; loading: boolean;
+  onCloseAndNext: () => void; onCloseOnly: () => void; onCancel: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.45)', justifyContent: 'flex-end' }} onPress={loading ? undefined : onCancel}>
+        <Pressable style={{ backgroundColor: semantic.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, padding: 22, paddingBottom: 22 + insets.bottom, alignItems: 'center', gap: 10 }}>
+          <View style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: intent.primary.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 4 }}>
+            <Lock size={24} color={intent.primary.text} />
+          </View>
+          <Text variant="h3" style={{ fontSize: 17, textAlign: 'center' }}>Close {cycleName}?</Text>
+          <Text color="secondary" style={{ fontSize: 13.5, textAlign: 'center' }}>
+            Its records become read-only and every member is notified. Members and their heads stay in the group.
+          </Text>
+          <View style={{ alignSelf: 'stretch', gap: 10, marginTop: 10 }}>
+            <Button label="Close and set up next cycle" onPress={onCloseAndNext} loading={loading} />
+            <Button label="Close only" variant="ghost" onPress={onCloseOnly} disabled={loading} />
+            <Button label="Cancel" variant="ghost" onPress={onCancel} disabled={loading} />
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 export default function ConfigureCycle() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const router = useRouter();
@@ -56,15 +88,27 @@ export default function ConfigureCycle() {
   const create = useCreateCycle(groupId!);
   const activate = useActivateCycle(groupId!);
   const close = useCloseCycle(groupId!);
-  const distributions = useQuery(() => listDistributions(groupId!), [groupId]);
+  const distributions = useQuery(() => listDistributions(groupId!), [groupId], { table: 'distributions', filter: `group_id=eq.${groupId}` });
+  const { role } = useActiveGroup();
+  const isOrganizer = role === 'owner';
+  const scrollRef = useRef<ScrollView>(null);
+  const formY = useRef(0);
+  const [closeSheet, setCloseSheet] = useState(false);
 
   const allCycles = cycles.data ?? [];
   const primaryCycle = selectActiveCycle(allCycles) ?? allCycles.find((c) => c.status === 'draft') ?? null;
   const otherCycles = allCycles.filter((c) => c.id !== primaryCycle?.id);
   const latestCycle = allCycles[0] ?? null; // listCycles returns newest first
   const cycleDistribution = primaryCycle
-    ? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id) ?? null
+    ? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id && d.status === 'finalized')
+      ?? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id && d.status !== 'draft')
+      ?? null
     : null;
+  const activeId = primaryCycle?.status === 'active' ? primaryCycle.id : undefined;
+  const progress = useCycleProgress(groupId!, activeId);
+  const blockers = useCloseBlockers(groupId!, activeId);
+  const pending = (blockers.data ?? []).filter((b) => b.kind !== 'distribution');
+  const canClose = !!activeId && !blockers.loading && !blockers.error && (blockers.data ?? []).length === 0;
 
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -83,14 +127,18 @@ export default function ConfigureCycle() {
     { label: 'amount', ok: !!toAmountString(amount) },
   ].filter((f) => !f.ok);
 
+  function copySettingsFrom(c: Cycle) {
+    setAmount(String(c.contribution_amount ?? ''));
+    setPenalty(c.penalty_amount ? String(c.penalty_amount) : '');
+    setDueDay(c.contribution_due_day ? String(c.contribution_due_day) : '');
+    setInterestRate(c.default_interest_rate ? String(Number(c.default_interest_rate) * 100) : '');
+    setMinLoan(c.minimum_loan_amount ? String(c.minimum_loan_amount) : '');
+    setEarlyTermPenalty(c.early_termination_penalty ? String(c.early_termination_penalty) : '');
+  }
+
   function onCopySettings() {
     if (!latestCycle) return;
-    setAmount(String(latestCycle.contribution_amount ?? ''));
-    setPenalty(latestCycle.penalty_amount ? String(latestCycle.penalty_amount) : '');
-    setDueDay(latestCycle.contribution_due_day ? String(latestCycle.contribution_due_day) : '');
-    setInterestRate(latestCycle.default_interest_rate ? String(Number(latestCycle.default_interest_rate) * 100) : '');
-    setMinLoan(latestCycle.minimum_loan_amount ? String(latestCycle.minimum_loan_amount) : '');
-    setEarlyTermPenalty(latestCycle.early_termination_penalty ? String(latestCycle.early_termination_penalty) : '');
+    copySettingsFrom(latestCycle);
     setCopied(true);
     setTimeout(() => setCopied(false), 1600);
   }
@@ -132,11 +180,25 @@ export default function ConfigureCycle() {
     if (ok !== undefined) cycles.refetch();
     else if (activate.error) Alert.alert('Could not activate', activate.error.status === 409 || /active/i.test(activate.error.message) ? 'Close the current active cycle first — only one can be active at a time.' : activate.error.message);
   }
-  function onClose(id: string) {
-    Alert.alert('Close cycle', 'Close this cycle? This is usually done at year-end, after the distribution is finalized.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Close', style: 'destructive', onPress: async () => { const ok = await close.run(id); if (ok !== undefined) cycles.refetch(); } },
-    ]);
+  async function onClose(openNext: boolean) {
+    if (!primaryCycle) return;
+    const closing = primaryCycle;
+    const ok = await close.run(closing.id);
+    setCloseSheet(false);
+    if (ok === undefined) {
+      blockers.refetch();
+      if (close.error) Alert.alert('Could not close the cycle', close.error.message);
+      return;
+    }
+    cycles.refetch();
+    if (openNext) {
+      // Steps 4-5: the next cycle starts from this one's settings; members and heads carry over on their own.
+      copySettingsFrom(closing);
+      toast(`${closing.name} closed. Set up the next cycle.`);
+      setTimeout(() => scrollRef.current?.scrollTo({ y: formY.current, animated: true }), 250);
+    } else {
+      toast(`${closing.name} closed`);
+    }
   }
   function goToYearEnd() {
     router.push({ pathname: '/(app)/[groupId]/distribution/year-end' as any, params: { groupId } });
@@ -150,6 +212,7 @@ export default function ConfigureCycle() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={{ padding: 16, paddingBottom: keyboardVisible ? 24 : 130, gap: 8 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
@@ -170,6 +233,24 @@ export default function ConfigureCycle() {
                 <StatusPill entity="cycle" value={primaryCycle.status} />
               </View>
 
+              {/* Cycle summary */}
+              {primaryCycle.status === 'active' && progress.data ? (
+                <View style={{ marginTop: 14, flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1, backgroundColor: semantic.surface, borderRadius: 12, padding: 11 }}>
+                    <Text variant="caption" color="secondary">Collected</Text>
+                    <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(progress.data.collected_total)}</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: semantic.surface, borderRadius: 12, padding: 11 }}>
+                    <Text variant="caption" color="secondary">Expected</Text>
+                    <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{formatPeso(progress.data.expected_total)}</Text>
+                  </View>
+                  <View style={{ width: 70, backgroundColor: semantic.surface, borderRadius: 12, padding: 11 }}>
+                    <Text variant="caption" color="secondary">Paid</Text>
+                    <Text style={{ fontSize: 15, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>{Math.round(Number(progress.data.percent_collected))}%</Text>
+                  </View>
+                </View>
+              ) : null}
+
               {primaryCycle.status === 'draft' ? (
                 <View style={{ marginTop: 15 }}>
                   <Button label="Activate this cycle" onPress={() => onActivate(primaryCycle.id)} loading={activate.loading} style={{ paddingVertical: 11 }} />
@@ -186,10 +267,26 @@ export default function ConfigureCycle() {
                       <Gate done={cycleDistribution?.status === 'finalized'} label="Finalized by you" />
                     </View>
 
+                    {pending.length > 0 ? (
+                      <View style={{ backgroundColor: intent.warning.soft, borderRadius: 12, padding: 12, gap: 5 }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
+                          <AlertTriangle size={14} color={intent.warning.text} />
+                          <Text variant="label" style={{ fontSize: 12.5, color: intent.warning.text }}>Still waiting for a decision</Text>
+                        </View>
+                        {pending.map((b) => (
+                          <Text key={b.kind} variant="caption" style={{ color: intent.warning.text, lineHeight: 16 }}>• {b.label}</Text>
+                        ))}
+                      </View>
+                    ) : null}
+
                     {cycleDistribution?.status !== 'finalized' ? (
                       <Button label="Go to Year-End Distribution" variant="ghost" onPress={goToYearEnd} style={{ paddingVertical: 11 }} />
                     ) : null}
-                    <Button label="Close cycle" variant="ghost" onPress={() => onClose(primaryCycle.id)} loading={close.loading} style={{ paddingVertical: 11 }} />
+                    {isOrganizer ? (
+                      <Button label="Close cycle" onPress={() => setCloseSheet(true)} disabled={!canClose} style={{ paddingVertical: 11 }} />
+                    ) : (
+                      <Text variant="caption" color="secondary" style={{ textAlign: 'center' }}>Only the Organizer can close the cycle.</Text>
+                    )}
                   </View>
                 </>
               )}
@@ -217,7 +314,7 @@ export default function ConfigureCycle() {
         )}
 
         {/* ---------------- New cycle form ---------------- */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: primaryCycle || otherCycles.length > 0 ? 22 : 0, marginBottom: 4 }}>
+        <View onLayout={(e) => { formY.current = e.nativeEvent.layout.y; }} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: primaryCycle || otherCycles.length > 0 ? 22 : 0, marginBottom: 4 }}>
           <Text variant="overline" color="secondary">Set up the next cycle</Text>
           {latestCycle ? (
             <Pressable onPress={onCopySettings} style={{ backgroundColor: copied ? intent.success.soft : semantic.surfaceAlt, paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10 }}>
@@ -325,6 +422,15 @@ export default function ConfigureCycle() {
               : 'Ready to create'}
         </Text>
       </LinearGradient>}
+
+      <CloseCycleSheet
+        visible={closeSheet}
+        cycleName={primaryCycle?.name ?? 'this cycle'}
+        loading={close.loading}
+        onCloseAndNext={() => onClose(true)}
+        onCloseOnly={() => onClose(false)}
+        onCancel={() => setCloseSheet(false)}
+      />
     </SafeAreaView>
   );
 }

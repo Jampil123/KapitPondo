@@ -160,7 +160,7 @@ const MANAGE_ACTIONS: TileAction[] = [
   { label: 'Configure Cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
   { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },
   { label: 'Audit Trail', icon: Clock3, route: 'audit/log' },
-  { label: 'Reports & Export', icon: Download, route: 'reports/export' },
+  { label: 'Reports', icon: Download, route: 'reports/export' },
 ];
 
 /* ---------------- Activity — what officers decided (audit log), not money movements ---------------- */

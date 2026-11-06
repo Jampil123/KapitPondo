@@ -67,9 +67,22 @@ export function activateCycle(groupId: string, cycleId: string) {
   return api.post<{ cycle: Cycle }>(`/api/groups/${groupId}/cycles/${cycleId}/activate`);
 }
 
-/** POST — close an active cycle (runs the close_cycle RPC). */
+/** POST — Organizer closes an active cycle. 409 with the reasons while anything blocks it. */
 export function closeCycle(groupId: string, cycleId: string) {
   return api.post<{ cycle: Cycle }>(`/api/groups/${groupId}/cycles/${cycleId}/close`);
+}
+
+/** What still stops a cycle from closing: the distribution, or items waiting for a decision. */
+export interface CloseBlocker {
+  kind: 'distribution' | 'contributions' | 'repayments' | 'loan_requests' | 'loan_releases' | 'reversals' | 'withdrawals';
+  label: string;
+  item_count: number;
+}
+
+/** GET — officers. Empty when the cycle can close. */
+export async function getCloseBlockers(groupId: string, cycleId: string) {
+  const res = await api.get<{ blockers: CloseBlocker[] }>(`/api/groups/${groupId}/cycles/${cycleId}/close-check`);
+  return res.blockers ?? [];
 }
 
 /** Pure selector: the group's single active cycle, or null. */

@@ -24,7 +24,7 @@ const SIGNOFFS: Item = { icon: Stamp, label: 'Needs your sign-off', to: 'signoff
 const YEAR_END: Item = { icon: CalendarClock, label: 'Year-end', to: 'distribution/year-end' };
 const LOAN_DECISIONS: Item = { icon: Coins, label: 'Loan decisions', to: 'loans/decisions' };
 const PAYMENT_CHANNEL: Item = { icon: Smartphone, label: 'Payment channel', to: 'group/settings' };
-const REPORTS: Item = { icon: Download, label: 'Reports & Export', to: 'reports/export' };
+const REPORTS: Item = { icon: Download, label: 'Reports', to: 'reports/export' };
 
 // The role's own tools — what this officer comes to the app to do.
 const ROLE_TOOLS: Record<GroupRole, Section | null> = {

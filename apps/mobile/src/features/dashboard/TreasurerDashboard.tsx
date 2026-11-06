@@ -104,7 +104,7 @@ const ACTIONS: TileAction[] = [
   { label: 'Group Ledger', icon: PiggyBank, route: 'reports/group-ledger' },
   { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },
   { label: 'Audit Trail', icon: Clock, route: 'audit/log' },
-  { label: 'Reports & Export', icon: Download, route: 'reports/export' },
+  { label: 'Reports', icon: Download, route: 'reports/export' },
 ];
 
 /* ---------------- Recent transactions (timeline) ---------------- */

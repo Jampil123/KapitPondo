@@ -42,6 +42,7 @@ const CATEGORY_BY_PREFIX = {
   ledger: 'payments',
   penalty: 'payments',
   membership: 'group_announcements',
+  cycle: 'group_announcements',
   distribution: 'group_announcements',
   announcement: 'group_announcements',
   balance: 'group_announcements',

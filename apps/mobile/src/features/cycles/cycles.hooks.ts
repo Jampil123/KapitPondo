@@ -7,6 +7,7 @@ import {
   closeCycle,
   selectActiveCycle,
   getCycleProgress,
+  getCloseBlockers,
   type CreateCycleInput,
 } from '../../api/cycles';
 
@@ -50,4 +51,16 @@ export function useActivateCycle(groupId: string) {
 
 export function useCloseCycle(groupId: string) {
   return useAction((cycleId: string) => closeCycle(groupId, cycleId));
+}
+/** What still stops the cycle from closing (UC-FC-02 E1/E2). Empty = it can close. */
+export function useCloseBlockers(groupId: string, cycleId?: string) {
+  const fn = useCallback(
+    () => (cycleId ? getCloseBlockers(groupId, cycleId) : Promise.resolve([])),
+    [groupId, cycleId],
+  );
+  return useQuery(fn, [groupId, cycleId], [
+    { table: 'distributions', filter: `group_id=eq.${groupId}` },
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+    { table: 'ledger_reversal_requests', filter: `group_id=eq.${groupId}` },
+  ]);
 }

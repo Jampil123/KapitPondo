@@ -118,7 +118,7 @@ export default function ReportsExport() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['bottom']}>
-      <BandHeader title="Reports & Export" />
+      <BandHeader title="Reports" />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}>
         {isAuditor ? (
           <>

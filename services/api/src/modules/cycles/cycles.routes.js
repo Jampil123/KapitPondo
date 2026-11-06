@@ -70,17 +70,28 @@ router.post('/groups/:groupId/cycles/:id/activate', requireAuth,
   }
 );
 
-// Close a cycle (owner or treasurer)
-router.post('/groups/:groupId/cycles/:id/close', requireAuth,
-  requireGroupRole(['owner', 'treasurer']),
+// What still stops a cycle from closing (officers)
+router.get('/groups/:groupId/cycles/:id/close-check', requireAuth,
+  requireGroupRole(['owner', 'treasurer', 'auditor']),
   async (req, res, next) => {
     try {
-      const cycle = await service.closeCycle(req.params.id);
+      res.json({ blockers: await service.closeBlockers(req.params.groupId, req.params.id) });
+    } catch (err) { next(err); }
+  }
+);
+
+// Close a cycle (UC-FC-02 — Organizer only)
+router.post('/groups/:groupId/cycles/:id/close', requireAuth,
+  requireGroupRole(['owner']),
+  async (req, res, next) => {
+    try {
+      const cycle = await service.closeCycle(req.params.groupId, req.params.id, req.member.id);
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'closed', entityType: 'cycle', entityId: req.params.id,
         before: { status: 'active' }, after: { status: 'closed', name: cycle.name },
       });
+      await service.notifyCycleClosed(req.params.groupId, cycle);
       res.json({ message: 'Cycle closed', cycle });
     } catch (err) { next(err); }
   }
