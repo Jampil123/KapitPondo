@@ -10,6 +10,7 @@ import { Field } from '@/components/ui/Field';
 import { Button } from '@/components/ui/Button';
 import { Avatar } from '@/components/ui/Avatar';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { semantic, intent, type IntentName } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -240,7 +241,12 @@ export default function GroupSettings() {
                 {group?.treasurer_gcash_note ? <DetailRow label="Note" value={group.treasurer_gcash_note} /> : null}
 
                 {role === 'owner' ? (
-                  <OwnerApproveReject groupId={groupId!} onDone={afterMutation} />
+                  <OwnerApproveReject
+                    groupId={groupId!}
+                    number={formatGcashDigits(group?.treasurer_gcash_pending_number ?? '')}
+                    name={group?.treasurer_gcash_pending_name ?? ''}
+                    onDone={afterMutation}
+                  />
                 ) : (
                   <Button label="Cancel submission" variant="ghost" onPress={() => confirmCancel(groupId!, afterMutation)} style={{ marginTop: 14 }} />
                 )}
@@ -305,13 +311,15 @@ function confirmCancel(groupId: string, onDone: () => void) {
   ]);
 }
 
-function OwnerApproveReject({ groupId, onDone }: { groupId: string; onDone: () => void }) {
+function OwnerApproveReject({ groupId, number, name, onDone }: { groupId: string; number: string; name: string; onDone: () => void }) {
   const approve = useAction(() => approveGcashProposal(groupId));
   const reject = useAction((reason: string) => rejectGcashProposal(groupId, reason));
   const [rejecting, setRejecting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   async function onApprove() {
     const ok = await approve.run();
+    setConfirming(false);
     if (ok !== undefined) onDone();
     else if (approve.error) Alert.alert('Could not approve', approve.error.message);
   }
@@ -341,7 +349,7 @@ function OwnerApproveReject({ groupId, onDone }: { groupId: string; onDone: () =
           </Pressable>
         </View>
         <View style={{ flex: 1 }}>
-          <Button label="Approve" onPress={onApprove} loading={approve.loading} disabled={reject.loading} />
+          <Button label="Approve" onPress={() => setConfirming(true)} loading={approve.loading} disabled={reject.loading} />
         </View>
       </View>
       <ReasonPrompt
@@ -352,6 +360,17 @@ function OwnerApproveReject({ groupId, onDone }: { groupId: string; onDone: () =
         destructive
         onCancel={() => setRejecting(false)}
         onConfirm={onReject}
+      />
+      <ConfirmDialog
+        visible={confirming}
+        icon={Smartphone}
+        title="Approve this GCash number?"
+        message={`${number}${name ? ` · ${name}` : ''}
+Members will send their payments to this number.`}
+        confirmLabel="Approve"
+        loading={approve.loading}
+        onCancel={() => setConfirming(false)}
+        onConfirm={onApprove}
       />
     </>
   );

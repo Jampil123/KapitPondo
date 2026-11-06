@@ -66,7 +66,7 @@ const ROLE_TOOLS: Record<GroupRole, Section | null> = {
       { icon: Clock, label: 'Audit trail', to: 'audit/log' },
       { icon: FileText, label: 'Proof review', to: 'audit/proofs' },
       REPORTS,
-      { icon: Wallet, label: 'Member balances', to: 'reports/member-balances' },
+      { icon: Wallet, label: 'Members', to: 'reports/member-balances' },
       { icon: AlertTriangle, label: 'Penalties', to: 'penalties' },
       YEAR_END,
     ],

@@ -19,3 +19,11 @@
     font-family: Poppins_800ExtraBold;
   }
 }
+
+/* Web: drop the browser's focus outline / tap flash on fields; the field's own styling shows focus. */
+input,
+textarea,
+select {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -156,7 +156,7 @@ function Gate({ done, label }: { done: boolean; label: string }) {
 const MANAGE_ACTIONS: TileAction[] = [
   { label: 'Manage Officers', icon: Users, route: 'members/officers' },
   { label: 'Group Ledger', icon: ScrollText, route: 'reports/group-ledger' },
-  { label: 'Member Balances', icon: Wallet, route: 'reports/member-balances' },
+  { label: 'Members', icon: Wallet, route: 'reports/member-balances' },
   { label: 'Configure Cycle', icon: SlidersHorizontal, route: 'cycles/configure' },
   { label: 'Year-End Distribution', icon: CalendarClock, route: 'distribution/year-end' },
   { label: 'Audit Trail', icon: Clock3, route: 'audit/log' },

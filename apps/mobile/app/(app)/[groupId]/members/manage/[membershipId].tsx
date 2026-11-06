@@ -8,7 +8,7 @@ import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
 import { toast } from '@/components/ui/Toast';
-import { AppBar } from '@/components/shared/AppBar';
+import { BandHeader } from '@/components/shared/DashboardBand';
 import { Alert } from '@/lib/alert';
 import { semantic, intent, shadowToken } from '@/theme/colors';
 import { formatPeso } from '@/lib/money';
@@ -107,8 +107,8 @@ export default function ManageMember() {
   const data = standing.data;
   if (!data) {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <AppBar title="Manage member" />
+      <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['bottom']}>
+        <BandHeader title="Manage member" />
         {standing.error
           ? <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 40, paddingHorizontal: 24 }}>{standing.error.message}</Text>
           : <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} />}
@@ -136,8 +136,8 @@ export default function ManageMember() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
-      <AppBar title="Manage member" />
+    <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['bottom']}>
+      <BandHeader title="Manage member" />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {/* Who */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 13 }}>

@@ -153,7 +153,7 @@ export default function MemberBalances() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader
-        title="Member balances"
+        title="Members"
         right={
           <Pressable onPress={() => setSort((s) => (s === 'owed' ? 'name' : 'owed'))} hitSlop={8} style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: semantic.surface, alignItems: 'center', justifyContent: 'center' }}>
             <ArrowUpDown size={16} color={semantic.brandDark} />

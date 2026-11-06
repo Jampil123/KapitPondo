@@ -18,6 +18,18 @@ import "../global.css";
 
 SplashScreen.preventAutoHideAsync();
 
+// Mobile browsers (iOS Safari) zoom into any input with a font under 16px on focus.
+// Capping the scale stops that; iOS still allows the user to pinch-zoom.
+if (Platform.OS === "web" && typeof document !== "undefined") {
+  let viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+  if (!viewport) {
+    viewport = document.createElement("meta");
+    viewport.name = "viewport";
+    document.head.appendChild(viewport);
+  }
+  viewport.content = "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover";
+}
+
 function RootNavigator() {
   const { status, signingOut, clearSigningOut, takePendingRedirect } = useAuth();
   const segments = useSegments();
