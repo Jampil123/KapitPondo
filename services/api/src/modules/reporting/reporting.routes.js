@@ -79,15 +79,16 @@ router.get(
   }
 );
 
-// GROUP-WIDE ledger — every posting in the group, by name and amount. Officers
-// only: members get totals only (/reports/fund-totals above). Proof images
+// GROUP-WIDE ledger — every posting in the group, by name and amount. Open to
+// every approved member (read-only) so the member Group Ledger matches the
+// officers' — the fund's full transparency record. Proof images
 // aren't exposed by this (or any ledger route) — a ledger row only carries
 // source_type/source_id, and fetching the underlying proof still goes through
 // the normal per-record access rules.
 router.get(
   '/groups/:groupId/reports/fund-ledger',
   requireAuth,
-  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
       const ledger = await service.groupLedger({

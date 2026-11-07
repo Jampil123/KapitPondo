@@ -31,6 +31,8 @@ export interface Cycle {
   default_interest_rate: number | null;
   minimum_loan_amount: Money | null;
   early_termination_penalty: Money | null;
+  /** % of a loan installment charged per month it's late (migration 0077); null = none. */
+  loan_late_penalty_pct?: Money | null;
   status: CycleStatus;
 }
 
@@ -46,6 +48,7 @@ export interface CreateCycleInput {
   default_interest_rate?: string; // monthly rate, e.g. "0.03" for 3% — a default; the officer can still set a different rate per loan at approval
   minimum_loan_amount?: string;
   early_termination_penalty?: string;
+  loan_late_penalty_pct?: string;
 }
 
 /** GET — all cycles for the group, newest first. */

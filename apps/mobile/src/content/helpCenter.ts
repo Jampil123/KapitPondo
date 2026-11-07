@@ -27,11 +27,47 @@ export const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
+    heading: 'Organizing a group',
+    items: [
+      {
+        q: 'How do I organize a group?',
+        a: [
+          "1. Verify your identity (Profile) — it's required to create a group.",
+          '2. On the home screen, tap + → Create Group. You become its Organizer.',
+          '3. Share the group code with your members.',
+          '4. Approve join requests as they come in.',
+          '5. Appoint a Treasurer and an Auditor.',
+          '6. Set up and activate the first cycle so members can start paying.',
+        ].join('\n'),
+      },
+      {
+        q: 'Where do I find my group code?',
+        a: "It's shown on the Group Created screen, and beside your group's name at the top of your dashboard. Tap it to copy, then send it to your members.",
+      },
+      {
+        q: 'How do I approve members who want to join?',
+        a: "Join requests appear under pending actions on your Organizer dashboard. Approve or reject each one — a member can't contribute until they're approved.",
+      },
+      {
+        q: 'How do I appoint a Treasurer and an Auditor?',
+        a: 'From your dashboard, open Manage Officers and pick from your approved members. Both must be verified, and they must be two different people — the Treasurer records money, the Auditor checks it.',
+      },
+      {
+        q: 'How do I set up a cycle?',
+        a: 'Open Configure Cycle from your dashboard. Fill in the cycle name, start date, and amount per head (the due day, late penalty, and loan settings are optional), then tap Create cycle. Finally, tap Activate this cycle — members can only pay into an active cycle.',
+      },
+      {
+        q: 'What do I do while the cycle is running?',
+        a: "Watch your dashboard's pending actions: decide on loan requests, review penalties, and approve anything waiting on the Organizer. At the end of the cycle, prepare the year-end distribution, wait for the Auditor to verify it, then finalize and close the cycle.",
+      },
+    ],
+  },
+  {
     heading: 'Contributions & cycles',
     items: [
       {
         q: 'What is a "cycle"?',
-        a: 'A cycle is one round of your group\'s fund — it sets the contribution frequency, the amount owed per head, and any penalty for late payments. Your Treasurer configures each cycle before it opens.',
+        a: 'A cycle is one round of your group\'s fund — it sets the contribution frequency, the amount owed per head, and any penalty for late payments. Your Organizer configures each cycle before it opens.',
       },
       {
         q: 'What counts as proof of a contribution?',

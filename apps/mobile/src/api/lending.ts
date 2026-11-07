@@ -44,6 +44,8 @@ export interface Loan {
   disbursed_at: string | null;
   rejection_reason: string | null;
   created_at: string;
+  /** Late penalty % per month an installment is late — copied from the cycle at release (migration 0077); null = none. */
+  late_penalty_pct?: Money | null;
   approved_by?: string | null;
   disbursed_by?: string | null;
   /** Officer loans need a before-release review (migration 0075). */
@@ -112,6 +114,8 @@ export interface LoanPayment {
   amount: Money;
   principal_portion: Money;
   interest_portion: Money;
+  /** Part of a posted repayment that paid late penalty — taken first (migration 0077). */
+  penalty_portion?: Money;
   due_date: string | null;
   paid_date: string | null;
   status: LoanPaymentStatus;

@@ -84,6 +84,7 @@ export const distributionStatus: Record<string, StatusMeta> = {
   draft:     { intent: 'neutral', label: 'Draft' },
   previewed: { intent: 'info',    label: 'Preview' },
   verified:  { intent: 'warning', label: 'Verified' },
+  returned:  { intent: 'danger',  label: 'Returned' },
   finalized: { intent: 'success', label: 'Finalized' },
 };
 

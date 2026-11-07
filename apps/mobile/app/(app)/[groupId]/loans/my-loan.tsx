@@ -15,6 +15,7 @@ import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useLoans, useLoan, useCancelLoan } from '@/features/lending/lending.hooks';
 import { Badge } from '@/features/lending/LoanBits';
 import { remainingInterest } from '@/features/lending/remainingInterest';
+import { loanPenaltyOwed } from '@/features/lending/loanSchedule';
 import type { LoanPayment } from '@/api/lending';
 
 const CARD_SHADOW = {
@@ -180,6 +181,8 @@ export default function MyLoan() {
   const principal = Number(activeLoan?.approved_principal ?? activeLoan?.principal ?? 0);
   const outstanding = Number(activeLoan?.outstanding_balance ?? 0);
   const interestLeft = remainingInterest(activeLoan, payments);
+  // Late penalty (0077): grows each month an installment stays unpaid; paid first.
+  const penaltyOwed = activeLoan ? loanPenaltyOwed(activeLoan, payments) : 0;
   // A repayment waiting on an officer blocks the next one until it's settled.
   const underReview = payments.some((p) => p.status === 'submitted' || p.status === 'confirmed');
   const repaidAmount = Math.max(0, principal - outstanding);
@@ -207,7 +210,12 @@ export default function MyLoan() {
                 <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>Still to repay</Text>
                 <Badge tone="primary" label="Active" Icon={Repeat} />
               </View>
-              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(outstanding + interestLeft)}</Text>
+              <Text style={{ fontSize: 28, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -1, marginTop: 6 }}>{formatPeso(outstanding + interestLeft + penaltyOwed)}</Text>
+              {penaltyOwed > 0 ? (
+                <View style={{ alignSelf: 'flex-start', marginTop: 6, backgroundColor: intent.danger.soft, borderRadius: 20, paddingVertical: 3, paddingHorizontal: 10 }}>
+                  <Text style={{ fontSize: 11.5, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text }}>Includes {formatPeso(penaltyOwed)} late penalty</Text>
+                </View>
+              ) : null}
               <View style={{ marginTop: 15 }}>
                 <View style={{ height: 9, borderRadius: 5, backgroundColor: semantic.surfaceAlt, overflow: 'hidden' }}>
                   <View style={{ height: '100%', width: (repaidPct + '%') as any, borderRadius: 5, backgroundColor: intent.success.base }} />

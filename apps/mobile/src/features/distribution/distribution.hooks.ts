@@ -5,7 +5,7 @@
  *
  *   // Owner/treasurer: build the preview
  *   const { run: preview } = usePreviewDistribution(groupId);
- *   const res = await preview('2026');   // res.distribution, res.allocations
+ *   const res = await preview();   // res.distribution (a draft), res.allocations
  *
  *   // Review screen
  *   const { data } = useDistribution(groupId, id);   // data.distribution, data.allocations
@@ -21,6 +21,10 @@ import {
   listDistributions,
   getDistribution,
   previewDistribution,
+  submitDistribution,
+  getDistributionReadiness,
+  getLedgerCheck,
+  getDistributionEstimate,
   verifyDistribution,
   unverifyDistribution,
   returnDistribution,
@@ -53,7 +57,52 @@ export function useDistribution(groupId: string, id?: string) {
 }
 
 export function usePreviewDistribution(groupId: string) {
-  return useAction((period: string) => previewDistribution(groupId, period));
+  return useAction(() => previewDistribution(groupId));
+}
+
+/** Preview vs ledger for one distribution (UC-YD-02). Only fetched when `enabled`. */
+export function useLedgerCheck(groupId: string, id: string | undefined, enabled: boolean) {
+  const on = enabled && !!id;
+  const fn = useCallback(
+    () => (on ? getLedgerCheck(groupId, id!) : Promise.resolve(null)),
+    [groupId, id, on],
+  );
+  return useQuery(fn, [groupId, id, on], on ? [
+    { table: 'distributions', filter: `id=eq.${id}` },
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+    { table: 'penalties', filter: `group_id=eq.${groupId}` },
+  ] : null);
+}
+
+/** Live estimate of the split before the Treasurer prepares (nothing saved). Only fetched when `enabled`. */
+export function useDistributionEstimate(groupId: string, enabled: boolean) {
+  const fn = useCallback(
+    () => (enabled ? getDistributionEstimate(groupId) : Promise.resolve(null)),
+    [groupId, enabled],
+  );
+  return useQuery(fn, [groupId, enabled], enabled ? [
+    { table: 'distributions', filter: `group_id=eq.${groupId}` },
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+    { table: 'penalties', filter: `group_id=eq.${groupId}` },
+  ] : null);
+}
+
+/** Treasurer: send the draft to the Auditor. */
+export function useSubmitDistribution(groupId: string) {
+  return useAction((id: string) => submitDistribution(groupId, id));
+}
+
+/** What stops the Treasurer from preparing (E1/E2/A3). Only fetched when `enabled`. */
+export function useDistributionReadiness(groupId: string, enabled: boolean) {
+  const fn = useCallback(
+    () => (enabled ? getDistributionReadiness(groupId) : Promise.resolve([])),
+    [groupId, enabled],
+  );
+  return useQuery(fn, [groupId, enabled], enabled ? [
+    { table: 'distributions', filter: `group_id=eq.${groupId}` },
+    { table: 'contributions', filter: `group_id=eq.${groupId}` },
+    { table: 'ledger_reversal_requests', filter: `group_id=eq.${groupId}` },
+  ] : null);
 }
 
 /** Auditor: verify a previewed distribution before the Owner can finalize it. */

@@ -1,13 +1,90 @@
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 
-async function previewDistribution({ groupId, period, declaredBy }) {
+// A function's own `raise exception` (P0001) is a rule the caller broke — a 409 with its message.
+function rpcError(error) {
+  if (error.code === 'P0001') return Object.assign(new Error(error.message), { status: 409 });
+  return error;
+}
+
+// UC-YD-01 E1/E2/A3 — what stops the Treasurer from preparing: [{ kind, label, item_count }].
+async function previewReadiness(groupId) {
+  const { data, error } = await supabase.rpc('distribution_readiness', { p_group_id: groupId });
+  if (error) throw rpcError(error);
+  return data ?? [];
+}
+
+// Builds a 'draft' for the active cycle (only the Treasurer sees it), replacing any
+// open draft or unverified preview. Refused while anything in previewReadiness() blocks it.
+async function previewDistribution({ groupId, declaredBy }) {
   const { data, error } = await supabase.rpc('preview_distribution', {
     p_group_id: groupId,
-    p_period: period,
     p_declared_by: declaredBy,
   });
+  if (error) throw rpcError(error);
+  return data;
+}
+
+// UC-YD-02 steps 2-3, E1: the preview's figures next to the ledger now.
+// Returns { totals: [...4 rows], members: [...rows that moved], matches }.
+async function ledgerCheck(distributionId) {
+  const { data, error } = await supabase.rpc('distribution_ledger_check', { p_distribution_id: distributionId });
+  if (error) throw rpcError(error);
+  const rows = data ?? [];
+  const differs = (r) => Math.abs(Number(r.preview_amount ?? 0) - Number(r.ledger_amount ?? 0)) > 0.01;
+  const totals = rows.filter((r) => r.kind === 'total').map((r) => ({ ...r, differs: differs(r) }));
+  const members = rows.filter((r) => r.kind === 'member');
+  return { totals, members, matches: !totals.some((t) => t.differs) && members.length === 0 };
+}
+
+// A1: the Auditor sends it back with notes. It stays as a 'returned' record so the
+// Treasurer sees why; preparing again builds a new draft beside it.
+async function returnDistribution({ distributionId, memberId, reason }) {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('distributions')
+    .update({
+      status: 'returned', returned_by: memberId, returned_at: now, return_reason: reason,
+      verified_by: null, verified_at: null, updated_at: now,
+    })
+    .eq('id', distributionId)
+    .in('status', ['previewed', 'verified'])
+    .select()
+    .maybeSingle();
   if (error) throw error;
+  return data;
+}
+
+// Live estimate (nothing saved): the split as it would be right now, for the
+// Year-End screen before the Treasurer prepares a preview.
+async function estimate(groupId) {
+  const [tot, rows] = await Promise.all([
+    supabase.rpc('distribution_estimate', { p_group_id: groupId }),
+    supabase.rpc('distribution_breakdown', { p_group_id: groupId }),
+  ]);
+  if (tot.error) throw rpcError(tot.error);
+  if (rows.error) throw rpcError(rows.error);
+  const ids = (rows.data ?? []).map((r) => r.membership_id);
+  const { data: people, error } = ids.length
+    ? await supabase.from('memberships')
+      .select('id, members!memberships_member_id_fkey(full_name, avatar_url)').in('id', ids)
+    : { data: [], error: null };
+  if (error) throw error;
+  const byId = new Map((people ?? []).map((p) => [p.id, p.members]));
+  const totals = Array.isArray(tot.data) ? tot.data[0] : tot.data;
+  const members = (rows.data ?? [])
+    .map((r) => ({ ...r, member: byId.get(r.membership_id) ?? null }))
+    .sort((a, b) => Number(b.payout) - Number(a.payout));
+  return { totals, members };
+}
+
+// Draft -> 'previewed'; the Auditor is notified by the route.
+async function submitDistribution({ distributionId, actorId }) {
+  const { data, error } = await supabase.rpc('submit_distribution', {
+    p_distribution_id: distributionId,
+    p_actor_id: actorId,
+  });
+  if (error) throw rpcError(error);
   return data;
 }
 
@@ -46,12 +123,15 @@ async function unverifyDistribution({ distributionId, memberId }) {
   return data;
 }
 
-async function listDistributions(groupId) {
-  const { data, error } = await supabase
+// A draft is the Treasurer's work in progress — nobody else sees it.
+async function listDistributions(groupId, { includeDrafts = false } = {}) {
+  let q = supabase
     .from('distributions')
     .select('*')
     .eq('group_id', groupId)
     .order('created_at', { ascending: false });
+  if (!includeDrafts) q = q.neq('status', 'draft');
+  const { data, error } = await q;
   if (error) throw error;
   return data;
 }
@@ -100,7 +180,7 @@ async function finalizeDistribution({ distributionId, finalizedBy }) {
       groupId: data.group_id,
       type: 'distribution.finalized',
       title: 'Year-end distribution finalized',
-      message: `Your share of ${data.period}'s year-end distribution (${alloc.amount}) has been posted.`,
+      message: `Your ${data.period} year-end payout of ₱${Number(alloc.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} has been posted.`,
     });
   }
 
@@ -114,7 +194,7 @@ async function cancelPreview(distributionId) {
     .from('distributions')
     .delete()
     .eq('id', distributionId)
-    .eq('status', 'previewed')
+    .in('status', ['draft', 'previewed'])
     .select()
     .single();
   if (error) throw error;
@@ -244,7 +324,12 @@ async function setHeadNames({ membershipId, names }) {
 module.exports = {
   getHeadNames,
   setHeadNames,
+  previewReadiness,
   previewDistribution,
+  submitDistribution,
+  ledgerCheck,
+  returnDistribution,
+  estimate,
   verifyDistribution,
   unverifyDistribution,
   listDistributions,

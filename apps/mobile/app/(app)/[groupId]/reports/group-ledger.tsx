@@ -11,7 +11,7 @@ import { formatPeso } from '@/lib/money';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useQuery } from '@/hooks/useApi';
 import { listFlags } from '@/api/flags';
-import { useFundSummary, useFundLedger, useFundTotals } from '@/features/reporting/reporting.hooks';
+import { useFundSummary, useFundLedger } from '@/features/reporting/reporting.hooks';
 import { signoffLine } from '@/features/activity/entryCopy';
 import { entryRef, type LedgerEntry, type LedgerEntryType } from '@/api/ledger';
 
@@ -63,12 +63,13 @@ function iconTone(e: LedgerEntry): { bg: string; fg: string; Icon: any } {
   return { bg: semantic.surfaceAlt, fg: semantic.brandDark, Icon: ArrowUpRight };
 }
 
-function Row({ e, mine, flagged, onPress }: { e: LedgerEntry; mine: boolean; flagged: boolean; onPress: () => void }) {
+/** `balance` is the group's cash on hand right after this posting. */
+function Row({ e, balance, mine, flagged, onPress }: { e: LedgerEntry; balance: number; mine: boolean; flagged: boolean; onPress?: () => void }) {
   const tone = iconTone(e);
   const credit = e.direction === 'credit';
   const who = e.membership?.members?.full_name ?? (e.entry_type === 'expense' ? 'Group' : null);
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border, ...(mine ? { backgroundColor: semantic.surfaceAlt, marginHorizontal: -8, paddingHorizontal: 10 } : null) }}>
+    <Pressable onPress={onPress} disabled={!onPress} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, paddingVertical: 13, paddingHorizontal: 2, borderBottomWidth: 1, borderColor: semantic.border, ...(mine ? { backgroundColor: semantic.surfaceAlt, marginHorizontal: -8, paddingHorizontal: 10 } : null) }}>
       <View style={{ width: 34, height: 34, borderRadius: 11, backgroundColor: tone.bg, alignItems: 'center', justifyContent: 'center', marginTop: 1 }}>
         <tone.Icon size={16} color={tone.fg} />
       </View>
@@ -95,9 +96,14 @@ function Row({ e, mine, flagged, onPress }: { e: LedgerEntry; mine: boolean; fla
           {[shortDate(e.posted_at), signoffLine(e)].filter(Boolean).join(' · ')}
         </Text>
       </View>
-      <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary, marginTop: 1 }}>
-        {credit ? '+' : '−'}{formatPeso(e.amount)}
-      </Text>
+      <View style={{ alignItems: 'flex-end', marginTop: 1 }}>
+        <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: credit ? intent.success.text : semantic.textPrimary }}>
+          {credit ? '+' : '−'}{formatPeso(e.amount)}
+        </Text>
+        <Text style={{ fontSize: 10.5, lineHeight: 14, fontFamily: 'Poppins_400Regular', color: semantic.textMuted, marginTop: 2 }}>
+          Bal {formatPeso(balance)}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -146,88 +152,30 @@ function SummaryCard({ cash, loading, postings, rows, footnote }: {
   );
 }
 
-function MonthTotal({ label, moneyIn, moneyOut, balance }: { label: string; moneyIn: number; moneyOut: number; balance: number }) {
-  return (
-    <View style={[{ backgroundColor: semantic.card, borderRadius: 16, padding: 14, marginTop: 10 }, CARD_SHADOW]}>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
-        <Text variant="overline" color="muted">{label}</Text>
-        <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_700Bold' }}>Balance {formatPeso(balance)}</Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 10 }}>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: intent.success.soft, alignItems: 'center', justifyContent: 'center' }}>
-            <ArrowDownRight size={15} color={intent.success.text} />
-          </View>
-          <View>
-            <Text variant="caption" color="secondary">Money in</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: intent.success.text }}>+{formatPeso(moneyIn)}</Text>
-          </View>
-        </View>
-        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: semantic.surfaceAlt, alignItems: 'center', justifyContent: 'center' }}>
-            <ArrowUpRight size={15} color={semantic.brandDark} />
-          </View>
-          <View>
-            <Text variant="caption" color="secondary">Money out</Text>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary }}>−{formatPeso(moneyOut)}</Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-/** Members see totals only — per type and per month — with no member names or individual postings. */
-function MemberGroupLedger({ groupId }: { groupId: string }) {
-  const fund = useFundSummary(groupId);
-  const totals = useFundTotals(groupId);
-  const cash = Number(fund.data?.available_cash ?? 0);
-
-  // Month-end balances walked backward from today's cash on hand (months arrive newest first).
-  const months = useMemo(() => {
-    let bal = cash;
-    return (totals.data?.by_month ?? []).map((m) => {
-      const [y, mo] = m.month.split('-').map(Number);
-      const row = { key: m.month, label: new Date(y, mo - 1, 1).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }), moneyIn: m.money_in, moneyOut: m.money_out, balance: bal };
-      bal -= m.money_in - m.money_out;
-      return row;
-    });
-  }, [totals.data, cash]);
-
-  return (
-    <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      <SummaryCard cash={cash} loading={fund.loading} postings={totals.data?.postings ?? 0} rows={compositionRows(totals.data?.by_type ?? {})} />
-      <Text variant="overline" color="muted" style={{ marginTop: 20, marginLeft: 2 }}>By month</Text>
-      {totals.loading && !totals.data ? (
-        <ActivityIndicator color={semantic.brand} style={{ marginTop: 30 }} />
-      ) : months.length === 0 ? (
-        <View style={[{ backgroundColor: semantic.card, borderRadius: 16, padding: 24, alignItems: 'center', marginTop: 10 }, CARD_SHADOW]}>
-          <Text variant="body" color="muted">No postings yet.</Text>
-        </View>
-      ) : (
-        months.map((m) => <MonthTotal key={m.key} label={m.label} moneyIn={m.moneyIn} moneyOut={m.moneyOut} balance={m.balance} />)
-      )}
-    </ScrollView>
-  );
-}
-
+/**
+ * One Group Ledger for every role — each posting by name and amount, search,
+ * filters and month balances. Flags stay Auditor/Organizer-only. Tapping a
+ * row opens the officers' entry detail; a member can open only their own
+ * postings (in their activity detail) — the entry-detail route, with its
+ * sign-off and proof context, stays officer-only.
+ */
 export default function GroupLedger() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { role } = useActiveGroup();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Group Ledger" />
-      {role === 'member' ? <MemberGroupLedger groupId={groupId!} /> : <OfficerGroupLedger groupId={groupId!} />}
+      <GroupLedgerList groupId={groupId!} />
     </SafeAreaView>
   );
 }
 
-function OfficerGroupLedger({ groupId }: { groupId: string }) {
+function GroupLedgerList({ groupId }: { groupId: string }) {
   const { membership, role } = useActiveGroup();
   const router = useRouter();
   const fund = useFundSummary(groupId);
   // Flags are Auditor/Organizer-only on the API, so the Treasurer gets no Flagged chip.
   const canSeeFlags = role === 'auditor' || role === 'owner';
+  const isMember = role === 'member';
   const flagsFn = useCallback(() => (canSeeFlags ? listFlags(groupId, 'open') : Promise.resolve([])), [groupId, canSeeFlags]);
   const flags = useQuery(flagsFn, [groupId, canSeeFlags], canSeeFlags ? { table: 'audit_flags', filter: `group_id=eq.${groupId}` } : null);
   const flaggedNos = useMemo(() => new Set((flags.data ?? []).map((f) => f.record?.entry_no).filter((n): n is number => n != null)), [flags.data]);
@@ -278,7 +226,7 @@ function OfficerGroupLedger({ groupId }: { groupId: string }) {
       list.push(row);
       map.set(key, list);
     }
-    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([key, list]) => ({ label: monthLabel(list[0].e.posted_at), balance: list[0].balance, list }));
+    return [...map.entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)).map(([, list]) => ({ label: monthLabel(list[0].e.posted_at), list }));
   }, [filtered]);
 
   const cash = Number(fund.data?.available_cash ?? 0);
@@ -339,17 +287,21 @@ function OfficerGroupLedger({ groupId }: { groupId: string }) {
         ) : (
           grouped.map((g) => (
             <View key={g.label}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 20, marginBottom: 9, marginLeft: 2 }}>
-                <Text variant="overline" color="muted">{g.label}</Text>
-                <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_700Bold' }}>Balance {formatPeso(g.balance)}</Text>
-              </View>
+              <Text variant="overline" color="muted" style={{ marginTop: 20, marginBottom: 9, marginLeft: 2 }}>{g.label}</Text>
               <View>
-                {g.list.map(({ e }) => (
-                  <Row
-                    key={e.id} e={e} mine={e.membership_id === membership?.id} flagged={isFlagged(e)}
-                    onPress={() => router.push({ pathname: '/(app)/[groupId]/ledger/[entryId]' as any, params: { groupId, entryId: e.id } })}
-                  />
-                ))}
+                {g.list.map(({ e, balance }) => {
+                  const mine = e.membership_id === membership?.id;
+                  return (
+                    <Row
+                      key={e.id} e={e} balance={balance} mine={mine} flagged={isFlagged(e)}
+                      onPress={
+                        !isMember ? () => router.push({ pathname: '/(app)/[groupId]/ledger/[entryId]' as any, params: { groupId, entryId: e.id } })
+                        : mine ? () => router.push({ pathname: '/(app)/[groupId]/activity/[entryId]' as any, params: { groupId, entryId: e.id } })
+                        : undefined
+                      }
+                    />
+                  );
+                })}
               </View>
             </View>
           ))

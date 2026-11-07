@@ -3,14 +3,14 @@
  * ----------------------------------------------------------------------------
  * Calls the distribution module of the API (M9) — the year-end close.
  *
- * Flow: set heads (owner) -> preview (owner/treasurer) -> VERIFY (auditor) ->
+ * Flow: Treasurer prepares a draft -> submits it (previewed) -> VERIFY (auditor) ->
  * finalize (owner). Finalize is IMMUTABLE: it posts payout ledger entries,
  * drives the fund to 0, and the distribution can't be reopened. Finalize is
  * blocked with a 409 until an Auditor has verified the preview.
  *
- * Formula (server-side): capital is returned; net income = interest + penalties
- * − expenses; net income is shared BY HEADS. Outstanding debts are deducted per
- * member.
+ * Formula (server-side, migration 0074): payout = capital + share of net income
+ * − unpaid loan − unpaid penalties. Net income is shared BY HEADS at the time of
+ * the preview; the deducted loans and penalties are settled when it's finalized.
  *
  * Unverified members are paid out the same as everyone else — verification
  * gates privileges (creating groups, borrowing, officer roles), not
@@ -19,7 +19,7 @@
 import { api } from './client';
 import type { Money } from '../lib/money';
 
-export type DistributionStatus = 'draft' | 'previewed' | 'verified' | 'finalized';
+export type DistributionStatus = 'draft' | 'previewed' | 'verified' | 'returned' | 'finalized';
 
 export interface Distribution {
   id: string;
@@ -36,6 +36,67 @@ export interface Distribution {
   verified_at: string | null; // migration 0028
   verify_notes: string | null; // migration 0028
   created_at: string;
+  // migration 0074 — null on previews made with the old formula
+  capital_total: Money | null;
+  net_income: Money | null;
+  interest_income: Money | null;
+  penalty_income: Money | null;
+  deductions_total: Money | null;
+  total_heads: number | null;
+  submitted_by: string | null;
+  submitted_at: string | null;
+  // migration 0075 — set when the Auditor returns it
+  returned_by: string | null;
+  returned_at: string | null;
+  return_reason: string | null;
+}
+
+/** One preview figure next to the ledger's (UC-YD-02 steps 2-3, E1). */
+export interface LedgerCheckRow {
+  kind: 'total' | 'member';
+  item: 'capital' | 'net_income' | 'deductions' | 'payout';
+  label: string;
+  membership_id: string | null;
+  preview_amount: Money;
+  ledger_amount: Money;
+  differs?: boolean; // totals only
+}
+
+export interface LedgerCheck {
+  totals: LedgerCheckRow[];
+  /** Only the members whose figures moved since the preview. */
+  members: LedgerCheckRow[];
+  matches: boolean;
+}
+
+/** Live estimate of the split before anything is prepared (nothing saved). */
+export interface DistributionEstimate {
+  totals: {
+    capital_total: Money; net_income: Money; interest_income: Money; penalty_income: Money;
+    deductions_total: Money; total_heads: number; total_amount: Money;
+  };
+  members: {
+    membership_id: string; heads: number; capital: Money; share: Money;
+    loan_owed: Money; penalties: Money; payout: Money;
+    member: { full_name: string | null; avatar_url?: string | null } | null;
+  }[];
+}
+
+/** GET — officers. */
+export function getDistributionEstimate(groupId: string) {
+  return api.get<DistributionEstimate>(`/api/groups/${groupId}/distributions/estimate`);
+}
+
+/** GET — officers. The preview's figures next to what the ledger says now. */
+export function getLedgerCheck(groupId: string, id: string) {
+  return api.get<LedgerCheck>(`/api/groups/${groupId}/distributions/${id}/ledger-check`);
+}
+
+/** What stops the Treasurer from preparing (UC-YD-01 E1/E2/A3). */
+export interface DistributionBlocker {
+  kind: string;
+  label: string;
+  item_count: number;
 }
 
 /** Server joins membership + member name via `getAllocations` — see distributions.service.js. */
@@ -43,7 +104,12 @@ export interface DistributionAllocation {
   id: string;
   distribution_id: string;
   membership_id: string;
-  amount: Money;
+  amount: Money; // the payout
+  heads: number | null;
+  capital: Money | null;
+  share: Money | null;
+  loan_deduction: Money | null;
+  penalty_deduction: Money | null;
   ledger_entry_id: string | null; // set once finalized
   created_at: string;
   memberships: {
@@ -80,9 +146,20 @@ export async function setHeadNames(groupId: string, membershipId: string, names:
   return res.names;
 }
 
-/** POST — build a year-end preview (status: previewed) + allocations. */
-export function previewDistribution(groupId: string, period: string) {
-  return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/preview`, { period });
+/** GET — what stops the Treasurer from preparing right now. Empty = ready. */
+export async function getDistributionReadiness(groupId: string) {
+  const res = await api.get<{ blockers: DistributionBlocker[] }>(`/api/groups/${groupId}/distributions/readiness`);
+  return res.blockers ?? [];
+}
+
+/** POST — Treasurer prepares a draft for the active cycle (replaces any open draft or unverified preview). */
+export function previewDistribution(groupId: string) {
+  return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/preview`);
+}
+
+/** POST — Treasurer submits the draft for verification; the Auditor is notified. */
+export function submitDistribution(groupId: string, id: string) {
+  return api.post<{ distribution: Distribution }>(`/api/groups/${groupId}/distributions/${id}/submit`);
 }
 
 /** POST — Auditor verifies a previewed distribution; proceeds to the Owner for finalization. */
@@ -91,7 +168,7 @@ export function unverifyDistribution(groupId: string, id: string) {
   return api.post<{ message: string; distribution: Distribution }>(`/api/groups/${groupId}/distributions/${id}/unverify`);
 }
 
-/** POST — the Auditor sends the preview back to the Treasurer with a reason (even after verifying it, until finalized). The preview is removed. */
+/** POST — the Auditor sends the preview back to the Treasurer with notes (even after verifying it, until finalized). It becomes 'returned'. */
 export function returnDistribution(groupId: string, id: string, reason: string) {
   return api.post<{ message: string }>(`/api/groups/${groupId}/distributions/${id}/return`, { reason });
 }
@@ -125,7 +202,7 @@ export function finalizeDistribution(groupId: string, id: string) {
   return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/${id}/finalize`);
 }
 
-/** DELETE — cancel a previewed distribution so it can be re-run. */
+/** DELETE — discard a draft, or cancel an unverified preview so it can be re-run. */
 export function cancelDistribution(groupId: string, id: string) {
   return api.del<{ ok: true }>(`/api/groups/${groupId}/distributions/${id}`);
 }

@@ -19,7 +19,10 @@ import { totalInterest } from '@/features/lending/remainingInterest';
 import { useSummary } from '@/features/reporting/reporting.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { useSignoffQueue, ROLE_NAME, loanRole, type SignoffItem, type Role } from '@/features/signoff/signoff';
-import { useSignoffActions, PRIMARY_LABEL, canSendBack, sendBackLabel } from '@/features/signoff/useSignoffActions';
+import { useSignoffActions, primaryLabel, canSendBack, sendBackLabel } from '@/features/signoff/useSignoffActions';
+import { useLedgerEntryDetail } from '@/features/ledger/ledger.hooks';
+import { ENTRY_TYPE_LABEL } from '@/features/audit/GroupLedgerView';
+import { entryRef } from '@/api/ledger';
 import { itemMatch } from '@/features/audit/VerificationQueue';
 import type { ProofField } from '@/features/signoff/proofMatch';
 
@@ -31,6 +34,50 @@ function recordedLine(i: SignoffItem) {
   const today = new Date().toDateString() === d.toDateString();
   const when = `${today ? 'today' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}, ${d.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' }).toLowerCase()}`;
   return `${METHOD[i.method ?? ''] ?? 'Payment'}, recorded by ${i.recordedBy ?? i.name} ${when}`;
+}
+
+// UC-LG-02 step 2: the entry being reversed, with its proof, right on the review page.
+function ReversalEntryCard({ groupId, entryId, onOpen }: { groupId: string; entryId: string; onOpen: () => void }) {
+  const q = useLedgerEntryDetail(groupId, entryId);
+  const [viewing, setViewing] = useState(false);
+  const d = q.data;
+  if (!d) return q.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 14 }} /> : null;
+  const e = d.entry;
+  const kind = ENTRY_TYPE_LABEL[e.entry_type] ?? e.entry_type.replace(/_/g, ' ');
+  const who = e.membership?.members?.full_name ?? d.record?.name ?? null;
+  const posted = new Date(e.posted_at);
+  const rows: [string, string | null][] = [
+    ['Entry', `${entryRef(e)} · ${kind}`],
+    ['Amount', `${e.direction === 'credit' ? '+' : '−'}${formatPeso(e.amount)}`],
+    ['Member', who],
+    ['Posted', isNaN(posted.getTime()) ? null : posted.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })],
+  ];
+  return (
+    <Card style={{ marginTop: 14 }}>
+      <Text variant="caption" color="secondary" style={{ marginBottom: 6 }}>Original entry</Text>
+      {rows.filter(([, v]) => v).map(([k, v]) => (
+        <View key={k} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, paddingVertical: 4 }}>
+          <Text variant="caption" color="secondary">{k}</Text>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, flexShrink: 1, textAlign: 'right' }}>{v}</Text>
+        </View>
+      ))}
+      {d.proof_url ? (
+        <Pressable onPress={() => setViewing(true)} style={{ marginTop: 10 }}>
+          <Image source={{ uri: d.proof_url }} style={{ width: '100%', height: 170, borderRadius: 14, backgroundColor: semantic.surfaceAlt }} resizeMode="cover" />
+        </Pressable>
+      ) : (
+        <Text variant="caption" color="muted" style={{ marginTop: 8 }}>No proof attached to this entry.</Text>
+      )}
+      <Pressable onPress={onOpen} style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.surfaceAlt }}>
+        <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Open full entry</Text>
+      </Pressable>
+      <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.85)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewing(false)}>
+          {d.proof_url ? <Image source={{ uri: d.proof_url }} style={{ width: '100%', height: '80%' }} resizeMode="contain" /> : null}
+        </Pressable>
+      </Modal>
+    </Card>
+  );
 }
 
 function Card({ children, style }: { children: React.ReactNode; style?: object }) {
@@ -307,6 +354,7 @@ export default function VerifyRecord() {
   });
   const [rejecting, setRejecting] = useState(false);
   const [viewing, setViewing] = useState(false);
+  const [verifyNotes, setVerifyNotes] = useState(false);
   const readRequested = useRef(false);
 
   const found = queue.items.find((x) => x.key === key && x.mine);
@@ -358,6 +406,11 @@ export default function VerifyRecord() {
         { text: 'Cancel', style: 'cancel' },
         { text: 'Release', onPress: () => actions.approve(i) },
       ]);
+      return;
+    }
+    if (i.kind === 'reversal' && i.action === 'verify') {
+      // UC-LG-02 step 4: optional notes for the Organizer.
+      setVerifyNotes(true);
       return;
     }
     actions.approve(i);
@@ -479,17 +532,17 @@ export default function VerifyRecord() {
             <Card style={{ marginTop: 14 }}>
               <Text variant="caption" color="secondary" style={{ marginBottom: 4 }}>{i.kind === 'reversal' ? 'Reason for the reversal' : i.kind === 'withdrawal' ? 'Settlement' : 'Purpose'}</Text>
               <Text style={{ fontSize: 13.5, lineHeight: 19, color: semantic.textPrimary }}>{i.note}</Text>
-              {i.kind === 'reversal' && i.entryId ? (
-                <Pressable
-                  onPress={() => router.push({ pathname: '/(app)/[groupId]/ledger/[entryId]' as any, params: { groupId, entryId: i.entryId! } })}
-                  style={{ marginTop: 12, paddingVertical: 10, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.surfaceAlt }}
-                >
-                  <Text style={{ fontSize: 12.5, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>View the original entry and proof</Text>
-                </Pressable>
-              ) : null}
             </Card>
           ) : null
         )}
+
+        {i.kind === 'reversal' && i.entryId ? (
+          <ReversalEntryCard
+            groupId={groupId!}
+            entryId={i.entryId}
+            onOpen={() => router.push({ pathname: '/(app)/[groupId]/ledger/[entryId]' as any, params: { groupId, entryId: i.entryId! } })}
+          />
+        ) : null}
 
         {!i.proofUrl && money ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }}>
@@ -507,7 +560,7 @@ export default function VerifyRecord() {
           </Pressable>
         ) : null}
         <Pressable onPress={onPrimary} disabled={actions.busy} style={{ flex: 1.6, paddingVertical: 15, borderRadius: 16, alignItems: 'center', backgroundColor: semantic.brandDark, opacity: actions.busy ? 0.6 : 1 }}>
-          {actions.busy ? <ActivityIndicator color="#fff" /> : <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{i.action === 'release' && i.amount != null ? `Release ${formatPeso(i.amount)}` : PRIMARY_LABEL[i.action]}</Text>}
+          {actions.busy ? <ActivityIndicator color="#fff" /> : <Text style={{ fontSize: 14, fontFamily: 'Poppins_700Bold', color: '#fff' }}>{i.action === 'release' && i.amount != null ? `Release ${formatPeso(i.amount)}` : primaryLabel(i)}</Text>}
         </Pressable>
       </View>
 
@@ -520,6 +573,14 @@ export default function VerifyRecord() {
         required={i.kind === 'contribution' || i.kind === 'repayment' || i.kind === 'reversal'}
         onCancel={() => setRejecting(false)}
         onConfirm={(reason) => { setRejecting(false); actions.sendBack(i, reason); }}
+      />
+      <ReasonPrompt
+        visible={verifyNotes}
+        title="Verify this reversal?"
+        placeholder="Notes for the Organizer (optional)"
+        confirmLabel="Verify"
+        onCancel={() => setVerifyNotes(false)}
+        onConfirm={(notes) => { setVerifyNotes(false); actions.approve(i, notes); }}
       />
       <Modal visible={viewing} transparent animationType="fade" onRequestClose={() => setViewing(false)}>
         <Pressable style={{ flex: 1, backgroundColor: 'rgba(20,24,26,0.85)', alignItems: 'center', justifyContent: 'center', padding: 20 }} onPress={() => setViewing(false)}>

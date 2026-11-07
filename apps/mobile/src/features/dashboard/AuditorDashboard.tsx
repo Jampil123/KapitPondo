@@ -20,7 +20,7 @@ import { useLoanAudits } from '@/features/loanAudits/loanAudits.hooks';
 import { useSignoffQueue } from '@/features/signoff/signoff';
 import { itemMatch } from '@/features/audit/VerificationQueue';
 import { matchLabel } from '@/features/signoff/proofMatch';
-import { useDistributions, useVerifyDistribution, useCancelDistribution } from '@/features/distribution/distribution.hooks';
+import { useDistributions } from '@/features/distribution/distribution.hooks';
 import { useAuditLog, useAuditTrailSince, useFlagPosting } from '@/features/auditlog/auditlog.hooks';
 import { useFindings } from '@/features/findings/findings.hooks';
 import { useFlags } from '@/features/flags/flags.hooks';
@@ -348,22 +348,13 @@ function Gate({ done, now, label }: { done: boolean; now?: boolean; label: strin
 }
 
 function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string) => void }) {
-  const { data, refetch } = useDistributions(groupId);
-  const verify = useVerifyDistribution(groupId);
-  const cancel = useCancelDistribution(groupId);
+  const { data } = useDistributions(groupId);
 
   const current = useMemo(() => (data ?? []).find((d) => d.status === 'previewed') ?? null, [data]);
   if (!current) return null;
 
-  async function onVerify() {
-    const ok = await verify.run(current!.id);
-    if (ok) refetch();
-  }
-  async function onReturn() {
-    const ok = await cancel.run(current!.id);
-    if (ok) refetch();
-  }
-
+  // UC-YD-02: verifying means checking the figures against the ledger first, so
+  // both Verify and Return live on the full breakdown, not here.
   return (
     <>
       <SectionHead title="Year-end preview" aside="Organizer is waiting" tone="hot" />
@@ -379,21 +370,13 @@ function YearEndVerification({ groupId, go }: { groupId: string; go: (r: string)
         </View>
 
         <View style={{ marginTop: 14, gap: 9 }}>
-          <Gate done label={`Preview prepared by Treasurer · ${shortDate(current.created_at)}`} />
+          <Gate done label={`Preview prepared by Treasurer · ${shortDate(current.submitted_at ?? current.created_at)}`} />
           <Gate done={false} now label="Your verification" />
           <Gate done={false} label="Organizer finalizes — becomes permanent" />
         </View>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
-          <Pressable disabled={cancel.loading} onPress={onReturn} style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.11)' }}>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: '#C4D9E2' }}>Return to Treasurer</Text>
-          </Pressable>
-          <Pressable disabled={verify.loading} onPress={() => go('distribution/year-end')} style={{ flex: 1, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: semantic.surfaceAlt }}>
-            <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.brandDark }}>Open full breakdown</Text>
-          </Pressable>
-        </View>
-        <Pressable disabled={verify.loading} onPress={onVerify} style={{ marginTop: 8, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: '#2FA8FF' }}>
-          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: '#052A47' }}>{verify.loading ? 'Verifying…' : 'Verify this preview'}</Text>
+        <Pressable onPress={() => go('distribution/year-end')} style={{ marginTop: 14, paddingVertical: 13, borderRadius: 12, alignItems: 'center', backgroundColor: '#2FA8FF' }}>
+          <Text style={{ fontSize: 13.5, fontFamily: 'Poppins_700Bold', color: '#052A47' }}>Review and verify</Text>
         </Pressable>
       </View>
     </>

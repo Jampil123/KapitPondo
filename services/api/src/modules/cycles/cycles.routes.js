@@ -27,6 +27,7 @@ router.post('/groups/:groupId/cycles', requireAuth,
         defaultInterestRate: req.body.default_interest_rate,
         minimumLoanAmount: req.body.minimum_loan_amount,
         earlyTerminationPenalty: req.body.early_termination_penalty,
+        loanLatePenaltyPct: req.body.loan_late_penalty_pct,
       });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,

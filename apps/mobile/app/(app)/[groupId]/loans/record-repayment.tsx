@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 're
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { X, Receipt, FileText } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -16,6 +17,8 @@ import { useAuth } from '@/context/AuthContext';
 import { headLabel, type Loan, type LoanPayment } from '@/api/lending';
 import { useLoans, useRepayments, useConfirmRepaymentReceipt, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
+import { loanSchedule, loanPenaltyOwed, monthKeyOf, dateOfMonthKey, type Installment } from '@/features/lending/loanSchedule';
+import { PeriodSwitcher } from '@/features/contributions/PeriodSwitcher';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
 
@@ -46,13 +49,45 @@ function shortDate(iso: string | null) {
   return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function Tag({ label, tone }: { label: string; tone: 'review' | 'posted' | 'settle' }) {
-  const map = { review: intent.warning, posted: intent.success, settle: intent.info } as const;
+function Tag({ label, tone }: { label: string; tone: 'review' | 'posted' | 'settle' | 'late' }) {
+  const map = { review: intent.warning, posted: intent.success, settle: intent.info, late: intent.danger } as const;
   const t = map[tone];
   return (
     <View style={{ backgroundColor: t.soft, paddingHorizontal: 7, paddingVertical: 2, borderRadius: 20 }}>
       <Text style={{ fontSize: 9.5, fontFamily: 'Poppins_700Bold', color: t.text }}>{label}</Text>
     </View>
+  );
+}
+
+/** One loan in the month view: who, which installment, its amount, and how far the loan is paid off. */
+function LoanMonthRow({ loan: l, inst, tag, onPress }: { loan: Loan; inst: Installment; tag: React.ReactNode; onPress: () => void }) {
+  const outstanding = Number(l.outstanding_balance ?? 0);
+  // TC-040: progress is against approved_principal (what was disbursed), not the requested amount.
+  const principal = Number(l.approved_principal ?? l.principal ?? 0);
+  const pct = principal ? Math.max(0, Math.min(100, Math.round((1 - outstanding / principal) * 100))) : 0;
+  const unpaid = inst.kind === 'late' || inst.kind === 'due' || inst.kind === 'upcoming';
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
+      <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={38} />
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text variant="label" style={{ fontSize: 13.5, flex: 1 }} numberOfLines={1}>{loanName(l)}</Text>
+          <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(inst.amount + (unpaid ? inst.penalty : 0))}</Text>
+        </View>
+        {unpaid && inst.penalty > 0 ? (
+          <Text style={{ fontSize: 11, lineHeight: 15, fontFamily: 'Poppins_500Medium', color: intent.danger.text, marginTop: 2 }}>
+            {formatPeso(inst.amount)} + {formatPeso(inst.penalty)} penalty · {inst.monthsLate} month{inst.monthsLate === 1 ? '' : 's'} late
+          </Text>
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+          <Text variant="caption" color="secondary">Month {inst.no} of {l.term_months} · {formatPeso(outstanding)} left</Text>
+          {tag}
+        </View>
+        <View style={{ height: 5, borderRadius: 3, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 8 }}>
+          <View style={{ width: `${pct}%`, height: '100%', backgroundColor: intent.success.base, borderRadius: 3 }} />
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -92,6 +127,52 @@ export default function RecordRepayment() {
   const totalOutstanding = activeLoans.reduce((s, l) => s + Number(l.outstanding_balance), 0);
   const totalInterestEarned = rows.filter((p) => p.status === 'paid').reduce((s, p) => s + Number(p.interest_portion || 0), 0);
   const postedCount = rows.filter((p) => p.status === 'paid').length;
+
+  // ---- Month switcher over the loans' payment terms (like Contributions) ----
+  // Each released loan's installments by calendar month. An unpaid month never
+  // drops off: it stays "Late" in its own month, and once a loan's term is over
+  // with months still unpaid, it's carried into the current month as "Overdue".
+  const schedules = useMemo(
+    () => activeLoans.map((l) => ({ loan: l, items: loanSchedule(l, rows) })).filter((x) => x.items.length > 0),
+    [activeLoans, rows],
+  );
+  const nowKey = monthKeyOf(new Date());
+  const monthRange = useMemo(() => {
+    if (!schedules.length) return null;
+    const keys = schedules.flatMap((x) => x.items.map((i) => i.monthKey));
+    return { first: Math.min(...keys, nowKey), last: Math.max(...keys, nowKey) };
+  }, [schedules, nowKey]);
+  const [pickedKey, setPickedKey] = useState<number | null>(null);
+  const [slide, setSlide] = useState<'left' | 'right' | null>(null);
+  const shownKey = pickedKey ?? nowKey;
+  const isPastMonth = shownKey < nowKey;
+  const isFutureMonth = shownKey > nowKey;
+  const monthName = dateOfMonthKey(shownKey).toLocaleDateString('en-PH', { month: 'long', year: 'numeric' });
+  function showMonth(next: number) {
+    if (next === shownKey) return;
+    setSlide(next > shownKey ? 'right' : 'left');
+    setPickedKey(next === nowKey ? null : next);
+  }
+  const slideIn = slide === 'right' ? FadeInRight.duration(240) : slide === 'left' ? FadeInLeft.duration(240) : undefined;
+
+  type MonthRow = { loan: Loan; inst: Installment; overdue: boolean };
+  const monthRows = useMemo<MonthRow[]>(() => {
+    const out: MonthRow[] = [];
+    for (const { loan, items } of schedules) {
+      const inst = items.find((i) => i.monthKey === shownKey);
+      if (inst) { out.push({ loan, inst, overdue: false }); continue; }
+      // Term already over but something's still unpaid: keep it in front of the Treasurer.
+      const firstLate = items.find((i) => i.kind === 'late');
+      if (shownKey === nowKey && firstLate && items[items.length - 1].monthKey < nowKey) out.push({ loan, inst: firstLate, overdue: true });
+    }
+    return out;
+  }, [schedules, shownKey, nowKey]);
+  const unpaidRows = monthRows.filter((r) => r.inst.kind === 'late' || r.inst.kind === 'due' || r.inst.kind === 'upcoming');
+  const handledRows = monthRows.filter((r) => r.inst.kind === 'paid' || r.inst.kind === 'review');
+  const monthExpected = monthRows.filter((r) => !r.overdue).reduce((s, r) => s + r.inst.amount, 0);
+  // Late penalty still owed on the loans shown this month — shown on the summary card.
+  const monthPenalty = monthRows.reduce((s, r) => s + (r.inst.kind === 'late' ? r.inst.penalty : 0), 0);
+  const monthPaid = monthRows.filter((r) => !r.overdue && r.inst.kind === 'paid').reduce((s, r) => s + r.inst.amount, 0);
 
   function goToRecordScreen(l: Loan) {
     router.push({ pathname: '/(app)/[groupId]/loans/record' as any, params: { groupId, loanId: l.id } });
@@ -137,6 +218,18 @@ export default function RecordRepayment() {
           </View>
         </View>
 
+        {monthRange ? (
+          <PeriodSwitcher
+            label={monthName}
+            isPast={shownKey !== nowKey}
+            onPrev={() => showMonth(shownKey - 1)}
+            onNext={() => showMonth(shownKey + 1)}
+            onReset={() => showMonth(nowKey)}
+            prevBlocked={shownKey <= monthRange.first ? 'No loan payments fall before this month.' : null}
+            nextBlocked={shownKey >= monthRange.last ? 'This is the last month of the loan terms.' : null}
+          />
+        ) : null}
+
         <PillFilters<Tab>
           options={[
             { key: 'pending', label: 'Pending', count: pendingRows.length },
@@ -168,8 +261,11 @@ export default function RecordRepayment() {
                 const monthInterest = Math.round(loanAmount * rate * 100) / 100;
                 const monthly = loan?.term_months ? loanAmount / loan.term_months + monthInterest : 0;
                 const interestLeft = loan ? remainingInterest(loan, (repayments.data ?? []).filter((r) => r.loan_id === loan.id)) : 0;
-                const interest = monthly > 0 ? Math.min(Math.round((amt * monthInterest / monthly) * 100) / 100, interestLeft, amt) : 0;
-                const principal = Math.min(amt - interest, outstanding);
+                // Late penalty is taken first (migration 0077).
+                const penalty = loan ? Math.min(loanPenaltyOwed(loan, repayments.data ?? []), amt) : 0;
+                const rest = amt - penalty;
+                const interest = monthly > 0 && rest > 0 ? Math.min(Math.round((rest * monthInterest / monthly) * 100) / 100, interestLeft, rest) : 0;
+                const principal = Math.max(Math.min(rest - interest, outstanding), 0);
                 const balanceAfter = Math.max(outstanding - principal, 0);
                 const settles = balanceAfter <= 0.01;
                 return (
@@ -192,6 +288,12 @@ export default function RecordRepayment() {
                     {loan ? (
                       <View style={{ margin: 14, marginBottom: 0, backgroundColor: semantic.surfaceAlt, borderRadius: 12, padding: 12 }}>
                         <Text variant="overline" color="muted" style={{ marginBottom: 6 }}>How this will be applied</Text>
+                        {penalty > 0 ? (
+                          <View style={{ flexDirection: 'row', paddingVertical: 2 }}>
+                            <Text variant="caption" color="secondary">Late penalty</Text>
+                            <Text style={{ marginLeft: 'auto', fontFamily: 'Poppins_700Bold', fontSize: 12.5, color: intent.danger.text }}>{formatPeso(penalty)}</Text>
+                          </View>
+                        ) : null}
                         <View style={{ flexDirection: 'row', paddingVertical: 2 }}>
                           <Text variant="caption" color="secondary">Interest</Text>
                           <Text style={{ marginLeft: 'auto', fontFamily: 'Poppins_700Bold', fontSize: 12.5, color: intent.warning.text }}>{formatPeso(interest)}</Text>
@@ -233,37 +335,60 @@ export default function RecordRepayment() {
             {loans.loading ? <ActivityIndicator color={semantic.brand} /> : activeLoans.length === 0 ? (
               <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No active loans right now.</Text>
             ) : (
-              <View>
-                <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Active loans</Text>
-                <View style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden' }, shadowToken.soft]}>
-                  {activeLoans.map((l) => {
-                    const outstanding = Number(l.outstanding_balance ?? 0);
-                    // TC-040: outstanding_balance is seeded from approved_principal
-                    // (what was actually disbursed) at disbursement, not the raw
-                    // requested principal — using the requested amount here understates
-                    // progress on any loan that was partially approved.
-                    const principal = Number(l.approved_principal ?? l.principal ?? 0);
-                    const pct = principal ? Math.max(0, Math.min(100, Math.round((1 - outstanding / principal) * 100))) : 0;
-                    const awaitingP = awaitingByLoan.get(l.id);
-                    const pendingP = pendingByLoan.get(l.id);
-                    return (
-                      <Pressable key={l.id} onPress={() => goToRecordScreen(l)} style={{ flexDirection: 'row', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
-                        <Avatar name={loanName(l)} uri={l.membership?.members?.avatar_url} size={38} />
-                        <View style={{ flex: 1, minWidth: 0 }}>
-                          <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{loanName(l)}</Text>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
-                            <Text variant="caption" color="secondary">{formatPeso(outstanding)} left</Text>
-                            {pendingP ? <Tag label="Awaiting your review" tone="review" /> : awaitingP ? <Tag label={awaitingP.status === 'confirmed' ? 'Pending verification' : 'Awaiting the Organizer'} tone="settle" /> : null}
-                          </View>
-                          <View style={{ height: 5, borderRadius: 3, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 8 }}>
-                            <View style={{ width: `${pct}%`, height: '100%', backgroundColor: intent.success.base, borderRadius: 3 }} />
-                          </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
+              <Animated.View key={`month-${shownKey}`} entering={slideIn} style={{ gap: 16 }}>
+                {monthRows.some((r) => !r.overdue) ? (
+                  <View style={{ backgroundColor: semantic.surfaceAlt, borderRadius: 16, padding: 14 }}>
+                    <Text variant="overline" color="muted">{isFutureMonth ? 'Paid in advance' : isPastMonth ? 'Collected' : 'Collected this month'}</Text>
+                    <Text style={{ fontSize: 20, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.4, marginTop: 4 }}>
+                      {formatPeso(monthPaid)} <Text style={{ fontSize: 13, color: semantic.textMuted, fontFamily: 'Poppins_500Medium' }}>of {formatPeso(monthExpected)}</Text>
+                    </Text>
+                    {monthPenalty > 0 ? (
+                      <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: intent.danger.text, marginTop: 4 }}>+ {formatPeso(monthPenalty)} late penalties</Text>
+                    ) : null}
+                  </View>
+                ) : null}
+
+                {unpaidRows.length > 0 ? (
+                  <View>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>
+                      {isPastMonth || isFutureMonth ? `Not paid for ${monthName}` : 'Not paid this month'}
+                    </Text>
+                    <View style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden' }, shadowToken.soft]}>
+                      {unpaidRows.map(({ loan: l, inst, overdue }) => (
+                        <LoanMonthRow
+                          key={l.id} loan={l} inst={inst} onPress={() => goToRecordScreen(l)}
+                          tag={
+                            pendingByLoan.get(l.id) ? <Tag label="Awaiting your review" tone="review" />
+                            : awaitingByLoan.get(l.id) ? <Tag label={awaitingByLoan.get(l.id)!.status === 'confirmed' ? 'Pending verification' : 'Awaiting the Organizer'} tone="settle" />
+                            : overdue ? <Tag label="Overdue" tone="late" />
+                            : inst.kind === 'late' ? <Tag label="Late" tone="late" />
+                            : inst.kind === 'upcoming' ? <Tag label="Advance" tone="settle" />
+                            : <Tag label="Due" tone="settle" />
+                          }
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {handledRows.length > 0 ? (
+                  <View>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Already handled</Text>
+                    <View style={[{ backgroundColor: semantic.card, borderRadius: 16, overflow: 'hidden' }, shadowToken.soft]}>
+                      {handledRows.map(({ loan: l, inst }) => (
+                        <LoanMonthRow
+                          key={l.id} loan={l} inst={inst} onPress={() => goToRecordScreen(l)}
+                          tag={inst.kind === 'review' ? <Tag label="Awaiting review" tone="review" /> : <Tag label={isFutureMonth ? 'Paid in advance' : 'Posted'} tone="posted" />}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                ) : null}
+
+                {monthRows.length === 0 ? (
+                  <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>No loan payments fall in {monthName}.</Text>
+                ) : null}
+              </Animated.View>
             )}
 
             {settledLoans.length > 0 ? (

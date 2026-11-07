@@ -30,6 +30,8 @@ async function createCycle(input) {
       default_interest_rate: input.defaultInterestRate ?? null,
       minimum_loan_amount: input.minimumLoanAmount ?? null,
       early_termination_penalty: input.earlyTerminationPenalty ?? null,
+      // Only sent when set, so creating a cycle still works before migration 0077 is applied.
+      ...(input.loanLatePenaltyPct != null && input.loanLatePenaltyPct !== '' ? { loan_late_penalty_pct: input.loanLatePenaltyPct } : {}),
       status: existingActive ? 'draft' : 'active',
     })
     .select()

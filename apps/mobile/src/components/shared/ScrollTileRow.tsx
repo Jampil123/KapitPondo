@@ -11,7 +11,12 @@ export type TileAction = { label: string; icon: any; route: string; params?: Rec
  * "scroll level" track beneath it showing how far through the row you are —
  * standalone tiles don't hint that there's more off-screen, this does.
  */
-export function ScrollTileRow({ actions, go }: { actions: TileAction[]; go: (route: string, params?: Record<string, string>) => void }) {
+export function ScrollTileRow({ actions, go, tileRefs }: {
+  actions: TileAction[];
+  go: (route: string, params?: Record<string, string>) => void;
+  /** Optional refs keyed by tile label — e.g. for an onboarding spotlight. */
+  tileRefs?: Record<string, React.Ref<View>>;
+}) {
   const [trackWidth, setTrackWidth] = useState(0);
   const [visibleWidth, setVisibleWidth] = useState(0);
   const [contentWidth, setContentWidth] = useState(0);
@@ -42,6 +47,8 @@ export function ScrollTileRow({ actions, go }: { actions: TileAction[]; go: (rou
         {actions.map((a) => (
           <Pressable
             key={a.label}
+            ref={tileRefs?.[a.label]}
+            collapsable={false}
             onPress={() => go(a.route, a.params)}
             style={[{ width: tileWidth, borderRadius: 18, backgroundColor: semantic.card, alignItems: 'center', paddingVertical: 16, paddingHorizontal: 4, gap: 10 }, shadowToken.soft]}
           >

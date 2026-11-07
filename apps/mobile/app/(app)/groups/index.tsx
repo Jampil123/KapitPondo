@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,6 +12,10 @@ import { useGroups } from '@/context/GroupContext';
 import { useAuth } from '@/context/AuthContext';
 import { useNotifications } from '@/context/NotificationsContext';
 import type { MyGroup } from '@/api/groups';
+import { CoachMark, type TargetRect } from '@/features/onboarding/CoachMark';
+import { useOnboardingFlag } from '@/features/onboarding/useOnboardingFlag';
+
+type TourStep = 'fab' | 'create' | null;
 
 function initialsOf(name?: string | null) {
   if (!name) return 'K';
@@ -28,6 +32,42 @@ export default function GroupsDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [fabOpen, setFabOpen] = useState(false);
   const [announcementsKey, setAnnouncementsKey] = useState(0);
+
+  // First-run tutorial: walk a user with no groups to "Create Group".
+  const { seen: tourSeen, markSeen: markTourSeen } = useOnboardingFlag('create-group');
+  const [tourStep, setTourStep] = useState<TourStep>(null);
+  const [tourTarget, setTourTarget] = useState<TargetRect | null>(null);
+  const fabRef = useRef<View>(null);
+  const createItemRef = useRef<View>(null);
+
+  useEffect(() => {
+    // One-shot: marked seen the moment it starts, so it never comes back —
+    // not after finishing, skipping, or closing the app halfway through.
+    if (tourSeen === false && !loading && groups.length === 0 && tourStep === null) {
+      setTourStep('fab');
+      markTourSeen();
+    }
+  }, [tourSeen, loading, groups.length]);
+
+  function measure(ref: React.RefObject<View | null>) {
+    ref.current?.measureInWindow((x, y, width, height) => setTourTarget({ x, y, width, height }));
+  }
+
+  useEffect(() => {
+    if (tourStep === 'fab') requestAnimationFrame(() => measure(fabRef));
+  }, [tourStep]);
+
+  function endTour() {
+    setTourStep(null);
+    setTourTarget(null);
+    markTourSeen();
+  }
+
+  function goCreateFromTour() {
+    endTour();
+    setFabOpen(false);
+    router.push('/(app)/groups/create');
+  }
 
   async function onRefresh() {
     setRefreshing(true);
@@ -123,6 +163,8 @@ export default function GroupsDashboard() {
           ].map((it) => (
             <Pressable
               key={it.label}
+              ref={it.label === 'Create Group' ? createItemRef : undefined}
+              onLayout={it.label === 'Create Group' && tourStep === 'create' ? () => measure(createItemRef) : undefined}
               onPress={() => { setFabOpen(false); router.push(it.path); }}
               style={[{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: semantic.surface, paddingHorizontal: 16, paddingVertical: 11, borderRadius: 28 }, shadowToken.card]}
             >
@@ -137,11 +179,38 @@ export default function GroupsDashboard() {
 
       {/* FAB */}
       <Pressable
+        ref={fabRef}
+        collapsable={false}
         onPress={() => setFabOpen((o) => !o)}
         style={[{ position: 'absolute', right: 24, bottom: fabBottom, width: 60, height: 60, borderRadius: 30, backgroundColor: semantic.brand, alignItems: 'center', justifyContent: 'center' }, shadowToken.button]}
       >
         {fabOpen ? <X size={30} color="#fff" /> : <Plus size={30} color="#fff" />}
       </Pressable>
+
+      {tourStep === 'fab' ? (
+        <CoachMark
+          visible
+          target={tourTarget}
+          radius={30}
+          step={1}
+          total={2}
+          title="Tap + to start"
+          onTargetPress={() => { setTourTarget(null); setFabOpen(true); setTourStep('create'); }}
+          onSkip={endTour}
+        />
+      ) : tourStep === 'create' ? (
+        <CoachMark
+          visible
+          target={tourTarget}
+          radius={28}
+          step={2}
+          total={2}
+          title="Create your group"
+          body="You'll be its Organizer and can invite members next."
+          onTargetPress={goCreateFromTour}
+          onSkip={() => { setFabOpen(false); endTour(); }}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }

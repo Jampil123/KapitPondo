@@ -14,7 +14,7 @@ import { useContributions } from '@/features/contributions/contributions.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import { computePeriodSummary } from '@/features/contributions/periodSummary';
 import { CollectionSummaryCard } from '@/features/contributions/CollectionSummaryCard';
-import type { PeriodKind } from '@/features/contributions/periods';
+import { currentPeriodIndex, type PeriodKind } from '@/features/contributions/periods';
 
 const STATUS: Record<PeriodKind, { label: string; tone: { soft: string; text: string } }> = {
   paid: { label: 'Posted', tone: intent.success },
@@ -24,10 +24,17 @@ const STATUS: Record<PeriodKind, { label: string; tone: { soft: string; text: st
   due: { label: 'Not paid', tone: intent.danger },
   upcoming: { label: 'Not paid', tone: intent.danger },
 };
+// A future period: unpaid isn't overdue yet; anything paid is an advance payment.
+const FUTURE_STATUS: Partial<Record<PeriodKind, { label: string; tone: { soft: string; text: string } }>> = {
+  paid: { label: 'Paid in advance', tone: intent.success },
+  late: { label: 'Not yet paid', tone: intent.info },
+  due: { label: 'Not yet paid', tone: intent.info },
+  upcoming: { label: 'Not yet paid', tone: intent.info },
+};
 // Unpaid first — that's what the treasurer is looking for in a past period.
 const ORDER: Record<PeriodKind, number> = { late: 0, due: 0, upcoming: 0, rejected: 1, review: 2, paid: 3 };
 
-/** One earlier period of the active cycle, read-only. Opened from the month switcher on the Contributions page. */
+/** One other period of the active cycle (earlier or upcoming), read-only. Opened from the month switcher on the Contributions page. */
 export default function ContributionPeriod() {
   const { groupId, idx: idxParam } = useLocalSearchParams<{ groupId: string; idx: string }>();
   const idx = Number(idxParam);
@@ -37,6 +44,7 @@ export default function ContributionPeriod() {
   const membersQ = useQuery(() => listMembers(groupId!), [groupId]);
   const roster: GroupMember[] = membersQ.data ?? [];
   const firstLoad = !cycle || (membersQ.data == null && !membersQ.error) || (all.data == null && !all.error);
+  const isFuture = !!cycle && !isNaN(idx) && idx > (currentPeriodIndex(cycle) ?? Infinity);
   const periodWord = cycle?.frequency === 'weekly' ? 'week' : cycle?.frequency === 'quarterly' ? 'quarter' : 'month';
 
   const summary = useMemo(
@@ -68,10 +76,10 @@ export default function ContributionPeriod() {
           <Text variant="body" color="muted" style={{ textAlign: 'center', paddingVertical: 20 }}>Nothing to show for this {periodWord}.</Text>
         ) : (
           <>
-            <CollectionSummaryCard summary={summary} periodWord={periodWord} isPast />
+            <CollectionSummaryCard summary={summary} periodWord={periodWord} isPast={!isFuture} isFuture={isFuture} />
             <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
               {list.map(({ m, entry }) => {
-                const s = STATUS[entry!.kind];
+                const s = (isFuture && FUTURE_STATUS[entry!.kind]) || STATUS[entry!.kind];
                 return (
                   <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
                     <Avatar name={m.members?.full_name ?? 'Member'} uri={m.members?.avatar_url} size={38} />

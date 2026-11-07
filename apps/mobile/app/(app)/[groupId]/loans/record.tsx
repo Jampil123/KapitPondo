@@ -18,6 +18,7 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { headLabel, type PaymentMethod } from '@/api/lending';
 import { useLoan, useSubmitRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
+import { loanPenaltyOwed } from '@/features/lending/loanSchedule';
 
 const cardStyle = [{ backgroundColor: semantic.surface, borderRadius: 20 }, shadowToken.card] as const;
 
@@ -45,8 +46,8 @@ function Notice({ tone, title, body }: { tone: 'info' | 'warning' | 'danger' | '
   );
 }
 
-function AllocRow({ label, value, tone }: { label: string; value: string; tone?: 'int' | 'pri' | 'bal' }) {
-  const color = tone === 'int' ? intent.warning.text : tone === 'pri' ? semantic.brandDark : semantic.textPrimary;
+function AllocRow({ label, value, tone }: { label: string; value: string; tone?: 'pen' | 'int' | 'pri' | 'bal' }) {
+  const color = tone === 'pen' ? intent.danger.text : tone === 'int' ? intent.warning.text : tone === 'pri' ? semantic.brandDark : semantic.textPrimary;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'baseline', paddingVertical: 4 }}>
       <Text variant="caption" color="secondary" style={{ fontWeight: tone === 'bal' ? '700' : '500' }}>{label}</Text>
@@ -74,7 +75,9 @@ export default function RecordLoanRepayment() {
   const interestLeft = remainingInterest(loan, payments);
   // Claims still under review count against the balance too — same cap as the server.
   const inFlight = payments.filter((p) => p.status === 'submitted' || p.status === 'confirmed').reduce((s, p) => s + Number(p.amount), 0);
-  const maxAmount = Math.max(0, Math.round((outstanding + interestLeft - inFlight) * 100) / 100);
+  // Late penalty (0077) — what verify_repayment() takes first.
+  const penaltyOwed = loan ? loanPenaltyOwed(loan, payments) : 0;
+  const maxAmount = Math.max(0, Math.round((outstanding + interestLeft + penaltyOwed - inFlight) * 100) / 100);
 
   const [amount, setAmount] = useState('');
   // Walk-in payments are almost always cash, so there's no method picker.
@@ -86,17 +89,20 @@ export default function RecordLoanRepayment() {
   const methodCfg = METHODS.find((m) => m.key === method)!;
   const amtNum = toAmountString(amount) ? Number(toAmountString(amount)) : 0;
 
-  // Flat rate, split like one monthly installment — same rule as verify_repayment (migration 0063).
+  // Late penalty first (0077), then the flat-rate split like one monthly
+  // installment — same rule as verify_repayment (migrations 0063, 0077).
   const alloc = useMemo(() => {
     if (!amtNum || !loan) return null;
+    const penalty = Math.min(penaltyOwed, amtNum);
+    const rest = amtNum - penalty;
     const loanAmount = Number(loan.approved_principal ?? loan.principal ?? 0);
     const monthInterest = Math.round(loanAmount * rate * 100) / 100;
     const monthly = loan.term_months ? loanAmount / loan.term_months + monthInterest : 0;
-    const interest = monthly > 0 ? Math.min(Math.round((amtNum * monthInterest / monthly) * 100) / 100, interestLeft, amtNum) : 0;
-    const principal = Math.min(amtNum - interest, outstanding);
+    const interest = monthly > 0 && rest > 0 ? Math.min(Math.round((rest * monthInterest / monthly) * 100) / 100, interestLeft, rest) : 0;
+    const principal = Math.max(Math.min(rest - interest, outstanding), 0);
     const balanceAfter = Math.max(outstanding - principal, 0);
-    return { interest, principal, balanceAfter, settles: balanceAfter <= 0.01 };
-  }, [amtNum, loan, outstanding, rate, interestLeft]);
+    return { penalty, interest, principal, balanceAfter, settles: balanceAfter <= 0.01 };
+  }, [amtNum, loan, outstanding, rate, interestLeft, penaltyOwed]);
 
   const needsRef = methodCfg.required && !reference.trim();
   const tooMuch = amtNum > maxAmount + 0.005;
@@ -156,7 +162,7 @@ export default function RecordLoanRepayment() {
                 <Text variant="h3" style={{ fontSize: 16.5 }} numberOfLines={1}>{loan.membership?.members?.full_name ?? 'Member'}</Text>
                 {loan.head_no > 1 ? <Text variant="caption" color="secondary">{headLabel(loan.head_no, loan.head_name)}</Text> : null}
                 <Text variant="caption" color="secondary" style={{ marginTop: 3 }}>
-                  {formatPeso(maxAmount)} left to repay{isSelf ? ' · you' : ''}
+                  {formatPeso(maxAmount)} left to repay{penaltyOwed > 0 ? ` · incl. ${formatPeso(penaltyOwed)} late penalty` : ''}{isSelf ? ' · you' : ''}
                 </Text>
               </View>
             </View>
@@ -191,7 +197,8 @@ export default function RecordLoanRepayment() {
                     </View>
                   ) : null}
                   <Text variant="overline" color="muted" style={{ marginBottom: 4 }}>How this will be applied</Text>
-                  <AllocRow label="Interest first" value={formatPeso(alloc.interest)} tone="int" />
+                  {penaltyOwed > 0 ? <AllocRow label="Late penalty first" value={formatPeso(alloc.penalty)} tone="pen" /> : null}
+                  <AllocRow label={penaltyOwed > 0 ? 'Then interest' : 'Interest first'} value={formatPeso(alloc.interest)} tone="int" />
                   <AllocRow label="Then principal" value={formatPeso(alloc.principal)} tone="pri" />
                   <View style={{ borderTopWidth: 1, borderColor: semantic.border, marginTop: 6, paddingTop: 6 }}>
                     <AllocRow label="Balance after" value={alloc.settles ? `${formatPeso(0)} · settled` : formatPeso(alloc.balanceAfter)} tone="bal" />

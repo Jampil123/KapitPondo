@@ -7,7 +7,7 @@ import Constants from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Bell, HelpCircle, Lock, ChevronRight, LogOut, Check,
-  Mail, Phone, KeyRound, Download, History, UserRound,
+  Mail, Phone, KeyRound, History, UserRound,
 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -188,7 +188,6 @@ export function ProfileBody() {
           <View>
             <Row icon={History} label="Login activity" sub="Devices and times your account signed in" onPress={() => router.push('/(app)/login-activity' as any)} />
             <Row icon={Lock} label="My data & consent" sub="Review what we collect and why" onPress={() => router.push('/(app)/my-data-consent' as any)} />
-            <Row icon={Download} label="Download my records" sub="Contributions, loans and payouts" onPress={() => router.push('/(app)/download-records' as any)} />
           </View>
         </View>
 

@@ -69,36 +69,93 @@ router.put(
   }
 );
 
-// Step 1 of the year-end split: the Treasurer prepares the preview. The
-// Auditor verifies it and the Organizer finalizes, so no one does two steps.
+// Live estimate of the split before anything is prepared (nothing saved). Officers.
+router.get(
+  '/groups/:groupId/distributions/estimate',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      res.json(await service.estimate(req.params.groupId));
+    } catch (err) { next(err); }
+  }
+);
+
+// UC-YD-01 E1/E2/A3: what stops the Treasurer from preparing the preview right now.
+router.get(
+  '/groups/:groupId/distributions/readiness',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      res.json({ blockers: await service.previewReadiness(req.params.groupId) });
+    } catch (err) { next(err); }
+  }
+);
+
+// Step 1 of the year-end split: the Treasurer prepares a draft for the active
+// cycle. The Auditor verifies it and the Organizer finalizes, so no one does two steps.
 router.post(
   '/groups/:groupId/distributions/preview',
   requireAuth,
   requireGroupRole(['treasurer']),
   async (req, res, next) => {
     try {
-      const { period } = req.body;
-      if (!period) {
-        return res.status(400).json({ error: 'period is required (e.g. "2026")' });
-      }
       const distribution = await service.previewDistribution({
         groupId: req.params.groupId,
-        period,
         declaredBy: req.member.id,
       });
       const allocations = await service.getAllocations(distribution.id, { role: req.membership.role, membershipId: req.membership.id });
       res.status(201).json({ distribution, allocations });
-    } catch (err) {
-      if (err.message && err.message.includes('Nothing to distribute')) {
-        return res.status(409).json({ error: err.message });
-      }
-      next(err);
-    }
+    } catch (err) { next(err); }
   }
 );
 
-// Auditor verifies a previewed distribution (TC-027) — cross-checks against
-// the ledger, proceeds to the Owner for finalization.
+// UC-YD-01 step 5: the Treasurer submits the draft; the Auditor is notified.
+router.post(
+  '/groups/:groupId/distributions/:id/submit',
+  requireAuth,
+  requireGroupRole(['treasurer']),
+  async (req, res, next) => {
+    try {
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      const submitted = await service.submitDistribution({ distributionId: req.params.id, actorId: req.member.id });
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'submitted', entityType: 'distribution', entityId: req.params.id,
+        before: { status: 'draft' }, after: { status: 'previewed', period: submitted.period, total_amount: submitted.total_amount },
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'auditor', skip: [req.member.id],
+        type: 'distribution.submitted', title: 'Year-end distribution to verify',
+        message: `The Treasurer submitted the ${submitted.period} distribution for your verification.`,
+      });
+      res.json({ distribution: submitted });
+    } catch (err) { next(err); }
+  }
+);
+
+// UC-YD-02 steps 2-3, E1: the preview's figures next to what the ledger says now.
+router.get(
+  '/groups/:groupId/distributions/:id/ledger-check',
+  requireAuth,
+  requireGroupRole(['treasurer', 'auditor', 'owner']),
+  async (req, res, next) => {
+    try {
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      res.json(await service.ledgerCheck(req.params.id));
+    } catch (err) { next(err); }
+  }
+);
+
+// Auditor verifies a previewed distribution (UC-YD-02 step 4) — only while its
+// figures still match the ledger (E1); the Organizer is notified to finalize.
 router.post(
   '/groups/:groupId/distributions/:id/verify',
   requireAuth,
@@ -109,16 +166,29 @@ router.post(
       if (distribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Distribution does not belong to this group' });
       }
+      if (distribution.status !== 'previewed') {
+        return res.status(409).json({ error: 'Distribution is not in previewed status' });
+      }
+      const check = await service.ledgerCheck(req.params.id);
+      if (!check.matches) {
+        return res.status(409).json({ error: "The figures don't match the ledger anymore. Return it to the Treasurer to prepare again." });
+      }
+      const notes = (req.body?.notes ?? '').trim() || null;
       const verified = await service.verifyDistribution({
         distributionId: req.params.id,
         verifiedBy: req.member.id,
-        notes: req.body?.notes,
+        notes,
       });
       if (!verified) return res.status(409).json({ error: 'Distribution is not in previewed status' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'verified', entityType: 'distribution', entityId: req.params.id,
-        before: { status: 'previewed' }, after: { status: 'verified', period: distribution.period, total_amount: distribution.total_amount },
+        before: { status: 'previewed' }, after: { status: 'verified', period: distribution.period, total_amount: distribution.total_amount, notes },
+      });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'owner', skip: [req.member.id],
+        type: 'distribution.verified', title: 'Year-end distribution verified',
+        message: `The Auditor verified the ${distribution.period} distribution. Review it and finalize.`,
       });
       res.json({ message: 'Distribution verified — awaiting Organizer finalization', distribution: verified });
     } catch (err) { next(err); }
@@ -165,16 +235,11 @@ router.post(
       if (distribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Distribution does not belong to this group' });
       }
-      if (distribution.status === 'verified') {
-        if (distribution.verified_by !== req.member.id) {
-          return res.status(403).json({ error: 'Only the Auditor who verified this distribution can return it' });
-        }
-        const reopened = await service.unverifyDistribution({ distributionId: req.params.id, memberId: req.member.id });
-        if (!reopened) return res.status(409).json({ error: 'This distribution is no longer waiting to be finalized' });
-      } else if (distribution.status !== 'previewed') {
-        return res.status(409).json({ error: 'This distribution can no longer be returned' });
+      if (distribution.status === 'verified' && distribution.verified_by !== req.member.id) {
+        return res.status(403).json({ error: 'Only the Auditor who verified this distribution can return it' });
       }
-      await service.cancelPreview(req.params.id);
+      const returned = await service.returnDistribution({ distributionId: req.params.id, memberId: req.member.id, reason });
+      if (!returned) return res.status(409).json({ error: 'This distribution can no longer be returned' });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
         action: 'returned', entityType: 'distribution', entityId: req.params.id,
@@ -197,7 +262,7 @@ router.get(
   requireGroupRole(['member', 'treasurer', 'auditor', 'owner']),
   async (req, res, next) => {
     try {
-      const distributions = await service.listDistributions(req.params.groupId);
+      const distributions = await service.listDistributions(req.params.groupId, { includeDrafts: req.membership.role === 'treasurer' });
       res.json({ distributions });
     } catch (err) { next(err); }
   }
@@ -213,6 +278,9 @@ router.get(
       const distribution = await service.getDistribution(req.params.id);
       if (distribution.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      if (distribution.status === 'draft' && req.membership.role !== 'treasurer') {
+        return res.status(404).json({ error: 'Distribution not found' });
       }
       const allocations = await service.getAllocations(distribution.id, { role: req.membership.role, membershipId: req.membership.id });
       res.json({ distribution, allocations });
@@ -243,7 +311,10 @@ router.post(
       });
       res.json({ message: 'Distribution finalized; fund balance is now 0', distribution: finalized });
     } catch (err) {
-      if (err.message && (err.message.includes('Fund changed since preview') || err.message.includes('not verified'))) {
+      if (err.message && err.message.includes('Fund changed since preview')) {
+        return res.status(409).json({ error: "The fund or a member's balances changed since the preview. Ask the Treasurer to prepare it again." });
+      }
+      if (err.message && (err.message.includes('not verified') || err.message.includes('old formula'))) {
         return res.status(409).json({ error: err.message });
       }
       next(err);

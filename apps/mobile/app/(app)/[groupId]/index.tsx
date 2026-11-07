@@ -171,7 +171,7 @@ export default function GroupDashboard() {
       role={role}
       header={
         <>
-          <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} />
+          <DashboardHeader group={group} member={member} roleLabel={ROLE_LABEL[role]} showCode={role === 'owner'} />
           {role === 'treasurer' && (
             <View style={{ paddingBottom: 2 }}>
               <RoleSwitch value={treasurerView} onChange={switchTo(setTreasurerView)} officerLabel="Treasurer" />

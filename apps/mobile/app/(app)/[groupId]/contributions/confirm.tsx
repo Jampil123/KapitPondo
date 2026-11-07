@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInLeft, FadeInRight } from 'react-native-reanimated';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -106,32 +107,37 @@ export default function ConfirmContributions() {
   const awaitingRows = rows.filter((c) => c.status === 'confirmed' || (c.status === 'submitted' && (c.recorded_by === member?.id || c.memberships?.member_id === member?.id)));
   const returnedRows = rows.filter((c) => c.status === 'rejected' && c.recorded_by === member?.id);
 
-  // ---- Collection summary for the current period ----
+  // ---- Month switcher: changes the month in place (slides), across the whole cycle ----
+  // Earlier months to catch up on, later ones for walk-in advance payments —
+  // the summary card and "Record new" both follow the month shown.
   const currentIdx = cycle ? currentPeriodIndex(cycle) : null;
-  const summary = useMemo(
-    () => (cycle && roster.length ? computePeriodSummary(cycle, roster, rows, currentIdx) : null),
-    [cycle, roster, rows, currentIdx],
-  );
-
-  // ---- Month switcher: stepping to an earlier period opens it on its own page ----
-  // The switcher remembers where it was left, so pressing ‹ again after coming
-  // back opens the period before that one.
   const periods = useMemo(() => (cycle ? cyclePeriods(cycle) : []), [cycle]);
+  const lastIdx = periods.length - 1;
   const [pickedIdx, setPickedIdx] = useState<number | null>(null);
+  const [slide, setSlide] = useState<'left' | 'right' | null>(null);
   const shownIdx = pickedIdx ?? currentIdx;
+  const isPastMonth = shownIdx !== null && currentIdx !== null && shownIdx < currentIdx;
+  const isFutureMonth = shownIdx !== null && currentIdx !== null && shownIdx > currentIdx;
   const switcherLabel = cycle && shownIdx !== null && periods[shownIdx] ? periodLabel(periods[shownIdx], cycle.frequency) : '';
-  function openPeriod(next: number) {
-    if (next === currentIdx) { setPickedIdx(null); return; }
-    setPickedIdx(next);
-    router.push({ pathname: '/(app)/[groupId]/contributions/period' as any, params: { groupId, idx: String(next) } });
+  function showPeriod(next: number) {
+    if (shownIdx === null || next === shownIdx) return;
+    setSlide(next > shownIdx ? 'right' : 'left');
+    setPickedIdx(next === currentIdx ? null : next);
   }
+  const slideIn = slide === 'right' ? FadeInRight.duration(240) : slide === 'left' ? FadeInLeft.duration(240) : undefined;
+
+  // ---- Collection summary for the month shown ----
+  const summary = useMemo(
+    () => (cycle && roster.length ? computePeriodSummary(cycle, roster, rows, shownIdx) : null),
+    [cycle, roster, rows, shownIdx],
+  );
 
   // ---- Record new: who still needs recording vs. already handled this period ----
   const needsRecording = useMemo(() => {
     if (!summary) return [];
     return roster
       .map((m) => ({ m, entry: summary.perMember.get(m.id) ?? null }))
-      .filter(({ entry }) => entry && (entry.kind === 'due' || entry.kind === 'late'));
+      .filter(({ entry }) => entry && (entry.kind === 'due' || entry.kind === 'late' || entry.kind === 'upcoming'));
   }, [roster, summary]);
   const alreadyHandled = useMemo(() => {
     if (!summary) return [];
@@ -164,17 +170,19 @@ export default function ConfirmContributions() {
             <ActivityIndicator color={semantic.brand} />
           </View>
         ) : cycle && summary ? (
-          <CollectionSummaryCard summary={summary} periodWord={periodWord} isPast={false} />
+          <Animated.View key={`summary-${shownIdx}`} entering={slideIn}>
+            <CollectionSummaryCard summary={summary} periodWord={periodWord} isPast={isPastMonth} isFuture={isFutureMonth} />
+          </Animated.View>
         ) : null}
         {!firstLoad && cycle && shownIdx !== null && currentIdx !== null ? (
           <PeriodSwitcher
             label={switcherLabel}
-            isPast={shownIdx < currentIdx}
-            onPrev={() => openPeriod(shownIdx - 1)}
-            onNext={() => openPeriod(shownIdx + 1)}
-            onReset={() => setPickedIdx(null)}
+            isPast={shownIdx !== currentIdx}
+            onPrev={() => showPeriod(shownIdx - 1)}
+            onNext={() => showPeriod(shownIdx + 1)}
+            onReset={() => currentIdx !== null && showPeriod(currentIdx)}
             prevBlocked={shownIdx <= 0 ? `This is the first ${periodWord} of the cycle.` : null}
-            nextBlocked={shownIdx >= currentIdx ? `The next ${periodWord} hasn't started yet.` : null}
+            nextBlocked={shownIdx >= lastIdx ? `This is the last ${periodWord} of the cycle.` : null}
           />
         ) : null}
 
@@ -241,7 +249,7 @@ export default function ConfirmContributions() {
 
         {/* ================= RECORD NEW ================= */}
         {tab === 'record' && (
-          <View style={{ marginTop: 16, gap: 16 }}>
+          <Animated.View key={`record-${shownIdx}`} entering={slideIn} style={{ marginTop: 16, gap: 16 }}>
             {firstLoad ? (
               <ActivityIndicator color={semantic.brand} style={{ marginTop: 20 }} />
             ) : !cycle ? (
@@ -250,7 +258,9 @@ export default function ConfirmContributions() {
               <>
                 {needsRecording.length > 0 ? (
                   <View>
-                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>Who hasn&apos;t paid this {periodWord}</Text>
+                    <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary, marginBottom: 9 }}>
+                      {isPastMonth || isFutureMonth ? `Who hasn't paid ${switcherLabel}` : `Who hasn't paid this ${periodWord}`}
+                    </Text>
                     <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, overflow: 'hidden' }, shadowToken.card]}>
                       {needsRecording.map(({ m, entry }) => (
                         <Pressable key={m.id} onPress={() => goToRecordScreen(m)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, padding: 13, borderBottomWidth: 1, borderColor: semantic.border }}>
@@ -259,7 +269,8 @@ export default function ConfirmContributions() {
                             <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                               <Text variant="caption" color="secondary">{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
-                              <Tag label={entry!.kind === 'late' ? 'Late' : 'Due'} tone={entry!.kind === 'late' ? 'late' : 'due'} />
+                              {isFutureMonth ? <Tag label="Advance" tone="due" />
+                                : <Tag label={entry!.kind === 'late' || isPastMonth ? 'Late' : 'Due'} tone={entry!.kind === 'late' || isPastMonth ? 'late' : 'due'} />}
                             </View>
                           </View>
                           <Text style={{ fontSize: 13, fontFamily: 'Poppins_700Bold', color: semantic.dashCard }}>{formatPeso(entry!.amount)}</Text>
@@ -280,7 +291,7 @@ export default function ConfirmContributions() {
                             <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textPrimary }} numberOfLines={1}>{m.members?.full_name ?? 'Member'}</Text>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 }}>
                               <Text variant="caption" color="secondary">{m.heads} head{m.heads === 1 ? '' : 's'}</Text>
-                              <Tag label={entry!.kind === 'review' ? 'Awaiting review' : 'Posted'} tone={entry!.kind === 'review' ? 'review' : 'posted'} />
+                              <Tag label={entry!.kind === 'review' ? 'Awaiting review' : isFutureMonth ? 'Paid in advance' : 'Posted'} tone={entry!.kind === 'review' ? 'review' : 'posted'} />
                             </View>
                           </View>
                           <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textMuted }}>{formatPeso(entry!.amount)}</Text>
@@ -295,7 +306,7 @@ export default function ConfirmContributions() {
                 ) : null}
               </>
             )}
-          </View>
+          </Animated.View>
         )}
 
         {/* ================= AWAITING (with the Auditor or Organizer) ================= */}

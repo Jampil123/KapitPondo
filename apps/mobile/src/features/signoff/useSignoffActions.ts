@@ -24,6 +24,12 @@ export const PRIMARY_LABEL: Record<SignoffItem['action'], string> = {
   approve: 'Approve reversal',
 };
 
+/** The step's button label — a reversal's verify step posts nothing, so it isn't "Approve and post". */
+export function primaryLabel(i: SignoffItem): string {
+  if (i.kind === 'reversal' && i.action === 'verify') return 'Verify reversal';
+  return PRIMARY_LABEL[i.action];
+}
+
 // Money already out can't be sent back — it's flagged instead.
 export const canSendBack = (i: SignoffItem) => i.action !== 'release' && i.action !== 'verify_release';
 export const sendBackLabel = (i: SignoffItem) => (i.action === 'review' ? 'Send back' : 'Reject');
@@ -70,8 +76,8 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
   }
 
   /** Take the step the item is waiting for. Resolves true on success. */
-  function approve(i: SignoffItem): Promise<boolean> {
-    const fail = `Could not ${PRIMARY_LABEL[i.action].toLowerCase()}`;
+  function approve(i: SignoffItem, notes?: string): Promise<boolean> {
+    const fail = `Could not ${primaryLabel(i).toLowerCase()}`;
     if (i.kind === 'contribution') {
       return i.action === 'confirm'
         ? run(() => confirmContrib.run(i.id), fail, () => confirmContrib.error, 'Confirmed — waiting for verification')
@@ -85,7 +91,7 @@ export function useSignoffActions(groupId: string, onDone: () => void) {
     if (i.kind === 'reversal') {
       return i.action === 'approve'
         ? runDirect(() => finalizeReversal(groupId, i.id), fail, 'Reversal approved — the correcting entry is posted')
-        : runDirect(() => verifyReversal(groupId, i.id), fail, 'Reversal verified — the Organizer approves it next');
+        : runDirect(() => verifyReversal(groupId, i.id, notes || undefined), fail, 'Reversal verified — the Organizer approves it next');
     }
     if (i.kind === 'withdrawal') {
       return i.action === 'release'

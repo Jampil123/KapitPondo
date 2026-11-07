@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { View, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -18,6 +18,7 @@ import { AuditTimeline } from '@/features/auditlog/AuditTimeline';
 import { CollectionBlock } from './CollectionBlock';
 import { PendingNote } from './PendingNote';
 import { PendingActionsCard, shortDate } from './OrganizerActions';
+import { CycleSetupDashboardTour } from '@/features/onboarding/CycleSetupTour';
 
 function SectionHead({ title, aside, hot, onAsidePress, top = 14 }: { title: string; aside?: string; hot?: boolean; onAsidePress?: () => void; top?: number }) {
   const asideText = aside ? (
@@ -93,7 +94,7 @@ function FinalizeCard({ groupId, go }: { groupId: string; go: (r: string) => voi
 
   const current = useMemo(() => {
     if (!data) return null;
-    const inFlight = data.filter((d) => d.status !== 'finalized' && d.status !== 'draft');
+    const inFlight = data.filter((d) => d.status === 'previewed' || d.status === 'verified');
     if (!inFlight.length) return null;
     return inFlight.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
   }, [data]);
@@ -198,6 +199,7 @@ export function OwnerHero({ groupId }: { groupId: string }) {
 export function OwnerDashboard({ groupId }: { groupId: string }) {
   const router = useRouter();
   const go = (sub: string) => router.push({ pathname: `/(app)/[groupId]/${sub}` as any, params: { groupId } });
+  const configureTileRef = useRef<View>(null);
 
   return (
     <>
@@ -207,7 +209,8 @@ export function OwnerDashboard({ groupId }: { groupId: string }) {
 
       <CollectionBlock groupId={groupId} go={go} head={(title, aside) => <SectionHead title={title} aside={aside} />} />
 
-      <ScrollTileRow actions={MANAGE_ACTIONS} go={go} />
+      <ScrollTileRow actions={MANAGE_ACTIONS} go={go} tileRefs={{ 'Configure Cycle': configureTileRef }} />
+      <CycleSetupDashboardTour groupId={groupId} targetRef={configureTileRef} />
 
       <SectionHead title="Recent activity" aside="See all" onAsidePress={() => go('owner-activity')} />
       <RecentActivity groupId={groupId} />

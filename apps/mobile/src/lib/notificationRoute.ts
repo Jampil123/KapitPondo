@@ -48,6 +48,8 @@ const GROUP_SCREEN: Record<string, string> = {
   'ledger.reversed': 'reports/my-transactions',
   'distribution.finalized': 'distribution/year-end',
   'distribution.returned': 'distribution/year-end',
+  'distribution.submitted': 'distribution/year-end',
+  'distribution.verified': 'distribution/year-end',
 
   // group
   'gcash.proposed': 'group/settings',

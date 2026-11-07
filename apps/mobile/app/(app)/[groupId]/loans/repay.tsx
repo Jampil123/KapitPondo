@@ -14,6 +14,7 @@ import { buildContributionReference } from '@/lib/qrPh';
 import { useActiveGroup } from '@/context/GroupContext';
 import { useLoans, useLoan, useRepayments, useSubmitRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
+import { loanPenaltyOwed } from '@/features/lending/loanSchedule';
 import { useLoanProofScan, confirmLoanSubmitDespiteDuplicate } from '@/features/lending/useProofScan';
 import { expectedMonthlyDue } from '@/features/lending/expectedMonthlyDue';
 import {
@@ -57,7 +58,10 @@ export default function Repay() {
   // Needs the loan's own payments to know how much interest is still to come (flat rate, see remainingInterest).
   const detail = useLoan(groupId!, activeLoan?.id);
   const interestLeft = remainingInterest(activeLoan, detail.data?.payments ?? []);
-  const suggestedAmount = expectedMonthlyDue(activeLoan, interestLeft);
+  // Late penalty (0077) is owed on top and paid first.
+  const penaltyOwed = activeLoan ? loanPenaltyOwed(activeLoan, detail.data?.payments ?? []) : 0;
+  const totalLeft = outstanding + interestLeft + penaltyOwed;
+  const suggestedAmount = Math.min(expectedMonthlyDue(activeLoan, interestLeft) + penaltyOwed, totalLeft);
 
   // The loan loads asynchronously, so show its expected payment until the user types their own amount.
   const amount = amountEdit ?? (suggestedAmount > 0 ? suggestedAmount.toFixed(2) : '');
@@ -101,8 +105,8 @@ export default function Repay() {
     if (!activeLoan) return;
     const amt = toAmountString(amount);
     if (!amt || Number(amt) <= 0) return Alert.alert('Invalid amount', 'Enter a valid repayment amount.');
-    if (Number(amt) > outstanding + interestLeft + 0.005) {
-      return Alert.alert('Amount too high', `That's more than the ${formatPeso(outstanding + interestLeft)} left on this loan.`);
+    if (Number(amt) > totalLeft + 0.005) {
+      return Alert.alert('Amount too high', `That's more than the ${formatPeso(totalLeft)} left on this loan.`);
     }
     if (!proofUri) return Alert.alert('Proof required', 'Attach a photo or screenshot of your payment before submitting.');
 
@@ -194,11 +198,11 @@ export default function Repay() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
           <AmountBlock
-            label={suggestedAmount >= outstanding + interestLeft ? 'Amount due' : "This month's payment"}
+            label={suggestedAmount >= totalLeft ? 'Amount due' : penaltyOwed > 0 ? 'Payment due with penalty' : "This month's payment"}
             amount={suggestedAmount}
             badge={<Badge tone="primary" label="Active loan" Icon={Repeat} />}
             meta={`${activeLoan.purpose ?? 'Loan'} · ${activeLoan.term_months} month${activeLoan.term_months === 1 ? '' : 's'}`}
-            note={`${formatPeso(outstanding + interestLeft)} left to repay`}
+            note={`${formatPeso(totalLeft)} left to repay${penaltyOwed > 0 ? ` · incl. ${formatPeso(penaltyOwed)} late penalty` : ''}`}
             copied={copiedField === 'amount'}
             onCopy={() => copyValue('amount', suggestedAmount.toFixed(2))}
           />

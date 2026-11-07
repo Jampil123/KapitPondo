@@ -283,8 +283,17 @@ async function disburseLoan({ loanId, disburserId }) {
 // member's own contribution submission.
 const peso = (n) => `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Late penalty still owed on a loan (0077's loan_penalty_owed — derived from
+// the schedule and posted repayments). 0 if the migration isn't applied yet.
+async function penaltyOwed(loanId) {
+  const { data, error } = await supabase.rpc('loan_penalty_owed', { p_loan_id: loanId });
+  if (error) return 0;
+  return Number(data ?? 0);
+}
+
 // What the borrower still owes: principal left plus the flat-rate interest
-// not yet posted — the same split verify_repayment() applies (0063).
+// not yet posted — the same split verify_repayment() applies (0063). The late
+// penalty (0077) comes on top; verify_repayment() takes it first.
 function amountOwed(loan, payments) {
   const loanAmount = Number(loan.approved_principal ?? loan.principal ?? 0);
   const totalInterest = Number(loan.interest_rate) > 0 && loan.term_months > 0
@@ -312,7 +321,7 @@ async function submitRepayment(input) {
   const inFlight = payments
     .filter((p) => p.status === 'submitted' || p.status === 'confirmed')
     .reduce((s, p) => s + Number(p.amount), 0);
-  const left = Math.round((amountOwed(loan, payments) - inFlight) * 100) / 100;
+  const left = Math.round((amountOwed(loan, payments) + (await penaltyOwed(input.loanId)) - inFlight) * 100) / 100;
   if (Number(input.amount) > left + 0.005) {
     const message = inFlight > 0
       ? `Only ${peso(Math.max(left, 0))} is left to repay after the ${peso(inFlight)} still under review.`

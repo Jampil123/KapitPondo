@@ -13,9 +13,11 @@
  *
  *   <DashboardHeader group={group} member={member} roleLabel="Organizer" />
  */
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Keyboard } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Bell } from 'lucide-react-native';
+import { Bell, Copy } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
+import { toast } from '../ui/Toast';
 import { Text } from '../ui/Text';
 import { LogoMark } from './ScreenHeader';
 import { semantic } from '../../theme/colors';
@@ -23,6 +25,18 @@ import { onBandText } from './DashboardBand';
 import { useNotifications } from '../../context/NotificationsContext';
 import type { Group } from '../../api/groups';
 import type { Member } from '../../api/members';
+
+// Some Android keyboards (Gboard, Samsung) react to a clipboard write by
+// raising the keyboard with a clipboard suggestion. Nothing on the dashboard
+// takes text input, so dismiss it right after copying (and once more after
+// the system's clipboard UI has had a moment to appear).
+async function copyCode(code: string) {
+  Keyboard.dismiss();
+  await Clipboard.setStringAsync(code);
+  Keyboard.dismiss();
+  setTimeout(() => Keyboard.dismiss(), 250);
+  toast('Group code copied');
+}
 
 function firstName(n?: string | null) {
   return n?.trim().split(/\s+/)[0] ?? 'there';
@@ -32,10 +46,13 @@ export function DashboardHeader({
   group,
   member,
   roleLabel,
+  showCode = false,
 }: {
   group: Group | null;
   member: Member | null;
   roleLabel: string;
+  /** Show the group's join code beside its name (tap to copy). Organizer only. */
+  showCode?: boolean;
 }) {
   const { groupId } = useLocalSearchParams<{ groupId?: string }>();
   const { notifications } = useNotifications();
@@ -48,7 +65,20 @@ export function DashboardHeader({
 
       <View style={{ flex: 1, gap: 3 }}>
         <Text variant="h3" style={{ fontSize: 15 }} numberOfLines={1}>Kumusta, {firstName(member?.full_name)}!</Text>
-        <Text variant="caption" style={{ fontSize: 11, lineHeight: 14, color: onBandText }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text variant="caption" style={{ flexShrink: 1, fontSize: 11, lineHeight: 14, color: onBandText }} numberOfLines={1}>{group?.name ?? 'Group'}</Text>
+          {showCode && group?.fund_code ? (
+            <Pressable
+              onPress={() => copyCode(group.fund_code)}
+              hitSlop={8}
+              accessibilityLabel={`Group code ${group.fund_code}, tap to copy`}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}
+            >
+              <Text style={{ fontSize: 10.5, lineHeight: 13, fontFamily: 'Poppins_700Bold', letterSpacing: 1, color: semantic.textPrimary }}>{group.fund_code}</Text>
+              <Copy size={10} color={semantic.textSecondary} />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <Pressable onPress={() => router.push({ pathname: '/(app)/notifications' as any, params: { groupId } })} hitSlop={8} style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: 'rgba(255,255,255,0.7)', alignItems: 'center', justifyContent: 'center' }}>

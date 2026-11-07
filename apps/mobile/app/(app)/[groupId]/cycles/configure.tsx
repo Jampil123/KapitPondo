@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, TextInput, Pressable, KeyboardAvoidingView, Platform, Modal } from 'react-native';
 import { AlertTriangle, Lock } from 'lucide-react-native';
 import { Alert } from '@/lib/alert';
@@ -20,6 +20,19 @@ import { listDistributions } from '@/api/distribution';
 import { selectActiveCycle } from '@/api/cycles';
 import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle, useCycleProgress, useCloseBlockers } from '@/features/cycles/cycles.hooks';
 import type { Cycle } from '@/api/cycles';
+import { CoachMark, type TargetRect } from '@/features/onboarding/CoachMark';
+import { CYCLE_TOUR_TOTAL, measureRef } from '@/features/onboarding/CycleSetupTour';
+import { useOnboardingFlag } from '@/features/onboarding/useOnboardingFlag';
+
+type FormSection = 'basics' | 'contributions' | 'lending' | 'leaving';
+// Steps 2–6 of the Organizer cycle-setup tour (step 1 is on the dashboard, 7 is Activate).
+const FORM_TOUR: { key: FormSection | 'create'; title: string; body: string }[] = [
+  { key: 'basics', title: 'Name and dates', body: 'Name the cycle and pick its start date. End date is optional.' },
+  { key: 'contributions', title: 'Contributions', body: 'Amount each head pays monthly, the due day, and the late fee.' },
+  { key: 'lending', title: 'Lending', body: 'Loan interest, minimum amount and late penalty. Optional.' },
+  { key: 'leaving', title: 'Leaving early', body: 'Penalty if a member leaves mid-cycle. Optional.' },
+  { key: 'create', title: 'Create the cycle', body: 'Once name, start date and amount are filled in, tap here.' },
+];
 
 function Label({ children }: { children: string }) {
   return <Text variant="overline" color="secondary" style={{ marginBottom: 8, marginLeft: 4 }}>{children}</Text>;
@@ -81,7 +94,7 @@ function CloseCycleSheet({ visible, cycleName, loading, onCloseAndNext, onCloseO
 }
 
 export default function ConfigureCycle() {
-  const { groupId } = useLocalSearchParams<{ groupId: string }>();
+  const { groupId, tour } = useLocalSearchParams<{ groupId: string; tour?: string }>();
   const router = useRouter();
   const keyboardVisible = useKeyboardVisible();
   const cycles = useCycles(groupId!);
@@ -101,7 +114,7 @@ export default function ConfigureCycle() {
   const latestCycle = allCycles[0] ?? null; // listCycles returns newest first
   const cycleDistribution = primaryCycle
     ? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id && d.status === 'finalized')
-      ?? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id && d.status !== 'draft')
+      ?? (distributions.data ?? []).find((d) => d.cycle_id === primaryCycle.id && d.status !== 'draft' && d.status !== 'returned')
       ?? null
     : null;
   const activeId = primaryCycle?.status === 'active' ? primaryCycle.id : undefined;
@@ -119,6 +132,7 @@ export default function ConfigureCycle() {
   const [interestRate, setInterestRate] = useState('');
   const [minLoan, setMinLoan] = useState('');
   const [earlyTermPenalty, setEarlyTermPenalty] = useState('');
+  const [loanLatePenalty, setLoanLatePenalty] = useState('');
   const [copied, setCopied] = useState(false);
 
   const missing = [
@@ -127,6 +141,71 @@ export default function ConfigureCycle() {
     { label: 'amount', ok: !!toAmountString(amount) },
   ].filter((f) => !f.ok);
 
+  /* ---------------- Onboarding tour ---------------- */
+  const formBodyY = useRef(0);
+  const sectionY = useRef<Partial<Record<FormSection, number>>>({});
+  const sectionRefs = {
+    basics: useRef<View>(null),
+    contributions: useRef<View>(null),
+    lending: useRef<View>(null),
+    leaving: useRef<View>(null),
+  };
+  const createBtnRef = useRef<View>(null);
+  const activateBtnRef = useRef<View>(null);
+  const [tourIdx, setTourIdx] = useState<number | null>(null);
+  const [tourTarget, setTourTarget] = useState<TargetRect | null>(null);
+  const tourStarted = useRef(false);
+  const activateTour = useOnboardingFlag('cycle-activate');
+  // Only for the Organizer's very first cycle; one-shot (marked seen on start).
+  const [activateActive, setActivateActive] = useState(false);
+  useEffect(() => {
+    if (activateActive || !isOrganizer || tourIdx !== null || activateTour.seen !== false) return;
+    if (primaryCycle?.status === 'draft' && allCycles.length === 1) {
+      setActivateActive(true);
+      activateTour.markSeen();
+    }
+  }, [activateActive, isOrganizer, tourIdx, activateTour.seen, primaryCycle?.status, allCycles.length]);
+  const showActivateTour = activateActive && tourIdx === null && primaryCycle?.status === 'draft';
+
+  useEffect(() => {
+    if (tour === '1' && isOrganizer && !tourStarted.current && !cycles.loading && allCycles.length === 0) {
+      tourStarted.current = true;
+      setTourIdx(0);
+    }
+  }, [tour, isOrganizer, cycles.loading, allCycles.length]);
+
+  useEffect(() => {
+    if (tourIdx === null) return;
+    setTourTarget(null);
+    const step = FORM_TOUR[tourIdx];
+    if (step.key === 'create') {
+      const t = setTimeout(() => measureRef(createBtnRef, setTourTarget), 50);
+      return () => clearTimeout(t);
+    }
+    const key = step.key;
+    const y = formBodyY.current + (sectionY.current[key] ?? 0);
+    scrollRef.current?.scrollTo({ y: Math.max(0, y - 24), animated: true });
+    const t = setTimeout(() => measureRef(sectionRefs[key], setTourTarget), 400);
+    return () => clearTimeout(t);
+  }, [tourIdx]);
+
+  useEffect(() => {
+    if (!showActivateTour) return;
+    setTourTarget(null);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    const t = setTimeout(() => measureRef(activateBtnRef, setTourTarget), 400);
+    return () => clearTimeout(t);
+  }, [showActivateTour]);
+
+  function nextTourStep() {
+    setTourIdx((i) => (i === null || i >= FORM_TOUR.length - 1 ? null : i + 1));
+  }
+
+  // Once a cycle exists, the form below is only for the NEXT one — so the
+  // bottom bar (button + "fields still needed") stays hidden until the
+  // Organizer actually starts filling it in.
+  const formPristine = ![name, amount, start, end, penalty, dueDay, interestRate, minLoan, loanLatePenalty, earlyTermPenalty].some((v) => v.trim());
+
   function copySettingsFrom(c: Cycle) {
     setAmount(String(c.contribution_amount ?? ''));
     setPenalty(c.penalty_amount ? String(c.penalty_amount) : '');
@@ -134,6 +213,7 @@ export default function ConfigureCycle() {
     setInterestRate(c.default_interest_rate ? String(Number(c.default_interest_rate) * 100) : '');
     setMinLoan(c.minimum_loan_amount ? String(c.minimum_loan_amount) : '');
     setEarlyTermPenalty(c.early_termination_penalty ? String(c.early_termination_penalty) : '');
+    setLoanLatePenalty(c.loan_late_penalty_pct ? String(Number(c.loan_late_penalty_pct)) : '');
   }
 
   function onCopySettings() {
@@ -149,6 +229,11 @@ export default function ConfigureCycle() {
       return;
     }
     const day = dueDay ? Number(dueDay) : undefined;
+    const latePct = loanLatePenalty.trim() ? Number(loanLatePenalty) : null;
+    if (latePct != null && (isNaN(latePct) || latePct < 0 || latePct > 100)) {
+      Alert.alert('Invalid late penalty', 'Enter a loan late penalty between 0 and 100%.');
+      return;
+    }
     if (day != null && (day < 1 || day > 31)) {
       Alert.alert('Invalid due day', 'Enter a day of the month between 1 and 31.');
       return;
@@ -165,10 +250,15 @@ export default function ConfigureCycle() {
       default_interest_rate: interestRate ? String(Number(interestRate) / 100) : undefined,
       minimum_loan_amount: minLoan ? toAmountString(minLoan) ?? undefined : undefined,
       early_termination_penalty: earlyTermPenalty ? toAmountString(earlyTermPenalty) ?? undefined : undefined,
+      loan_late_penalty_pct: loanLatePenalty ? String(Number(loanLatePenalty)) : undefined,
     });
     if (ok !== undefined) {
+      const createdName = name.trim();
+      toast(`${createdName} created`);
+      // Back to the top, where the new cycle's card (and its Activate button) is.
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
       setName(''); setAmount(''); setStart(''); setEnd(''); setPenalty('');
-      setDueDay(''); setInterestRate(''); setMinLoan(''); setEarlyTermPenalty('');
+      setDueDay(''); setInterestRate(''); setMinLoan(''); setEarlyTermPenalty(''); setLoanLatePenalty('');
       cycles.refetch();
     } else if (create.error) {
       Alert.alert('Could not create cycle', create.error.message);
@@ -177,7 +267,12 @@ export default function ConfigureCycle() {
 
   async function onActivate(id: string) {
     const ok = await activate.run(id);
-    if (ok !== undefined) cycles.refetch();
+    if (ok !== undefined) {
+      const c = allCycles.find((x) => x.id === id);
+      toast(`${c?.name ?? 'Cycle'} is now active`);
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+      cycles.refetch();
+    }
     else if (activate.error) Alert.alert('Could not activate', activate.error.status === 409 || /active/i.test(activate.error.message) ? 'Close the current active cycle first — only one can be active at a time.' : activate.error.message);
   }
   async function onClose(openNext: boolean) {
@@ -213,7 +308,7 @@ export default function ConfigureCycle() {
       >
       <ScrollView
         ref={scrollRef}
-        contentContainerStyle={{ padding: 16, paddingBottom: keyboardVisible ? 24 : 130, gap: 8 }}
+        contentContainerStyle={{ padding: 16, paddingBottom: keyboardVisible || (primaryCycle && formPristine) ? 32 : 130, gap: 8 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
@@ -252,7 +347,7 @@ export default function ConfigureCycle() {
               ) : null}
 
               {primaryCycle.status === 'draft' ? (
-                <View style={{ marginTop: 15 }}>
+                <View ref={activateBtnRef} collapsable={false} style={{ marginTop: 15 }}>
                   <Button label="Activate this cycle" onPress={() => onActivate(primaryCycle.id)} loading={activate.loading} style={{ paddingVertical: 11 }} />
                 </View>
               ) : (
@@ -325,9 +420,9 @@ export default function ConfigureCycle() {
           ) : null}
         </View>
 
-        <View style={{ gap: 18 }}>
+        <View onLayout={(e) => { formBodyY.current = e.nativeEvent.layout.y; }} style={{ gap: 18 }}>
           {/* 1 — basics */}
-          <View>
+          <View ref={sectionRefs.basics} collapsable={false} onLayout={(e) => { sectionY.current.basics = e.nativeEvent.layout.y; }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 }}>
               <View style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>1</Text>
@@ -350,7 +445,7 @@ export default function ConfigureCycle() {
           </View>
 
           {/* 2 — contributions */}
-          <View>
+          <View ref={sectionRefs.contributions} collapsable={false} onLayout={(e) => { sectionY.current.contributions = e.nativeEvent.layout.y; }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 }}>
               <View style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>2</Text>
@@ -374,7 +469,7 @@ export default function ConfigureCycle() {
           </View>
 
           {/* 3 — lending */}
-          <View>
+          <View ref={sectionRefs.lending} collapsable={false} onLayout={(e) => { sectionY.current.lending = e.nativeEvent.layout.y; }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 }}>
               <View style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>3</Text>
@@ -386,11 +481,15 @@ export default function ConfigureCycle() {
                 <View style={{ flex: 1 }}><Label>Interest % / month</Label><TextInput value={interestRate} onChangeText={setInterestRate} keyboardType="numeric" placeholder="e.g. 2" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
                 <View style={{ flex: 1 }}><Label>Minimum loan</Label><TextInput value={minLoan} onChangeText={setMinLoan} keyboardType="numeric" placeholder="₱1,000" placeholderTextColor={semantic.textMuted} style={inputStyle} /></View>
               </View>
+              <View>
+                <Label>Late penalty (% per month late, optional)</Label>
+                <TextInput value={loanLatePenalty} onChangeText={setLoanLatePenalty} keyboardType="numeric" placeholder="e.g. 5" placeholderTextColor={semantic.textMuted} style={inputStyle} />
+              </View>
             </View>
           </View>
 
           {/* 4 — leaving early */}
-          <View>
+          <View ref={sectionRefs.leaving} collapsable={false} onLayout={(e) => { sectionY.current.leaving = e.nativeEvent.layout.y; }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 9 }}>
               <View style={{ width: 20, height: 20, borderRadius: 6, backgroundColor: semantic.brandDark, alignItems: 'center', justifyContent: 'center' }}>
                 <Text style={{ fontSize: 10.5, fontFamily: 'Poppins_700Bold', color: '#fff' }}>4</Text>
@@ -408,12 +507,14 @@ export default function ConfigureCycle() {
       </KeyboardAvoidingView>
 
       {/* Hidden while typing — pinned above the keyboard it would cover the field in use. */}
-      {keyboardVisible ? null : <LinearGradient
+      {keyboardVisible || (primaryCycle && formPristine) ? null : <LinearGradient
         colors={['transparent', semantic.background, semantic.background]}
         locations={[0, 0.35, 1]}
         style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 26 }}
       >
-        <Button label="Create cycle" onPress={onCreate} loading={create.loading} disabled={missing.length > 0} />
+        <View ref={createBtnRef} collapsable={false}>
+          <Button label="Create cycle" onPress={onCreate} loading={create.loading} disabled={missing.length > 0} />
+        </View>
         <Text variant="caption" style={{ textAlign: 'center', marginTop: 9, color: missing.length ? intent.warning.text : intent.success.text, fontFamily: 'Poppins_600SemiBold' }}>
           {missing.length
             ? `${missing.length} field${missing.length > 1 ? 's' : ''} still needed: ${missing.map((m) => m.label).join(', ')}`
@@ -422,6 +523,33 @@ export default function ConfigureCycle() {
               : 'Ready to create'}
         </Text>
       </LinearGradient>}
+
+      {tourIdx !== null ? (
+        <CoachMark
+          visible
+          target={tourTarget}
+          radius={FORM_TOUR[tourIdx].key === 'create' ? 14 : 16}
+          step={tourIdx + 2}
+          total={CYCLE_TOUR_TOTAL}
+          title={FORM_TOUR[tourIdx].title}
+          body={FORM_TOUR[tourIdx].body}
+          nextLabel={tourIdx === FORM_TOUR.length - 1 ? 'Got it' : 'Next'}
+          onNext={nextTourStep}
+          onSkip={() => { setTourIdx(null); activateTour.markSeen(); }}
+        />
+      ) : showActivateTour ? (
+        <CoachMark
+          visible
+          target={tourTarget}
+          radius={14}
+          step={tour === '1' ? CYCLE_TOUR_TOTAL : 1}
+          total={tour === '1' ? CYCLE_TOUR_TOTAL : 1}
+          title="Activate the cycle"
+          body="Starts the cycle so members can pay."
+          onTargetPress={() => { setActivateActive(false); onActivate(primaryCycle!.id); }}
+          onSkip={() => setActivateActive(false)}
+        />
+      ) : null}
 
       <CloseCycleSheet
         visible={closeSheet}
