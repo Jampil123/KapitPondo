@@ -17,7 +17,7 @@ import { useAuth } from '@/context/AuthContext';
 import { headLabel, type Loan, type LoanPayment } from '@/api/lending';
 import { useLoans, useRepayments, useConfirmRepaymentReceipt, useRejectRepayment } from '@/features/lending/lending.hooks';
 import { remainingInterest } from '@/features/lending/remainingInterest';
-import { loanSchedule, loanPenaltyOwed, monthKeyOf, dateOfMonthKey, type Installment } from '@/features/lending/loanSchedule';
+import { loanSchedule, loanPenaltyOwed, paymentLabel, monthKeyOf, dateOfMonthKey, type Installment } from '@/features/lending/loanSchedule';
 import { PeriodSwitcher } from '@/features/contributions/PeriodSwitcher';
 
 type Tab = 'pending' | 'record' | 'awaiting' | 'returned';
@@ -80,7 +80,7 @@ function LoanMonthRow({ loan: l, inst, tag, onPress }: { loan: Loan; inst: Insta
           </Text>
         ) : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
-          <Text variant="caption" color="secondary">Month {inst.no} of {l.term_months} · {formatPeso(outstanding)} left</Text>
+          <Text variant="caption" color="secondary">{paymentLabel(inst.no)} of {l.term_months} · {formatPeso(outstanding)} left</Text>
           {tag}
         </View>
         <View style={{ height: 5, borderRadius: 3, backgroundColor: semantic.surfaceAlt, overflow: 'hidden', marginTop: 8 }}>

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowUpRight, ArrowDownRight, Receipt, Search, Flag } from 'lucide-react-native';
+import { ArrowUpRight, ArrowDownRight, Receipt, Search, Flag, FileDown } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { BandHeader } from '@/components/shared/DashboardBand';
 import { PillFilters } from '@/components/shared/PillFilters';
@@ -12,6 +12,8 @@ import { useActiveGroup } from '@/context/GroupContext';
 import { useQuery } from '@/hooks/useApi';
 import { listFlags } from '@/api/flags';
 import { useFundSummary, useFundLedger } from '@/features/reporting/reporting.hooks';
+import { shareGroupLedgerPdf } from '@/features/reporting/groupLedgerPdf';
+import { Alert } from '@/lib/alert';
 import { signoffLine } from '@/features/activity/entryCopy';
 import { entryRef, type LedgerEntry, type LedgerEntryType } from '@/api/ledger';
 
@@ -163,15 +165,15 @@ export default function GroupLedger() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
-      <BandHeader title="Group Ledger" />
       <GroupLedgerList groupId={groupId!} />
     </SafeAreaView>
   );
 }
 
 function GroupLedgerList({ groupId }: { groupId: string }) {
-  const { membership, role } = useActiveGroup();
+  const { membership, role, group } = useActiveGroup();
   const router = useRouter();
+  const [exporting, setExporting] = useState(false);
   const fund = useFundSummary(groupId);
   // Flags are Auditor/Organizer-only on the API, so the Treasurer gets no Flagged chip.
   const canSeeFlags = role === 'auditor' || role === 'owner';
@@ -252,7 +254,37 @@ function GroupLedgerList({ groupId }: { groupId: string }) {
     ...(canSeeFlags ? [{ key: 'flagged' as const, label: 'Flagged' }] : []),
   ];
 
+  // PDF statement of every posting loaded (not just the current filter/search), oldest first.
+  async function onExportPdf() {
+    if (exporting) return;
+    if (!withBalance.length) { Alert.alert('Nothing to export', 'This group has no postings yet.'); return; }
+    setExporting(true);
+    try {
+      await shareGroupLedgerPdf(group?.name ?? 'Group', withBalance);
+    } catch (err) {
+      Alert.alert('Could not export', (err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
+    <>
+      <BandHeader
+        title="Group Ledger"
+        right={
+          <Pressable
+            onPress={onExportPdf}
+            disabled={exporting || ledger.loading}
+            hitSlop={8}
+            accessibilityLabel="Export ledger as PDF"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, height: 32, paddingHorizontal: 11, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.75)', opacity: ledger.loading ? 0.5 : 1 }}
+          >
+            {exporting ? <ActivityIndicator size="small" color={semantic.brandDark} /> : <FileDown size={15} color={semantic.brandDark} />}
+            <Text style={{ fontSize: 12, fontFamily: 'Poppins_600SemiBold', color: semantic.brandDark }}>Export</Text>
+          </Pressable>
+        }
+      />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
 
         {/* ---------------- Summary ---------------- */}
@@ -307,5 +339,6 @@ function GroupLedgerList({ groupId }: { groupId: string }) {
           ))
         )}
       </ScrollView>
+    </>
   );
 }

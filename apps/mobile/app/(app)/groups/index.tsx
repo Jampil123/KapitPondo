@@ -206,7 +206,9 @@ export default function GroupsDashboard() {
           step={2}
           total={2}
           title="Create your group"
-          body="You'll be its Organizer and can invite members next."
+          body={member?.verification_status === 'verified'
+            ? "You'll be its Organizer and can invite members next."
+            : "You'll verify your ID first — then you can create it and invite members."}
           onTargetPress={goCreateFromTour}
           onSkip={() => { setFabOpen(false); endTour(); }}
         />

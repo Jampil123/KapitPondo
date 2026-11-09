@@ -22,7 +22,6 @@ import { useCycles, useCreateCycle, useActivateCycle, useCloseCycle, useCyclePro
 import type { Cycle } from '@/api/cycles';
 import { CoachMark, type TargetRect } from '@/features/onboarding/CoachMark';
 import { CYCLE_TOUR_TOTAL, measureRef } from '@/features/onboarding/CycleSetupTour';
-import { useOnboardingFlag } from '@/features/onboarding/useOnboardingFlag';
 
 type FormSection = 'basics' | 'contributions' | 'lending' | 'leaving';
 // Steps 2–6 of the Organizer cycle-setup tour (step 1 is on the dashboard, 7 is Activate).
@@ -31,7 +30,7 @@ const FORM_TOUR: { key: FormSection | 'create'; title: string; body: string }[] 
   { key: 'contributions', title: 'Contributions', body: 'Amount each head pays monthly, the due day, and the late fee.' },
   { key: 'lending', title: 'Lending', body: 'Loan interest, minimum amount and late penalty. Optional.' },
   { key: 'leaving', title: 'Leaving early', body: 'Penalty if a member leaves mid-cycle. Optional.' },
-  { key: 'create', title: 'Create the cycle', body: 'Once name, start date and amount are filled in, tap here.' },
+  { key: 'create', title: 'Create the cycle', body: 'Fill in name, start date and amount, then tap here. Your first cycle starts right away.' },
 ];
 
 function Label({ children }: { children: string }) {
@@ -151,21 +150,11 @@ export default function ConfigureCycle() {
     leaving: useRef<View>(null),
   };
   const createBtnRef = useRef<View>(null);
-  const activateBtnRef = useRef<View>(null);
   const [tourIdx, setTourIdx] = useState<number | null>(null);
   const [tourTarget, setTourTarget] = useState<TargetRect | null>(null);
   const tourStarted = useRef(false);
-  const activateTour = useOnboardingFlag('cycle-activate');
-  // Only for the Organizer's very first cycle; one-shot (marked seen on start).
-  const [activateActive, setActivateActive] = useState(false);
-  useEffect(() => {
-    if (activateActive || !isOrganizer || tourIdx !== null || activateTour.seen !== false) return;
-    if (primaryCycle?.status === 'draft' && allCycles.length === 1) {
-      setActivateActive(true);
-      activateTour.markSeen();
-    }
-  }, [activateActive, isOrganizer, tourIdx, activateTour.seen, primaryCycle?.status, allCycles.length]);
-  const showActivateTour = activateActive && tourIdx === null && primaryCycle?.status === 'draft';
+  // No "Activate" step: a group's first cycle is created already active
+  // (cycles.service createCycle), so creating it is the tour's last step.
 
   useEffect(() => {
     if (tour === '1' && isOrganizer && !tourStarted.current && !cycles.loading && allCycles.length === 0) {
@@ -188,14 +177,6 @@ export default function ConfigureCycle() {
     const t = setTimeout(() => measureRef(sectionRefs[key], setTourTarget), 400);
     return () => clearTimeout(t);
   }, [tourIdx]);
-
-  useEffect(() => {
-    if (!showActivateTour) return;
-    setTourTarget(null);
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
-    const t = setTimeout(() => measureRef(activateBtnRef, setTourTarget), 400);
-    return () => clearTimeout(t);
-  }, [showActivateTour]);
 
   function nextTourStep() {
     setTourIdx((i) => (i === null || i >= FORM_TOUR.length - 1 ? null : i + 1));
@@ -347,7 +328,7 @@ export default function ConfigureCycle() {
               ) : null}
 
               {primaryCycle.status === 'draft' ? (
-                <View ref={activateBtnRef} collapsable={false} style={{ marginTop: 15 }}>
+                <View style={{ marginTop: 15 }}>
                   <Button label="Activate this cycle" onPress={() => onActivate(primaryCycle.id)} loading={activate.loading} style={{ paddingVertical: 11 }} />
                 </View>
               ) : (
@@ -535,19 +516,7 @@ export default function ConfigureCycle() {
           body={FORM_TOUR[tourIdx].body}
           nextLabel={tourIdx === FORM_TOUR.length - 1 ? 'Got it' : 'Next'}
           onNext={nextTourStep}
-          onSkip={() => { setTourIdx(null); activateTour.markSeen(); }}
-        />
-      ) : showActivateTour ? (
-        <CoachMark
-          visible
-          target={tourTarget}
-          radius={14}
-          step={tour === '1' ? CYCLE_TOUR_TOTAL : 1}
-          total={tour === '1' ? CYCLE_TOUR_TOTAL : 1}
-          title="Activate the cycle"
-          body="Starts the cycle so members can pay."
-          onTargetPress={() => { setActivateActive(false); onActivate(primaryCycle!.id); }}
-          onSkip={() => setActivateActive(false)}
+          onSkip={() => setTourIdx(null)}
         />
       ) : null}
 

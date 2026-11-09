@@ -40,6 +40,13 @@ const IN_REVIEW: LoanPayment['status'][] = ['submitted', 'confirmed'];
 const EPS = 0.01;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/** "1st payment", "2nd payment", "3rd payment", "11th payment"… */
+export function paymentLabel(no: number): string {
+  const tens = no % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[no % 10] ?? 'th';
+  return `${no}${suffix} payment`;
+}
+
 export const monthKeyOf = (d: Date) => d.getFullYear() * 12 + d.getMonth();
 export const dateOfMonthKey = (k: number) => new Date(Math.floor(k / 12), k % 12, 1);
 const dayOnly = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());

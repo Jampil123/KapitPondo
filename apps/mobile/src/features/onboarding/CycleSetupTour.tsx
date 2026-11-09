@@ -7,10 +7,10 @@ import { useOnboardingFlag } from './useOnboardingFlag';
 
 /**
  * Organizer onboarding, after a group is created: dashboard → Configure Cycle
- * → each form section → Create cycle → Activate. Step 1 lives on the
+ * → each form section → Create cycle (a group's first cycle starts active). Step 1 lives on the
  * dashboard; the rest run on cycles/configure (opened with `tour=1`).
  */
-export const CYCLE_TOUR_TOTAL = 7;
+export const CYCLE_TOUR_TOTAL = 6;
 
 export function measureRef(ref: React.RefObject<View | null>, cb: (r: TargetRect) => void) {
   ref.current?.measureInWindow((x, y, width, height) => cb({ x, y, width, height }));
