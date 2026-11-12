@@ -10,7 +10,7 @@
     "loadtest:live": "node scripts/load-test-50.js all --verbose"
   },
   "engines": {
-    "node": ">=20"
+    "node": "22.x"
   },
   "keywords": [],
   "author": "",
