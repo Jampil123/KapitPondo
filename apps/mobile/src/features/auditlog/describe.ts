@@ -100,6 +100,8 @@ export function describe(e: AuditLogEntry): { title: string; from?: string; to?:
       return e.action === 'verified'
         ? { title: 'Verified the year-end distribution', from: 'Preview', to: `Verified · ${fmtValue(a.total_amount)}`, toGood: true }
         : { title: 'Finalized the year-end distribution', from: 'Verified', to: `Finalized · ${fmtValue(a.total_amount)}`, toGood: true };
+    case 'distribution_payout':
+      return { title: `Released a year-end payout${a.member ? ` to ${a.member}` : ''}`, from: 'To release', to: `Released · ${fmtValue(a.amount)}`, toGood: true };
     case 'penalty':
       return e.action === 'paid'
         ? { title: 'Collected a late penalty', from: 'Pending', to: `Paid · ${fmtValue(a.amount)}`, toGood: true }

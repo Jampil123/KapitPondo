@@ -5,6 +5,7 @@ const requireGroupRole = require('../../middleware/requireGroupRole');
 const service = require('./distributions.service');
 const { logAudit } = require('../../lib/auditLog');
 const officers = require('../../lib/officers');
+const { notify } = require('../../lib/notifications');
 
 // Set a member's OWN head count — self-service (member and officers alike),
 // not an owner-configures-everyone action. Affects their own distribution
@@ -288,8 +289,8 @@ router.get(
   }
 );
 
-// Finalize a VERIFIED distribution (owner only) — posts payouts, fund -> 0.
-// Requires an Auditor to have verified it first (see /verify above).
+// Organizer approves a VERIFIED distribution. Deductions settle now; the
+// Treasurer then releases each payout (below), taking the fund down to 0.
 router.post(
   '/groups/:groupId/distributions/:id/finalize',
   requireAuth,
@@ -309,7 +310,12 @@ router.post(
         action: 'finalized', entityType: 'distribution', entityId: req.params.id,
         before: { status: 'verified' }, after: { status: 'finalized', total_amount: distribution.total_amount },
       });
-      res.json({ message: 'Distribution finalized; fund balance is now 0', distribution: finalized });
+      await officers.notifyRole({
+        groupId: req.params.groupId, role: 'treasurer', skip: [req.member.id],
+        type: 'distribution.to_release', title: 'Year-end payouts ready to release',
+        message: `The Organizer approved the ${distribution.period} distribution. Release each member's payout from Year-End Distribution.`,
+      });
+      res.json({ message: "Distribution approved — the Treasurer releases each member's payout next", distribution: finalized });
     } catch (err) {
       if (err.message && err.message.includes('Fund changed since preview')) {
         return res.status(409).json({ error: "The fund or a member's balances changed since the preview. Ask the Treasurer to prepare it again." });
@@ -317,6 +323,53 @@ router.post(
       if (err.message && (err.message.includes('not verified') || err.message.includes('old formula'))) {
         return res.status(409).json({ error: err.message });
       }
+      next(err);
+    }
+  }
+);
+
+// Treasurer releases one member's approved payout; it leaves the fund now.
+router.post(
+  '/groups/:groupId/distributions/:id/allocations/:allocationId/release',
+  requireAuth,
+  requireGroupRole(['treasurer']),
+  async (req, res, next) => {
+    try {
+      const distribution = await service.getDistribution(req.params.id);
+      if (distribution.group_id !== req.params.groupId) {
+        return res.status(400).json({ error: 'Distribution does not belong to this group' });
+      }
+      const allocation = await service.getAllocation(req.params.allocationId);
+      if (!allocation || allocation.distribution_id !== distribution.id) {
+        return res.status(404).json({ error: 'Payout not found in this distribution' });
+      }
+      const released = await service.releasePayout({ allocationId: allocation.id, releasedBy: req.member.id });
+      const amount = Number(released.amount) > 0 ? Number(released.amount) : 0;
+      const name = allocation.memberships?.members?.full_name ?? 'a member';
+      await logAudit({
+        groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,
+        action: 'released', entityType: 'distribution_payout', entityId: allocation.id,
+        before: { released: false }, after: { released: true, amount, member: name, period: distribution.period },
+      });
+      const memberId = allocation.memberships?.member_id;
+      if (memberId && memberId !== req.member.id) {
+        await notify({
+          memberId, groupId: req.params.groupId, type: 'distribution.released',
+          title: 'Year-end payout released',
+          message: `The Treasurer released your ${distribution.period} year-end payout of ₱${amount.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+        });
+      }
+      const remaining = await service.countUnreleased(distribution.id);
+      if (remaining === 0) {
+        await officers.notifyRole({
+          groupId: req.params.groupId, role: 'owner', skip: [req.member.id],
+          type: 'distribution.all_released', title: 'All year-end payouts released',
+          message: `Every ${distribution.period} payout has been released. You can close the cycle now.`,
+        });
+      }
+      res.json({ message: 'Payout released', allocation: released, remaining });
+    } catch (err) {
+      if (err.status === 409) return res.status(409).json({ error: err.message });
       next(err);
     }
   }

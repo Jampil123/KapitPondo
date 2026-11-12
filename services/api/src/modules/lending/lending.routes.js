@@ -31,6 +31,14 @@ async function borrowerOf(membershipId) {
 // Apply for a loan — member supplies amount, term, purpose (NOT the rate).
 // Verified members only (TC-035) — the mobile UI already gated this
 // client-side, but nothing stopped a direct API call before.
+
+// Year-end payouts approved but not released are the members' money, not the fund's to lend.
+async function heldForPayouts(groupId, amount) {
+  const free = await service.availableCash(groupId);
+  if (free + 0.005 >= Number(amount)) return null;
+  return `Only ${peso(Math.max(free, 0))} can be lent right now — the rest is held for year-end payouts the Treasurer hasn't released yet.`;
+}
+
 router.post(
   '/groups/:groupId/loans',
   requireAuth,
@@ -199,6 +207,8 @@ router.post(
       if (req.membership.role !== decider) {
         return res.status(403).json({ error: `Only the ${officers.ROLE_LABEL[decider]} can decide on this loan` });
       }
+      const held = await heldForPayouts(req.params.groupId, approved_principal ?? loan.principal);
+      if (held) return res.status(409).json({ error: held });
       const approvedLoan = await service.approveLoan({
         loanId: req.params.id,
         approverId: req.member.id,
@@ -277,6 +287,8 @@ router.post(
       if (loan.group_id !== req.params.groupId) {
         return res.status(400).json({ error: 'Loan does not belong to this group' });
       }
+      const held = await heldForPayouts(req.params.groupId, loan.approved_principal ?? loan.principal);
+      if (held) return res.status(409).json({ error: held });
       await service.disburseLoan({ loanId: req.params.id, disburserId: req.member.id });
       await logAudit({
         groupId: req.params.groupId, actorId: req.member.id, actorRole: req.membership.role,

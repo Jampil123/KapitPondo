@@ -2,6 +2,7 @@
 // KapitPondo — Lending service (FINAL)
 // Talks to Supabase; the money-critical operations call SQL functions.
 
+const { unreleasedPayouts } = require('../distribution/distributions.service');
 const supabase = require('../../config/supabase');
 const { notify } = require('../../lib/notifications');
 const { withSignedProof } = require('../../lib/proofUrl');
@@ -123,10 +124,14 @@ async function getLoanPayments(loanId) {
   return withSignedProof(data);
 }
 
+// Cash free to lend: year-end payouts approved but not released yet stay held for their members.
 async function availableCash(groupId) {
-  const { data, error } = await supabase.rpc('group_available_cash', { p_group_id: groupId });
+  const [{ data, error }, held] = await Promise.all([
+    supabase.rpc('group_available_cash', { p_group_id: groupId }),
+    unreleasedPayouts(groupId),
+  ]);
   if (error) throw error;
-  return data;
+  return Math.round((Number(data ?? 0) - held) * 100) / 100;
 }
 
 // TC-014 / TC-034: what the Owner is meant to "review" before deciding — and

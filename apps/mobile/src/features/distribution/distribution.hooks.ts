@@ -30,6 +30,7 @@ import {
   returnDistribution,
   finalizeDistribution,
   cancelDistribution,
+  releasePayout,
   setHeads,
   getHeadNames,
   setHeadNames,
@@ -121,6 +122,11 @@ export function useUnverifyDistribution(groupId: string) {
 
 export function useReturnDistribution(groupId: string) {
   return useAction((id: string, reason: string) => returnDistribution(groupId, id, reason));
+}
+
+/** release(distributionId, allocationId) — Treasurer, after the Organizer approves. */
+export function useReleasePayout(groupId: string) {
+  return useAction((distributionId: string, allocationId: string) => releasePayout(groupId, distributionId, allocationId));
 }
 
 export function useCancelDistribution(groupId: string) {

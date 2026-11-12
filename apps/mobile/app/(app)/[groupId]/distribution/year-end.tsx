@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
-import { View, ScrollView, ActivityIndicator } from 'react-native';
+import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Check, AlertTriangle, Lock, CalendarCheck } from 'lucide-react-native';
+import { Check, AlertTriangle, Lock, CalendarCheck, HandCoins } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { Button } from '@/components/ui/Button';
@@ -21,7 +21,7 @@ import { useSummary } from '@/features/reporting/reporting.hooks';
 import { usePenalties } from '@/features/penalties/penalties.hooks';
 import {
   useDistributions, useDistribution, usePreviewDistribution, useVerifyDistribution, useUnverifyDistribution, useReturnDistribution, useFinalizeDistribution, useCancelDistribution,
-  useSubmitDistribution, useDistributionReadiness, useLedgerCheck, useDistributionEstimate,
+  useSubmitDistribution, useDistributionReadiness, useLedgerCheck, useDistributionEstimate, useReleasePayout,
 } from '@/features/distribution/distribution.hooks';
 import { useActiveCycle } from '@/features/cycles/cycles.hooks';
 import type { Distribution, LedgerCheck } from '@/api/distribution';
@@ -214,7 +214,6 @@ export default function YearEnd() {
   const estimate = useDistributionEstimate(groupId!, showEstimate);
   const router = useRouter();
   const [confirmFinalize, setConfirmFinalize] = useState(false);
-  const [promptClose, setPromptClose] = useState(false);
 
   const cashNow = Number(summary.data?.available_cash ?? 0);
   const cashAtPreview = current ? Number(current.total_amount) : 0;
@@ -224,6 +223,31 @@ export default function YearEnd() {
 
   const pendingPenaltyCount = pendingPenalties.data?.length ?? 0;
   const totalHeads = allocations.reduce((s, a) => s + (a.memberships?.heads ?? 0), 0);
+
+  // After the Organizer approves, the Treasurer releases each payout; the fund drops with each one.
+  const release = useReleasePayout(groupId!);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [confirmRelease, setConfirmRelease] = useState(false);
+  const unreleased = finalized ? allocations.filter((a) => !a.released_at) : [];
+  const releasedCount = allocations.length - unreleased.length;
+  const leftToRelease = unreleased.reduce((s, a) => s + Math.max(Number(a.amount), 0), 0);
+  const allReleased = finalized && allocations.length > 0 && unreleased.length === 0;
+  const canRelease = role === 'treasurer' && finalized && !!record && unreleased.length > 0;
+  const selected = unreleased.find((a) => a.id === selectedId) ?? null;
+  const selectedName = selected?.memberships?.members?.full_name ?? 'this member';
+
+  async function onRelease() {
+    if (!current || !selected) return;
+    const res = await release.run(current.id, selected.id);
+    setConfirmRelease(false);
+    if (res) {
+      toast(res.remaining === 0 ? 'All payouts released' : `Released ${formatPeso(selected.amount)} to ${selectedName}`);
+      setSelectedId(null);
+      detail.refetch(); summary.refetch();
+    } else if (release.error) {
+      Alert.alert('Could not release', release.error.message);
+    }
+  }
 
   async function onPreview() {
     const res = await preview.run();
@@ -304,7 +328,7 @@ export default function YearEnd() {
     setConfirmFinalize(false);
     if (res) {
       distributions.refetch(); detail.refetch();
-      setPromptClose(true);
+      toast("Approved — the Treasurer releases each member's payout next");
     } else if (finalize.error) {
       ledger.refetch();
       Alert.alert('Could not finalize', finalize.error.message);
@@ -314,13 +338,13 @@ export default function YearEnd() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={[]}>
       <BandHeader title="Year-End Distribution" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: (canCancel && role === 'owner') || role === 'auditor' || (draft && isTreasurer) ? 190 : 130, gap: 4 }} keyboardShouldPersistTaps="handled">
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: (canCancel && role === 'owner') || role === 'auditor' || (draft && isTreasurer) || canRelease ? 190 : 130, gap: 4 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Summary ---------------- */}
         <View style={{ paddingHorizontal: 2 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
             <Text variant="overline" color="muted" style={{ paddingTop: 4 }}>
-              {record ? (finalized ? 'Distributed' : 'To be distributed') : showEstimate ? 'Estimate — not prepared yet' : 'No distribution yet'}
+              {record ? (allReleased ? 'Distributed' : finalized ? 'Approved — releasing payouts' : 'To be distributed') : showEstimate ? 'Estimate — not prepared yet' : 'No distribution yet'}
             </Text>
             {record ? <StatusPill status={record.status} /> : null}
           </View>
@@ -333,7 +357,10 @@ export default function YearEnd() {
           )}
           <Text variant="body" color="secondary" style={{ marginTop: 8, fontSize: 12.5, lineHeight: 18 }}>
             {record
-              ? `${allocations.length} member${allocations.length === 1 ? '' : 's'} · ${totalHeads} head${totalHeads === 1 ? '' : 's'} · ${finalized ? `paid ${shortDate(current.finalized_at)}` : 'nothing is paid until the Organizer finalizes'}`
+              ? `${allocations.length} member${allocations.length === 1 ? '' : 's'} · ${totalHeads} head${totalHeads === 1 ? '' : 's'} · ${
+                allReleased ? 'all payouts released'
+                  : finalized ? `${releasedCount} of ${allocations.length} released · ${formatPeso(leftToRelease)} left to release`
+                    : 'nothing is paid until the Organizer finalizes'}`
               : showEstimate
                 ? `${activeCycle?.name ?? 'This cycle'} · based on balances right now. Nothing is saved until the Treasurer prepares the preview.`
                 : `${formatPeso(cashNow)} available cash, split by heads once the Treasurer builds a preview`}
@@ -439,7 +466,19 @@ export default function YearEnd() {
               { state: draft || returned ? 'now' : 'done', label: 'Treasurer prepares preview', sub: draft ? 'Not submitted yet' : returned ? 'Returned — prepare again' : `Submitted ${shortDate(current.submitted_at ?? current.created_at)}` },
               { state: verified || finalized ? 'done' : draft || returned ? 'wait' : 'now', label: 'Auditor verifies', sub: verified || finalized ? `Verified ${shortDate(current.verified_at)}` : undefined },
               { state: finalized ? 'done' : verified ? 'now' : 'wait', label: 'Organizer finalizes', sub: finalized ? `Finalized ${shortDateTime(current.finalized_at)}` : undefined },
+              { state: allReleased ? 'done' : finalized ? 'now' : 'wait', label: 'Treasurer releases', sub: finalized ? `${releasedCount} of ${allocations.length} released` : undefined },
             ]} />
+
+            {allReleased && role === 'owner' && finalizedThisCycle && activeCycle ? (
+              <View style={{ marginTop: 16 }}>
+                <Button
+                  label="Close the cycle"
+                  variant="ghost"
+                  leading={<CalendarCheck size={18} color={semantic.brand} />}
+                  onPress={() => router.push({ pathname: '/(app)/[groupId]/cycles/configure' as any, params: { groupId } })}
+                />
+              </View>
+            ) : null}
 
             {/* ---------------- Auditor's notes ---------------- */}
             {(verified || finalized) && current.verify_notes ? (
@@ -479,8 +518,12 @@ export default function YearEnd() {
 
             {/* ---------------- Member payouts ---------------- */}
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 22, marginBottom: 10 }}>
-              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>What each member receives</Text>
-              <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>{allocations.length} members</Text>
+              <Text style={{ fontSize: 13, fontFamily: 'Poppins_600SemiBold', color: semantic.textPrimary }}>
+                {canRelease ? 'Select a member to release' : 'What each member receives'}
+              </Text>
+              <Text variant="caption" color="secondary" style={{ fontFamily: 'Poppins_600SemiBold' }}>
+                {finalized ? `${releasedCount}/${allocations.length} released` : `${allocations.length} members`}
+              </Text>
             </View>
             <View>
               {detail.loading ? (
@@ -495,8 +538,19 @@ export default function YearEnd() {
                   const math = a.capital != null
                     ? `${formatPeso(a.capital)} + ${formatPeso(a.share ?? 0)}${deduct > 0 ? ` − ${formatPeso(deduct)}` : ''}`
                     : null;
+                  const pickable = canRelease && !a.released_at;
+                  const isSelected = selected?.id === a.id;
                   return (
-                    <View key={a.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 2, borderBottomWidth: i < allocations.length - 1 ? 1 : 0, borderColor: semantic.border }}>
+                    <Pressable
+                      key={a.id}
+                      disabled={!pickable}
+                      onPress={() => setSelectedId(isSelected ? null : a.id)}
+                      style={{
+                        flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: isSelected ? 10 : 2,
+                        borderBottomWidth: i < allocations.length - 1 ? 1 : 0, borderColor: semantic.border,
+                        backgroundColor: isSelected ? intent.info.soft : 'transparent', borderRadius: isSelected ? 14 : 0,
+                      }}
+                    >
                       <Avatar name={name} uri={a.memberships?.members?.avatar_url} size={38} />
                       <View style={{ flex: 1, minWidth: 0 }}>
                         <Text variant="label" style={{ fontSize: 13.5 }} numberOfLines={1}>{name}</Text>
@@ -505,8 +559,15 @@ export default function YearEnd() {
                           <Text variant="caption" style={{ marginTop: 1, color: intent.danger.text, fontFamily: 'Poppins_600SemiBold' }}>Differs from the ledger</Text>
                         ) : null}
                       </View>
-                      <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 15, color: semantic.dashCard }}>{formatPeso(a.amount)}</Text>
-                    </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={{ fontFamily: 'Poppins_700Bold', fontSize: 15, color: semantic.dashCard }}>{formatPeso(a.amount)}</Text>
+                        {finalized ? (
+                          <Text variant="caption" style={{ marginTop: 1, fontFamily: 'Poppins_600SemiBold', color: a.released_at ? intent.success.text : intent.warning.text }}>
+                            {a.released_at ? `Released ${shortDate(a.released_at)}` : 'To release'}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </Pressable>
                   );
                 })
               )}
@@ -540,26 +601,44 @@ export default function YearEnd() {
         </View>
       ) : null}
 
+      {canRelease ? (
+        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, paddingTop: 10, backgroundColor: semantic.background, borderTopWidth: 1, borderColor: semantic.border, gap: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+            <Text variant="caption" color="secondary" numberOfLines={1} style={{ flex: 1 }}>
+              {selected ? `${selectedName} · ${formatPeso(selected.amount)}` : 'Select a member above'}
+            </Text>
+            <Text variant="caption" color="secondary">Fund {formatPeso(cashNow)}</Text>
+          </View>
+          <Button
+            label={selected ? `Release ${formatPeso(selected.amount)}` : 'Release'}
+            leading={<HandCoins size={18} color="#fff" />}
+            onPress={() => setConfirmRelease(true)}
+            disabled={!selected}
+            loading={release.loading}
+          />
+        </View>
+      ) : null}
+
+      <ConfirmDialog
+        visible={confirmRelease && !!selected}
+        icon={HandCoins}
+        title={`Release ${formatPeso(selected?.amount ?? 0)} to ${selectedName}?`}
+        message="Hand the money over first. This records it as paid out and takes it from the fund. It can't be undone."
+        confirmLabel="Release"
+        loading={release.loading}
+        onCancel={() => setConfirmRelease(false)}
+        onConfirm={onRelease}
+      />
       <ConfirmDialog
         visible={confirmFinalize}
         icon={Lock}
         title={`Finalize the ${current?.period ?? ''} distribution?`}
-        message={`This pays out ${formatPeso(current?.total_amount ?? 0)} to ${allocations.length} member${allocations.length === 1 ? '' : 's'}, settles their deducted loans and penalties, and notifies everyone. It can't be changed after this.`}
+        message={`This approves ${formatPeso(current?.total_amount ?? 0)} for ${allocations.length} member${allocations.length === 1 ? '' : 's'} and settles their deducted loans and penalties. The money stays in the fund until the Treasurer releases each payout. It can't be changed after this.`}
         confirmLabel="Finalize"
         destructive
         loading={finalize.loading}
         onCancel={() => setConfirmFinalize(false)}
         onConfirm={onFinalize}
-      />
-      <ConfirmDialog
-        visible={promptClose}
-        icon={CalendarCheck}
-        title="Distribution finalized"
-        message="Every member was notified of their payout. Close the cycle now?"
-        confirmLabel="Close the cycle"
-        cancelLabel="Later"
-        onCancel={() => setPromptClose(false)}
-        onConfirm={() => { setPromptClose(false); router.push({ pathname: '/(app)/[groupId]/cycles/configure' as any, params: { groupId } }); }}
       />
       <ReasonPrompt
         visible={verifying}

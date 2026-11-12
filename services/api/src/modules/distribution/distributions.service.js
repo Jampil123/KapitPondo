@@ -161,8 +161,8 @@ async function getAllocations(distributionId, caller = {}) {
   return data;
 }
 
-// Finalize: posts payouts, fund goes to 0. Requires status 'verified' (see
-// migration 0028) — an Auditor must have signed off first (TC-015).
+// Organizer approval. Settles deducted loans/penalties; the payouts stay in the
+// fund until the Treasurer releases each one (migration 0078).
 async function finalizeDistribution({ distributionId, finalizedBy }) {
   const { data, error } = await supabase.rpc('finalize_distribution', {
     p_distribution_id: distributionId,
@@ -179,12 +179,55 @@ async function finalizeDistribution({ distributionId, finalizedBy }) {
       memberId,
       groupId: data.group_id,
       type: 'distribution.finalized',
-      title: 'Year-end distribution finalized',
-      message: `Your ${data.period} year-end payout of ₱${Number(alloc.amount).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} has been posted.`,
+      title: 'Year-end distribution approved',
+      message: Number(alloc.amount) > 0
+        ? `Your ${data.period} year-end payout of ${peso(alloc.amount)} was approved. The Treasurer will release it to you.`
+        : `The ${data.period} year-end distribution was approved. Your payout went to your unpaid loans and penalties.`,
     });
   }
 
   return data;
+}
+
+function peso(n) {
+  return `₱${Number(n).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function getAllocation(allocationId) {
+  const { data, error } = await supabase
+    .from('distribution_allocations')
+    .select('*, memberships!membership_id(member_id, members!member_id(full_name))')
+    .eq('id', allocationId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+// Treasurer hands one member their approved payout; it leaves the fund now.
+async function releasePayout({ allocationId, releasedBy }) {
+  const { data, error } = await supabase.rpc('release_distribution_payout', {
+    p_allocation_id: allocationId,
+    p_released_by: releasedBy,
+  });
+  if (error) throw rpcError(error);
+  return data;
+}
+
+// Approved payouts still waiting to be released — held back from loans.
+async function unreleasedPayouts(groupId) {
+  const { data, error } = await supabase.rpc('group_unreleased_payouts', { p_group_id: groupId });
+  if (error) throw error;
+  return Number(data ?? 0);
+}
+
+async function countUnreleased(distributionId) {
+  const { count, error } = await supabase
+    .from('distribution_allocations')
+    .select('id', { count: 'exact', head: true })
+    .eq('distribution_id', distributionId)
+    .is('released_at', null);
+  if (error) throw error;
+  return count ?? 0;
 }
 
 // Cancel a previewed distribution (deletes it and its allocations) so it can be re-run
@@ -336,6 +379,10 @@ module.exports = {
   getDistribution,
   getAllocations,
   finalizeDistribution,
+  getAllocation,
+  releasePayout,
+  unreleasedPayouts,
+  countUnreleased,
   cancelPreview,
   setHeads,
 };

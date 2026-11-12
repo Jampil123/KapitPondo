@@ -4,9 +4,9 @@
  * Calls the distribution module of the API (M9) — the year-end close.
  *
  * Flow: Treasurer prepares a draft -> submits it (previewed) -> VERIFY (auditor) ->
- * finalize (owner). Finalize is IMMUTABLE: it posts payout ledger entries,
- * drives the fund to 0, and the distribution can't be reopened. Finalize is
- * blocked with a 409 until an Auditor has verified the preview.
+ * finalize (owner) -> the Treasurer releases each member's payout, taking the
+ * fund to 0 (migration 0078). Finalize can't be undone, and is blocked with a
+ * 409 until an Auditor has verified the preview.
  *
  * Formula (server-side, migration 0074): payout = capital + share of net income
  * − unpaid loan − unpaid penalties. Net income is shared BY HEADS at the time of
@@ -110,7 +110,9 @@ export interface DistributionAllocation {
   share: Money | null;
   loan_deduction: Money | null;
   penalty_deduction: Money | null;
-  ledger_entry_id: string | null; // set once finalized
+  ledger_entry_id: string | null; // the payout's ledger entry, once released
+  released_at: string | null; // migration 0078 — null until the Treasurer releases it
+  released_by: string | null;
   created_at: string;
   memberships: {
     member_id: string;
@@ -194,12 +196,19 @@ export function getDistribution(groupId: string, id: string) {
 }
 
 /**
- * POST — finalize a previewed distribution (owner). Posts payouts, fund -> 0,
- * becomes immutable. Throws ApiError with status 409 if the fund changed since
+ * POST — finalize a verified distribution (owner). Settles deductions; payouts
+ * wait for the Treasurer's release. Throws ApiError with status 409 if the fund changed since
  * the preview was built — in that case, re-run the preview before finalizing.
  */
 export function finalizeDistribution(groupId: string, id: string) {
   return api.post<DistributionDetail>(`/api/groups/${groupId}/distributions/${id}/finalize`);
+}
+
+/** POST — Treasurer releases one member's approved payout; it leaves the fund now. */
+export function releasePayout(groupId: string, distributionId: string, allocationId: string) {
+  return api.post<{ message: string; allocation: DistributionAllocation; remaining: number }>(
+    `/api/groups/${groupId}/distributions/${distributionId}/allocations/${allocationId}/release`,
+  );
 }
 
 /** DELETE — discard a draft, or cancel an unverified preview so it can be re-run. */
