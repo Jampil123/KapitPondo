@@ -7,7 +7,9 @@ import { supabase } from './supabase';
 
 // When the dashboard is opened from another device on the LAN (http://<pc-ip>:5173), "localhost" would point at
 // that device, so swap it for whatever host the page itself was loaded from.
-const BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace('localhost', window.location.hostname);
+const RAW = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').trim().replace(/\/+$/, '');
+// Every admin route lives under /api; accept the bare server URL too.
+const BASE = (RAW && !RAW.endsWith('/api') ? `${RAW}/api` : RAW).replace('localhost', window.location.hostname);
 export const API_BASE = BASE;
 
 export class ApiError extends Error {
