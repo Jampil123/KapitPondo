@@ -6,7 +6,7 @@
  *   app.use('/admin', adminRouter);
  */
 const { Router } = require('express');
-const { requireSysadmin } = require('../../middleware/requireSysadmin');
+const { requireSysadmin } = require('../../middleware/requireSysAdmin');
 const verifications = require('./verifications');
 const metrics = require('./metrics');
 const audit = require('./audit');
