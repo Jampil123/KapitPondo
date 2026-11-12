@@ -6,6 +6,9 @@ import { PresenceProvider } from '@/context/PresenceContext';
 import { GroupNav } from '@/components/shared/GroupNav';
 import { activeGroupTab } from '@/components/shared/groupTabs';
 
+// A group page opened directly (web refresh, link) gets the dashboard underneath so Back works.
+export const unstable_settings = { initialRouteName: 'index' };
+
 export default function GroupLayout() {
   // Only the dashboard shows the bottom nav; Chat, Profile and More open as their own pages with a back button.
   const showNav = activeGroupTab(usePathname()) === 'home';

@@ -14,6 +14,8 @@
     "dev:api": "npm run dev --workspace=api",
     "dev:admin": "npm run dev --workspace=admin",
     "dev:mobile": "npm run dev --workspace=KapitPondo",
+    "loadtest": "npm run loadtest --workspace=api",
+    "loadtest:live": "npm run loadtest:live --workspace=api",
     "dev": "concurrently -n api,admin,mobile -c blue,green,magenta \"npm:dev:api\" \"npm:dev:admin\" \"npm:dev:mobile\""
   },
   "keywords": [],

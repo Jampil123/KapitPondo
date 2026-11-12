@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
@@ -32,7 +33,7 @@ export default function NewComplaint() {
     try {
       await fileProblemReport({ category, subject: subject.trim(), description: description.trim(), group_id: groupId });
       toast('Complaint sent.');
-      router.back();
+      goBack(router);
     } catch (e) {
       setError((e as Error).message || 'Could not send your complaint. Please try again.');
     } finally {

@@ -3,6 +3,7 @@ import { View, ScrollView, Image, ActivityIndicator, KeyboardAvoidingView, Platf
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import {
@@ -282,7 +283,7 @@ export default function Contribute() {
     rejected: 'Resubmit proof',
   };
   const title = TITLES[state];
-  const close = () => router.back();
+  const close = () => goBack(router);
 
   if (receipt) {
     return (

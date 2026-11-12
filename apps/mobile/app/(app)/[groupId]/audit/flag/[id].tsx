@@ -1,6 +1,7 @@
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Text } from '@/components/ui/Text';
 import { CloseHeader } from '@/features/payments/PaymentPage';
 import { semantic, intent, shadowToken } from '@/theme/colors';
@@ -59,7 +60,7 @@ export default function FlagDetail() {
   const { groupId, id } = useLocalSearchParams<{ groupId: string; id: string }>();
   const router = useRouter();
   const q = useFlag(groupId!, id!);
-  const close = () => router.back();
+  const close = () => goBack(router);
   const f = q.data?.flag;
 
   if (!f) {

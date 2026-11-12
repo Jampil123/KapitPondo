@@ -1,6 +1,7 @@
 import { View, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Check, X, ChevronRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
@@ -82,14 +83,14 @@ export default function LoanRequest() {
     () => (loan ? getMemberStanding(groupId!, loan.membership_id) : Promise.resolve(null)),
     [groupId, loan?.membership_id],
   );
-  const decision = useLoanDecision(groupId!, { onDecided: () => router.back() });
+  const decision = useLoanDecision(groupId!, { onDecided: () => goBack(router) });
   const roster = useQuery(() => listMembers(groupId!), [groupId]);
   const hasAuditor = (roster.data ?? []).some((m) => m.role === 'auditor');
 
   if (!loan) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Loan request" onClose={() => router.back()} />
+        <CloseHeader title="Loan request" onClose={() => goBack(router)} />
         {q.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} /> : (
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 40 }}>This loan couldn’t be found.</Text>
         )}
@@ -159,7 +160,7 @@ export default function LoanRequest() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <CloseHeader title="Loan request" onClose={() => router.back()} />
+      <CloseHeader title="Loan request" onClose={() => goBack(router)} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: canDecide ? 120 : 40 }}>
         {/* Who and how much */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import Constants from 'expo-constants';
 import { CheckCircle2, Bug, Sparkles, MessageSquare, MoreHorizontal } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -61,7 +62,7 @@ export default function SendFeedback() {
           </View>
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 32 }}>Thanks for the feedback</Text>
           <View style={{ alignSelf: 'stretch' }}>
-            <Button label="Done" onPress={() => router.back()} />
+            <Button label="Done" onPress={() => goBack(router)} />
           </View>
         </View>
       </SafeAreaView>

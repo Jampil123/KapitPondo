@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, Image, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Check, X, ScanLine, Receipt, Info } from 'lucide-react-native';
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
@@ -350,7 +351,7 @@ export default function VerifyRecord() {
   const nextKey = useRef<string | null>(null);
   const actions = useSignoffActions(groupId!, () => {
     if (nextKey.current) router.replace({ pathname: '/(app)/[groupId]/verify/[key]' as any, params: { groupId, key: nextKey.current } });
-    else { queue.refetch(); router.back(); }
+    else { queue.refetch(); goBack(router); }
   });
   const [rejecting, setRejecting] = useState(false);
   const [viewing, setViewing] = useState(false);
@@ -376,7 +377,7 @@ export default function VerifyRecord() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
         {/* No title while loading — it would flash before the real one ("Contribution"). */}
-        <CloseHeader title={queue.loading ? undefined : 'Record'} onClose={() => router.back()} />
+        <CloseHeader title={queue.loading ? undefined : 'Record'} onClose={() => goBack(router)} />
         {queue.loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} /> : (
           <Text variant="body" color="secondary" style={{ textAlign: 'center', marginTop: 40, paddingHorizontal: 24 }}>This one’s already been handled, or it isn’t yours to sign off.</Text>
         )}
@@ -428,7 +429,7 @@ export default function VerifyRecord() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <CloseHeader title={i.label} onClose={() => router.back()} />
+      <CloseHeader title={i.label} onClose={() => goBack(router)} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 120 }}>
         <Text style={{ fontSize: 13, fontFamily: 'Poppins_500Medium', color: semantic.textSecondary }}>{i.name}</Text>
         {i.amount !== null ? <Text style={{ fontSize: 32, lineHeight: 40, fontFamily: 'Poppins_700Bold', color: semantic.textPrimary, letterSpacing: -0.8 }}>{formatPeso(i.amount)}</Text> : null}

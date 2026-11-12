@@ -2,6 +2,7 @@ import { ReactNode, useMemo, useState } from 'react';
 import { View, Pressable, RefreshControl, Animated, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -108,7 +109,7 @@ export function DashboardShell({
               backgroundColor: semantic.surface,
             }}
           >
-            <Pressable onPress={() => router.back()} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable onPress={() => goBack(router)} hitSlop={8} style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}>
               <ChevronLeft size={24} color={semantic.textPrimary} />
             </Pressable>
             <View style={{ flex: 1 }}>

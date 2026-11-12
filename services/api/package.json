@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "nodemon src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "loadtest": "node scripts/load-test-50.js all",
+    "loadtest:live": "node scripts/load-test-50.js all --verbose"
   },
   "keywords": [],
   "author": "",

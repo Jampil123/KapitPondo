@@ -3,6 +3,7 @@ import { View, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } f
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Coins, Repeat, Clock3 } from 'lucide-react-native';
@@ -137,7 +138,7 @@ export default function Repay() {
     }
   }
 
-  const close = () => router.back();
+  const close = () => goBack(router);
 
   if (receipt) {
     return (

@@ -1,6 +1,7 @@
 import { View, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Check, X, Clock3, ArrowRight } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { CloseHeader } from '@/features/payments/PaymentPage';
@@ -44,7 +45,7 @@ function dateTime(iso: string) {
 export function AuditEntryDetail() {
   const { groupId, id, at } = useLocalSearchParams<{ groupId: string; id: string; at?: string }>();
   const router = useRouter();
-  const close = () => router.back();
+  const close = () => goBack(router);
   // No single-entry endpoint, so read the page that ends at this entry's timestamp and pick it out.
   const before = at ? new Date(new Date(at).getTime() + 1).toISOString() : undefined;
   const page = useAuditLog(groupId!, { before, limit: before ? 10 : 100 });

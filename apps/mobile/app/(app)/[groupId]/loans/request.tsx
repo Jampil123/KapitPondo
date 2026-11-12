@@ -4,6 +4,7 @@ import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Wallet, ShieldCheck } from 'lucide-react-native';
 import { VERIFY_META, verifyDestination } from '@/constants/verificationStatus';
 import { Text } from '@/components/ui/Text';
@@ -146,7 +147,7 @@ export default function RequestLoan() {
     const vtone = intent[vmeta.tone];
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
-        <CloseHeader title="Request a loan" onClose={() => router.back()} />
+        <CloseHeader title="Request a loan" onClose={() => goBack(router)} />
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 }}>
           <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: vtone.soft, alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
             <ShieldCheck size={42} color={vtone.text} />
@@ -168,7 +169,7 @@ export default function RequestLoan() {
         </View>
         <View style={{ paddingHorizontal: 20, paddingBottom: 12, gap: 8 }}>
           {vmeta.btn ? <Button label={vmeta.btn} onPress={() => router.push(verifyDestination(vstatus) as any)} /> : null}
-          <Button label="Not now" variant="ghost" onPress={() => router.back()} />
+          <Button label="Not now" variant="ghost" onPress={() => goBack(router)} />
         </View>
       </SafeAreaView>
     );
@@ -178,7 +179,7 @@ export default function RequestLoan() {
   if (!eligibility.data && !eligibility.error) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Request a loan" onClose={() => router.back()} />
+        <CloseHeader title="Request a loan" onClose={() => goBack(router)} />
         <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} />
       </SafeAreaView>
     );
@@ -188,7 +189,7 @@ export default function RequestLoan() {
   if (eligibility.data && !eligibility.data.eligible) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-        <CloseHeader title="Request a loan" onClose={() => router.back()} />
+        <CloseHeader title="Request a loan" onClose={() => goBack(router)} />
         <View style={{ padding: 16, gap: 14 }}>
           <View style={[{ backgroundColor: semantic.surface, borderRadius: 16, padding: 20, alignItems: 'center' }, CARD_SHADOW]}>
             <Text variant="label">You can&apos;t request a loan yet</Text>
@@ -201,7 +202,7 @@ export default function RequestLoan() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <CloseHeader title="Request a loan" onClose={() => router.back()} />
+      <CloseHeader title="Request a loan" onClose={() => goBack(router)} />
       <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
 
         {/* ---------------- Which head ---------------- */}

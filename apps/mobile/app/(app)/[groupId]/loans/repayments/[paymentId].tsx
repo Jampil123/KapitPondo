@@ -1,6 +1,7 @@
 import { View, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Repeat } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, intent } from '@/theme/colors';
@@ -38,7 +39,7 @@ function Proof({ path }: { path: string | null }) {
 export default function RepaymentDetail() {
   const { groupId, paymentId } = useLocalSearchParams<{ groupId: string; paymentId: string }>();
   const router = useRouter();
-  const close = () => router.back();
+  const close = () => goBack(router);
   const repayments = useRepayments(groupId!);
   const p = repayments.data?.find((x) => x.id === paymentId) ?? null;
 

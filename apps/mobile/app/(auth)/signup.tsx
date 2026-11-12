@@ -3,6 +3,7 @@ import { View, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Pressable } from 'react-native';
 import { User, Phone, Lock, Mail, ChevronLeft } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -126,7 +127,7 @@ export default function SignUp() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }}>
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => goBack(router)}
         hitSlop={8}
         style={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, alignSelf: 'flex-start' }}
       >

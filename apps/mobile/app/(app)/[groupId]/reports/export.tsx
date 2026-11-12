@@ -106,7 +106,7 @@ export default function ReportsExport() {
       if (type === 'financial' && financial.data) {
         await exportFinancialReport({ groupName, period, data: financial.data });
       } else if (type === 'audit' && audit.data) {
-        await exportAuditReport({ groupName, period, data: audit.data, include, format: 'csv' });
+        await exportAuditReport({ groupName, period, data: audit.data, include });
         if (audit.data.truncated) Alert.alert('Report shortened', 'Only the most recent 5,000 audit entries fit in one export.');
       }
     } catch (e) {
@@ -174,11 +174,10 @@ export default function ReportsExport() {
         )}
 
         {loadError ? <Text variant="caption" style={{ color: intent.danger.text, marginTop: 10 }}>{loadError.message}</Text> : null}
-        <Text variant="caption" color="secondary" style={{ marginTop: 14, marginLeft: 2 }}>Exports as a CSV file that opens in Excel or Google Sheets.</Text>
       </ScrollView>
 
       <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12 }}>
-        <Button label="Export report" onPress={onExport} loading={exporting} disabled={!ready || exporting} />
+        <Button label="Export PDF" onPress={onExport} loading={exporting} disabled={!ready || exporting} />
       </View>
     </SafeAreaView>
   );

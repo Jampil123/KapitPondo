@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { ShieldCheck } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Field } from '@/components/ui/Field';
@@ -44,12 +45,12 @@ export default function NewAuditFinding() {
       return;
     }
     toast('Finding submitted to the Organizer');
-    router.back();
+    goBack(router);
   }
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <CloseHeader title="New audit finding" onClose={() => router.back()} />
+      <CloseHeader title="New audit finding" onClose={() => goBack(router)} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} keyboardShouldPersistTaps="handled">
           <Field

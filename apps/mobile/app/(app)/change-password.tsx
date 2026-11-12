@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { CheckCircle2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -72,7 +73,7 @@ export default function ChangePassword() {
           </View>
           <Text variant="h1" style={{ fontSize: 22, textAlign: 'center', marginBottom: 32 }}>Password Updated</Text>
           <View style={{ alignSelf: 'stretch' }}>
-            <Button label="Done" onPress={() => router.back()} />
+            <Button label="Done" onPress={() => goBack(router)} />
           </View>
         </View>
       </SafeAreaView>

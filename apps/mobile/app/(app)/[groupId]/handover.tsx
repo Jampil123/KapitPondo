@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Crown, Check, Clock3, Users, Coins, Undo2, CalendarClock } from 'lucide-react-native';
 import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
@@ -142,7 +143,7 @@ export default function Handover() {
     }
     if (!h) return;
     if (confirming === 'cancel') return run(() => cancelHandover(groupId!, h.id), 'Request cancelled', () => { current.refetch(); opts.refetch(); });
-    if (confirming === 'decline') return run(() => declineHandover(groupId!, h.id), 'Request declined', () => router.back());
+    if (confirming === 'decline') return run(() => declineHandover(groupId!, h.id), 'Request declined', () => goBack(router));
     if (confirming === 'accept') {
       return run(() => acceptHandover(groupId!, h.id), 'You are now the Organizer', async () => {
         await refreshGroups();
@@ -164,7 +165,7 @@ export default function Handover() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top']}>
-      <CloseHeader title={incoming ? 'Organizer request' : 'Hand over group'} onClose={() => router.back()} />
+      <CloseHeader title={incoming ? 'Organizer request' : 'Hand over group'} onClose={() => goBack(router)} />
       {loading ? <ActivityIndicator color={semantic.brand} style={{ marginTop: 40 }} /> : (
         <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 140 }} keyboardShouldPersistTaps="handled">
           {incoming && h ? (

@@ -2,10 +2,8 @@
  * features/auditlog/auditReport.ts
  * ----------------------------------------------------------------------------
  * The Auditor's exported report for a period: verified records, rejected
- * records with reasons, flags, findings and loan decision audits — as a CSV.
- * PDF is switched off for now: it needs expo-print, a native module the
- * current dev client doesn't include (see PDF_EXPORT_ENABLED). The
- * Export screen loads the sections once (useAuditReport) to show the counts,
+ * records with reasons, flags, findings and loan decision audits — as a PDF
+ * (lib/simplePdf, pure JS via pdf-lib). The Export screen loads the sections once (useAuditReport) to show the counts,
  * then hands the same sections to exportAuditReport.
  */
 import { useCallback, useMemo } from 'react';
@@ -15,14 +13,11 @@ import { listFindings, type AuditFinding } from '../../api/findings';
 import { listFlags, type AuditFlag } from '../../api/flags';
 import { listLoanAudits, type LoanAudit } from '../../api/loanAudits';
 import { formatPeso } from '../../lib/money';
-import { shareCsv } from '../../lib/csv';
+import { buildSimplePdf, sharePdf, pdfFilename } from '../../lib/simplePdf';
 import { describe, ROLE_LABEL, isPostingSignoff } from './describe';
 import { recordLabel } from '../flags/flagStatus';
 
 export type ReportSection = 'verified' | 'rejected' | 'flags' | 'findings' | 'loans';
-export type ReportFormat = 'pdf' | 'csv';
-/** Flip on after adding expo-print and rebuilding the dev client. */
-export const PDF_EXPORT_ENABLED = false;
 /** Local ISO dates, both inclusive. */
 export type ReportPeriod = { label: string; from: string; to: string };
 
@@ -94,7 +89,7 @@ export function useAuditReport(groupId: string, period: ReportPeriod) {
 }
 
 /* ---------------- One table per section ---------------- */
-type Table = { title: string; head: string[]; rows: string[][] };
+type Table = { title: string; head: string[]; rows: string[][]; widths: number[] };
 
 function tables(data: AuditReportData, include: ReportSection[]): Table[] {
   const who = (e: AuditLogEntry) => `${e.actor?.full_name ?? ''}${e.actor_role ? ` (${ROLE_LABEL[e.actor_role] ?? e.actor_role})` : ''}`;
@@ -102,11 +97,13 @@ function tables(data: AuditReportData, include: ReportSection[]): Table[] {
     verified: {
       title: SECTION_LABEL.verified,
       head: ['Date', 'Record', 'Verified by'],
+      widths: [1.2, 2.6, 1.6],
       rows: data.verified.map((e) => [stamp(e.created_at), describe(e).title, who(e)]),
     },
     rejected: {
       title: SECTION_LABEL.rejected,
       head: ['Date', 'Record', 'Rejected by', 'Reason'],
+      widths: [1.2, 2, 1.4, 2],
       rows: data.rejected.map((e) => {
         const d = describe(e);
         return [stamp(e.created_at), d.title, who(e), d.reason ?? ''];
@@ -115,16 +112,19 @@ function tables(data: AuditReportData, include: ReportSection[]): Table[] {
     flags: {
       title: SECTION_LABEL.flags,
       head: ['Flag', 'Raised', 'Record', 'Reason', 'Status', 'Note'],
+      widths: [0.9, 1, 1.6, 1.8, 0.9, 1.8],
       rows: data.flags.map((f) => [f.ref, day(f.created_at), recordLabel(f), f.reason, f.status, f.resolution_note ?? f.note ?? '']),
     },
     findings: {
       title: SECTION_LABEL.findings,
       head: ['Finding', 'Submitted', 'Title', 'What was found', 'Recommendation', 'Status', 'Organizer note'],
+      widths: [0.9, 1, 1.3, 1.8, 1.8, 0.9, 1.5],
       rows: data.findings.map((f) => [f.ref, day(f.created_at), f.title, f.details ?? '', f.recommendation ?? '', f.status, f.resolution_note ?? '']),
     },
     loans: {
       title: SECTION_LABEL.loans,
       head: ['Loan', 'Borrower', 'Approved', 'Amount', 'Checks', 'Failed checks'],
+      widths: [0.9, 1.4, 1, 1.1, 1, 2.4],
       rows: data.loans.map((l) => [
         l.ref, l.borrower ?? '', day(l.approved_at), formatPeso(l.approved_principal ?? l.principal),
         l.failed ? `${l.failed} failed` : 'All passed',
@@ -135,22 +135,21 @@ function tables(data: AuditReportData, include: ReportSection[]): Table[] {
   return include.map((k) => all[k]);
 }
 
-/** Builds the report from already-loaded sections and opens the share sheet. */
-export async function exportAuditReport({ groupName, period, data, include, format }: {
+/** Builds the report PDF from already-loaded sections and opens the share sheet. */
+export async function exportAuditReport({ groupName, period, data, include }: {
   groupName: string;
   period: ReportPeriod;
   data: AuditReportData;
   include: ReportSection[];
-  format: ReportFormat;
 }) {
-  if (format === 'pdf' && !PDF_EXPORT_ENABLED) throw new Error('PDF export isn’t available yet — choose CSV.');
-  const base = `${groupName.replace(/\s+/g, '-')}-audit-report-${period.from}-to-${period.to}`;
-
-  const rows: string[][] = [
-    ['Audit report', groupName],
-    ['Period', `${period.label} (${period.from} to ${period.to})`],
-    ['Generated', stamp(new Date().toISOString())],
-  ];
-  tables(data, include).forEach((t) => rows.push([], [t.title.toUpperCase(), String(t.rows.length)], t.head, ...t.rows));
-  await shareCsv(`${base}.csv`, rows);
+  const bytes = await buildSimplePdf({
+    title: 'Audit report',
+    subtitle: groupName,
+    meta: [`${period.label} (${period.from} to ${period.to})`],
+    blocks: tables(data, include).flatMap((t) => [
+      { kind: 'heading' as const, text: t.title, count: t.rows.length },
+      { kind: 'table' as const, head: t.head, rows: t.rows, widths: t.widths },
+    ]),
+  });
+  await sharePdf(pdfFilename(`${groupName}-audit-report-${period.from}-to-${period.to}`), bytes);
 }

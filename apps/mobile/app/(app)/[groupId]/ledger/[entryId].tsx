@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, ScrollView, ActivityIndicator, Pressable, Image, Modal } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Flag, Undo2, Check, Clock3 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { ReasonPrompt } from '@/components/ui/ReasonPrompt';
@@ -103,7 +104,7 @@ export default function LedgerEntryPage() {
   const { groupId, entryId } = useLocalSearchParams<{ groupId: string; entryId: string }>();
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const close = () => router.back();
+  const close = () => goBack(router);
   const { role } = useActiveGroup();
   const { member } = useAuth();
   const q = useLedgerEntryDetail(groupId!, entryId!);

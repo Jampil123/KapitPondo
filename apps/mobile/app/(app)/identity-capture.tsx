@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, Image, ActivityIndicator } from 'react-nat
 import { Alert } from '@/lib/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { goBack as navigateBack } from '@/lib/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ImageManipulator } from 'expo-image-manipulator';
@@ -109,7 +110,7 @@ export default function IdentityCapture() {
       router.replace('/(app)/identity' as any);
     } else {
       AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
-      router.back();
+      navigateBack(router);
     }
   }
 

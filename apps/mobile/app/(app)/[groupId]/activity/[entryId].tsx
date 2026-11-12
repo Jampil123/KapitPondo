@@ -1,6 +1,7 @@
 import { View, ScrollView, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { ArrowDownRight, ArrowUpRight, Receipt } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { semantic, intent } from '@/theme/colors';
@@ -87,7 +88,7 @@ export default function ActivityDetail() {
   // group's ledger to officer roles.
   const ledger = useLedger(groupId!, scope === 'group' ? { limit: 500 } : { membership_id: membership?.id });
   const entry = (ledger.data ?? []).find((e) => e.id === entryId) ?? null;
-  const close = () => router.back();
+  const close = () => goBack(router);
 
   // Data is kept across refetches, so this only holds the very first paint.
   if (ledger.data === null && !ledger.error) {

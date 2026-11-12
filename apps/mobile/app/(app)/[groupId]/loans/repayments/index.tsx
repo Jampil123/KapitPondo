@@ -1,6 +1,7 @@
 import { View, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Check, Clock3 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { Button } from '@/components/ui/Button';
@@ -36,7 +37,7 @@ function ProofThumb({ path, title, sub }: { path: string | null; title: string; 
 export default function RepaymentStatus() {
   const { groupId, from } = useLocalSearchParams<{ groupId: string; from?: string }>();
   const router = useRouter();
-  const close = () => router.back();
+  const close = () => goBack(router);
   const { membership } = useActiveGroup();
   const loans = useLoans(groupId!, { status: 'active' });
   const loan = (loans.data ?? []).find((l) => l.membership_id === membership?.id) ?? null;

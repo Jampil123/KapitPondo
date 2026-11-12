@@ -1,0 +1,82 @@
+
+════════════════════════════════════════════════════════════════════════════════════════════
+  KAPITPONDO LOAD TEST REPORT
+════════════════════════════════════════════════════════════════════════════════════════════
+  Date            11/12/2026, 9:53:19 PM
+  Virtual users   50  (Organizer, Treasurer, Auditor + 47 members)
+  API             http://localhost:4000
+  Supabase        tnecppmzzuaticisnrsd
+  Test group      LTMWDM07ZB  19efb262-0f88-49e0-a919-8cfbe21dba46
+  OTP / SMS       none sent — email + password accounts only, no phone numbers
+  Result          COMPLETED
+
+  PROCESS RUNNING TIME
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  ✓ Create / refresh 50 test users                                            36.29s
+  ✓ 0. API health check                                                        0.02s
+  ! 1. 25 users sign in at the same time                                       1.17s  fail 10
+  ✓ 1b. Retry 10 sign-ins blocked by Supabase's per-IP limit                  63.15s
+  ✓ 2. 50 users open the app at the same time (profile load)                   2.65s
+  ✓ 3. Organizer (user 01) creates a group                                     1.13s
+  ✓ 4. 49 users join with fund code LTMWDM07ZB at the same time                1.97s
+  ✓ 5. Organizer approves 49 join requests (5 at a time)                      25.88s
+  ✓ 6. Organizer appoints Treasurer (user 02) and Auditor (user 03)            4.83s
+  ✓ 7. Start a contribution cycle (₱100.00 per member)                         1.95s
+  ✓ 8. 47 members pay their contribution at the same time                      3.27s
+  ✓ 9. Treasurer confirms 47 payments (5 at a time)                           39.69s
+  ✓ 10. Auditor verifies 47 payments and posts them to the ledger             19.60s
+  ✓ 11. 50 users browse 9 screens, 5 rounds each                              20.41s
+  ──────────────────────────────────────────────────────────────────────────────────────────
+    TOTAL RUNNING TIME                                                       185.75s
+
+  RESPONSE TIME PER ENDPOINT (milliseconds)
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  endpoint                          count  fail    min    avg    p50    p95    p99    max
+  setup: sign-in                       25     0    184    249    223    317    324    324
+  GET /health                           1     0     16     16     16     16     16     16
+  auth: password sign-in               25    10    306    973   1146   1170   1172   1172  {"429":10}
+  auth: retry sign-in                  11     1    167    285    300    511    511    511  {"429":1}
+  GET /me                              50     0    791    923    909   1026   1222   1222
+  GET /api/me/profile                  50     0    527   1086   1123   1264   1759   1759
+  POST /api/groups                      1     0   1124   1124   1124   1124   1124   1124
+  POST /api/groups/join-by-code        49     0   1269   1505   1515   1943   1971   1971
+  PATCH members/:id/approve            49     0   1025   2607   2084   6026   9931   9931
+  PATCH members/:id/role                2     0   2168   2415   2168   2661   2661   2661
+  POST cycles                           1     0   1944   1944   1944   1944   1944   1944
+  POST contributions                   47     0   2457   2714   2689   3001   3266   3266
+  POST contributions/:id/confirm       47     0   2660   4089   3455   8349   8728   8728
+  POST contributions/:id/verify        47     0   1599   1966   1937   2355   2511   2511
+  GET /api/groups                     250     0    323   2241   1964   4938   8674   9403
+  GET /api/me/notifications           250     0    317   2319   2098   5007   9349   9584
+  GET cycles                          250     0    462   2788   2439   5468   9457  11646
+  GET groups/:id                      250     0    436   2828   2428   5819  10910  12090
+  GET announcements                   250     0    427   2856   2436   6157  11402  11465
+  GET messages                        250     0    484   2804   2412   5773  10809  11815
+  GET contributions                   250     0    430   2829   2443   5813  10911  12354
+  GET cycles/:id/progress             250     0    443   2706   2382   5499   9451  11430
+  GET members/directory               250     0    472   2865   2533   5707  10941  11774
+  GET members (officer)                15     0   1519   2869   2625   5527   5527   5527
+  GET reports/summary (officer)        15     0   2341   3360   2915   7111   7111   7111
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  ALL REQUESTS                       2685    11     16   2573   2320   5515   9527  12354
+  p50 = half of requests were faster; p95 = 95 of 100 requests were faster.
+
+  SUMMARY
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  Total requests          2685
+  Successful              2674
+  Failed                  11  (0.4%)  incl. 10 sign-ins blocked by Supabase's per-IP limit (HTTP 429)
+  Average response time   2573ms
+  95th percentile         5515ms
+  Throughput              14.5 requests/second
+
+  DATABASE PROOF (read back from Supabase after the test)
+  ──────────────────────────────────────────────────────────────────────────────────────────
+  ✓ Active members in test group   50 / 50
+  ✓ Officer roles                  auditor, owner, treasurer
+  ✓ Contributions recorded         47 / 47
+  ✓ Contributions verified/posted  47 / 47
+  ✓ Ledger entries                 47
+  ✓ Ledger balance                 ₱4,700.00  (expected ₱4,700.00)
+  ✓ Test users with a phone number 0  (0 = no OTP possible)
+════════════════════════════════════════════════════════════════════════════════════════════

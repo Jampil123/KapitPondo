@@ -4,6 +4,7 @@ import { Alert } from '@/lib/alert';
 import { toast } from '@/components/ui/Toast';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import { Camera, Banknote, AlertTriangle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -129,7 +130,7 @@ export default function RecordPayment() {
           : ok.contribution?.status === 'confirmed'
             ? `${formatPeso(amt)} recorded — waiting for the Auditor’s verification`
             : `${formatPeso(amt)} recorded — waiting for the Treasurer to confirm`);
-        router.back();
+        goBack(router);
       } else if (submit.error) {
         Alert.alert('Could not record', submit.error.message);
       }
@@ -148,7 +149,7 @@ export default function RecordPayment() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: semantic.background }} edges={['top', 'bottom']}>
-      <CloseHeader title="Record a payment" onClose={() => router.back()} />
+      <CloseHeader title="Record a payment" onClose={() => goBack(router)} />
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }} keyboardShouldPersistTaps="handled">
 
         {!target || !cycle || membersQ.loading ? (

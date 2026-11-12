@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, FlatList, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback } from 'react-native';
 import { Alert } from '@/lib/alert';
 import { useLocalSearchParams, router } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import { MessageCircle } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -45,7 +46,7 @@ export default function Chat() {
   // then reject).
   const allowed = channel === 'officers' ? can(role, 'viewOfficersChat') : can(role, 'viewGeneralChat');
   useEffect(() => {
-    if (role && !allowed) router.back();
+    if (role && !allowed) goBack(router);
   }, [role, allowed]);
 
   const { messages, loading, loadingMore, loadMore } = useMessages(groupId, channel, member?.id);

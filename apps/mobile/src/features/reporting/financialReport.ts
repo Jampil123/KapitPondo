@@ -2,7 +2,7 @@ import { useCallback } from 'react';
 import { api } from '../../api/client';
 import { useQuery } from '../../hooks/useApi';
 import { formatPeso } from '../../lib/money';
-import { shareCsv } from '../../lib/csv';
+import { buildSimplePdf, sharePdf, pdfFilename, type PdfBlock } from '../../lib/simplePdf';
 import type { LedgerEntryType } from '../../api/ledger';
 import type { ReportPeriod } from '../auditlog/auditReport';
 
@@ -46,42 +46,54 @@ export function useFinancialReport(groupId: string, period: ReportPeriod) {
 
 export async function exportFinancialReport({ groupName, period, data }: { groupName: string; period: ReportPeriod; data: FinancialReport }) {
   const peso = (n: number) => formatPeso(n);
-  const rows: (string | number)[][] = [
-    ['Financial report', groupName],
-    ['Period', `${period.label} (${period.from} to ${period.to})`],
-    ['Generated', new Date().toLocaleString('en-PH', { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })],
-    [],
-    ['CASH'],
-    ['Cash at start', peso(data.cash.opening)],
-    ['Money in', peso(data.cash.money_in)],
-    ['Money out', peso(data.cash.money_out)],
-    ['Cash at end', peso(data.cash.closing)],
-    [],
-    ['MONEY IN', 'Amount'],
-    ...Object.entries(data.money_in).map(([t, v]) => [typeLabel(t), peso(v ?? 0)]),
-    [],
-    ['MONEY OUT', 'Amount'],
-    ...Object.entries(data.money_out).map(([t, v]) => [typeLabel(t), peso(v ?? 0)]),
-    [],
-    ['LOANS'],
-    ['Released this period', peso(data.loans.released)],
-    ['Principal repaid', peso(data.loans.principal_repaid)],
-    ['Interest earned', peso(data.loans.interest_earned)],
-    ['Active loans today', data.loans.active_count],
-    ['Still owed today', peso(data.loans.outstanding)],
-    [],
-    ['PENALTIES'],
-    ['Charged this period', peso(data.penalties.charged)],
-    ['Paid this period', peso(data.penalties.paid)],
-    ['Waived this period', peso(data.penalties.waived)],
-    ['Unpaid today', peso(data.penalties.pending)],
-    [],
-    ['MEMBERS (today)', String(data.members.length)],
-    ['Name', 'Role', 'Status', 'Heads', 'Contributed', 'Loan owed', 'Unpaid penalties'],
-    ...data.members.map((m) => [
-      m.name, ROLE[m.role] ?? m.role, m.status === 'suspended' ? 'Suspended' : 'Active', m.heads,
-      peso(m.contributed), peso(m.loan_outstanding), peso(m.penalties_pending),
-    ]),
+  const typeRows = (m: FinancialReport['money_in']) => Object.entries(m).map(([t, v]) => ({ label: typeLabel(t), value: peso(v ?? 0) }));
+  const blocks: PdfBlock[] = [
+    { kind: 'heading', text: 'Cash' },
+    { kind: 'pairs', rows: [
+      { label: 'Cash at start', value: peso(data.cash.opening) },
+      { label: 'Money in', value: peso(data.cash.money_in) },
+      { label: 'Money out', value: peso(data.cash.money_out) },
+      { label: 'Cash at end', value: peso(data.cash.closing), bold: true },
+    ] },
   ];
-  await shareCsv(`${groupName.replace(/\s+/g, '-')}-financial-report-${period.from}-to-${period.to}.csv`, rows);
+  const moneyIn = typeRows(data.money_in);
+  const moneyOut = typeRows(data.money_out);
+  if (moneyIn.length) blocks.push({ kind: 'heading', text: 'Money in' }, { kind: 'pairs', rows: moneyIn });
+  if (moneyOut.length) blocks.push({ kind: 'heading', text: 'Money out' }, { kind: 'pairs', rows: moneyOut });
+  blocks.push(
+    { kind: 'heading', text: 'Loans' },
+    { kind: 'pairs', rows: [
+      { label: 'Released this period', value: peso(data.loans.released) },
+      { label: 'Principal repaid', value: peso(data.loans.principal_repaid) },
+      { label: 'Interest earned', value: peso(data.loans.interest_earned) },
+      { label: 'Active loans today', value: String(data.loans.active_count) },
+      { label: 'Still owed today', value: peso(data.loans.outstanding) },
+    ] },
+    { kind: 'heading', text: 'Penalties' },
+    { kind: 'pairs', rows: [
+      { label: 'Charged this period', value: peso(data.penalties.charged) },
+      { label: 'Paid this period', value: peso(data.penalties.paid) },
+      { label: 'Waived this period', value: peso(data.penalties.waived) },
+      { label: 'Unpaid today', value: peso(data.penalties.pending) },
+    ] },
+    { kind: 'heading', text: 'Members (today)', count: data.members.length },
+    {
+      kind: 'table',
+      head: ['Name', 'Role', 'Status', 'Heads', 'Contributed', 'Loan owed', 'Unpaid penalties'],
+      widths: [2.4, 1.2, 1.1, 0.8, 1.5, 1.5, 1.5],
+      align: ['left', 'left', 'left', 'right', 'right', 'right', 'right'],
+      rows: data.members.map((m) => [
+        m.name, ROLE[m.role] ?? m.role, m.status === 'suspended' ? 'Suspended' : 'Active', String(m.heads),
+        peso(m.contributed), peso(m.loan_outstanding), peso(m.penalties_pending),
+      ]),
+      empty: 'No members.',
+    },
+  );
+  const bytes = await buildSimplePdf({
+    title: 'Financial report',
+    subtitle: groupName,
+    meta: [`${period.label} (${period.from} to ${period.to})`],
+    blocks,
+  });
+  await sharePdf(pdfFilename(`${groupName}-financial-report-${period.from}-to-${period.to}`), bytes);
 }

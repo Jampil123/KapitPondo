@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, TextInput, Switch, ActivityIndicator } fro
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Text } from '@/components/ui/Text';
 import { AppBar } from '@/components/shared/AppBar';
 import { semantic, intent, shadowToken } from '@/theme/colors';
@@ -45,7 +46,7 @@ export default function ComposeAnnouncement() {
   const [sendPush, setSendPush] = useState(true);
 
   useEffect(() => {
-    if (role && role !== 'owner') router.back();
+    if (role && role !== 'owner') goBack(router);
   }, [role]);
   if (role !== 'owner') return null;
 
@@ -72,7 +73,7 @@ export default function ComposeAnnouncement() {
     const result = await create.run({ type, body: trimmed, audience, send_push: sendPush });
     if (result) {
       Alert.alert('Announcement posted', `Sent to ${result.announcement.recipient_count} member${result.announcement.recipient_count === 1 ? '' : 's'}.`);
-      router.back();
+      goBack(router);
     } else if (create.error) {
       Alert.alert("Couldn't post", create.error.message);
     }

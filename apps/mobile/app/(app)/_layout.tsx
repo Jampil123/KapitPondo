@@ -3,6 +3,9 @@ import { GroupProvider } from '@/context/GroupContext';
 import { NotificationsProvider } from '@/context/NotificationsContext';
 import { semantic } from '@/theme/colors';
 
+// A page opened directly (web refresh, link) gets My Groups underneath so Back works.
+export const unstable_settings = { initialRouteName: 'groups/index' };
+
 export default function AppLayout() {
   return (
     <NotificationsProvider>

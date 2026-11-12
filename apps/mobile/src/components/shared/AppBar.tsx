@@ -7,6 +7,7 @@
 import { ReactNode } from 'react';
 import { View, Pressable } from 'react-native';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic } from '../../theme/colors';
@@ -24,7 +25,7 @@ export function AppBar({
   title: string;
   subtitle?: string;
   back?: boolean;
-  /** Override the default router.back() — e.g. to step back to a previous in-screen stage instead of leaving the route entirely. */
+  /** Override the default goBack(router) — e.g. to step back to a previous in-screen stage instead of leaving the route entirely. */
   onBack?: () => void;
   right?: ReactNode;
   /** Shown just before the title, e.g. a chat partner's avatar. */
@@ -50,7 +51,7 @@ export function AppBar({
       }}
     >
       {back ? (
-        <Pressable onPress={onBack ?? (() => router.back())} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable onPress={onBack ?? (() => goBack(router))} hitSlop={8} style={{ width: 40, height: 40, alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeft size={24} color={tintColor ?? semantic.textPrimary} />
         </Pressable>
       ) : (

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { View, ScrollView, Pressable, Image, ActivityIndicator, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Receipt, X, Flag, Send, Maximize2 } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { FlagPrompt } from '@/features/flags/FlagPrompt';
@@ -46,7 +47,7 @@ function ActionButton({ label, tone, Icon, onPress, disabled }: { label: string;
 export default function ProofDetail() {
   const { groupId, id, type } = useLocalSearchParams<{ groupId: string; id: string; type: ProofEntityType }>();
   const router = useRouter();
-  const close = () => router.back();
+  const close = () => goBack(router);
   const isRepayment = type === 'loan_payment';
 
   const contribs = useContributions(groupId!, {});

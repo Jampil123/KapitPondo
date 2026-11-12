@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, Modal, KeyboardAvoidingView, Platform, Act
 import { Alert } from '@/lib/alert';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import * as ImagePicker from 'expo-image-picker';
 import { ChevronDown, ChevronRight, Check, X, Phone, Mail, Lock, AlertTriangle, Camera } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
@@ -207,7 +208,7 @@ export default function EditProfile() {
         occupation: occupation.trim() || undefined,
       });
       await refreshMember();
-      router.back();
+      goBack(router);
     } catch (e) {
       Alert.alert('Update failed', (e as Error).message);
     } finally {

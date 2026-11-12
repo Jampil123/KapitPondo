@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Plus, X, Users, UserPlus, Bell } from 'lucide-react-native';
 import { Text } from '@/components/ui/Text';
 import { GroupCard } from '@/components/shared/GroupCard';
@@ -40,14 +40,21 @@ export default function GroupsDashboard() {
   const fabRef = useRef<View>(null);
   const createItemRef = useRef<View>(null);
 
+  // Mounted hidden under a refreshed deeper page (initialRouteName), so the tour waits for focus.
+  const [focused, setFocused] = useState(false);
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+
   useEffect(() => {
     // One-shot: marked seen the moment it starts, so it never comes back —
     // not after finishing, skipping, or closing the app halfway through.
-    if (tourSeen === false && !loading && groups.length === 0 && tourStep === null) {
+    if (focused && tourSeen === false && !loading && groups.length === 0 && tourStep === null) {
       setTourStep('fab');
       markTourSeen();
     }
-  }, [tourSeen, loading, groups.length]);
+  }, [focused, tourSeen, loading, groups.length]);
 
   function measure(ref: React.RefObject<View | null>) {
     ref.current?.measureInWindow((x, y, width, height) => setTourTarget({ x, y, width, height }));

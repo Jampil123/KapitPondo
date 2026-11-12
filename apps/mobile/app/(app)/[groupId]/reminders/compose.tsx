@@ -3,6 +3,7 @@ import { View, ScrollView, Pressable, TextInput, ActivityIndicator } from 'react
 import { Alert } from '@/lib/alert';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { Text } from '@/components/ui/Text';
 import { Avatar } from '@/components/ui/Avatar';
 import { AppBar } from '@/components/shared/AppBar';
@@ -32,7 +33,7 @@ export default function ComposeReminder() {
 
   const allowed = role === 'owner' || role === 'treasurer';
   useEffect(() => {
-    if (role && !allowed) router.back();
+    if (role && !allowed) goBack(router);
   }, [role, allowed]);
   if (!role || !allowed) return null;
 
@@ -45,7 +46,7 @@ export default function ComposeReminder() {
     const result = await send.run(trimmed);
     if (result) {
       Alert.alert('Reminder sent', `Sent privately to ${result.sent_count} member${result.sent_count === 1 ? '' : 's'}.`);
-      router.back();
+      goBack(router);
     } else if (send.error) {
       Alert.alert("Couldn't send", send.error.message);
     }

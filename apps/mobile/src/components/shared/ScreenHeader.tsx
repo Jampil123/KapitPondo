@@ -7,6 +7,7 @@
 import { View, Pressable } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
+import { goBack } from '@/lib/navigation';
 import { ChevronLeft } from 'lucide-react-native';
 import { Text } from '../ui/Text';
 import { semantic } from '../../theme/colors';
@@ -47,7 +48,7 @@ export function ScreenHeader({ back = false, showBrand = true }: { back?: boolea
     >
       <View style={{ width: 30, alignItems: 'flex-start' }}>
         {back ? (
-          <Pressable onPress={() => router.back()} hitSlop={8} style={{ marginLeft: -4 }}>
+          <Pressable onPress={() => goBack(router)} hitSlop={8} style={{ marginLeft: -4 }}>
             <ChevronLeft size={24} color={semantic.textPrimary} />
           </Pressable>
         ) : null}
