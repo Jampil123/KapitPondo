@@ -9,6 +9,9 @@
     "loadtest": "node scripts/load-test-50.js all",
     "loadtest:live": "node scripts/load-test-50.js all --verbose"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
