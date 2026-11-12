@@ -7,7 +7,8 @@ import { supabase } from './supabase';
 
 // When the dashboard is opened from another device on the LAN (http://<pc-ip>:5173), "localhost" would point at
 // that device, so swap it for whatever host the page itself was loaded from.
-const BASE = (import.meta.env.VITE_API_URL as string).replace('localhost', window.location.hostname);
+const BASE = ((import.meta.env.VITE_API_URL as string | undefined) ?? '').replace('localhost', window.location.hostname);
+export const API_BASE = BASE;
 
 export class ApiError extends Error {
   status: number;

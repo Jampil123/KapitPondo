@@ -9,7 +9,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
-import { api } from '../lib/api';
+import { api, ApiError, API_BASE } from '../lib/api';
 import { describeDevice } from '../lib/device';
 
 export type AdminMe = { user_id: string; email?: string; full_name?: string | null; avatar_url?: string | null };
@@ -19,6 +19,8 @@ type AdminAuthValue = {
   admin: AdminMe | null;
   loading: boolean;
   isSysadmin: boolean;
+  // Set when the admin check couldn't reach the API — not the same as "not an admin".
+  checkError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   // Settings edits the profile; this keeps the sidebar in step without a refetch.
@@ -31,6 +33,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [admin, setAdmin] = useState<AdminMe | null>(null);
   const [loading, setLoading] = useState(true);
+  const [checkError, setCheckError] = useState<string | null>(null);
   // The user the current `admin` value was resolved for. Supabase re-emits
   // auth events on every token refresh and whenever the tab regains focus;
   // only a different user should re-check sysadmin status. Otherwise the
@@ -49,15 +52,22 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
       // Deferred: calling Supabase (api.get reads the session) inside this
       // callback deadlocks the auth lock, leaving the console stuck loading.
       setTimeout(async () => {
-        let me: AdminMe | null;
+        let me: AdminMe | null = null;
+        let failure: string | null = null;
         try {
           // GET /admin/me → 200 with the admin record if platform admin, else 403.
           me = await api.get<AdminMe>('/admin/me');
-        } catch {
-          me = null; // signed in, but not a sysadmin
+        } catch (err) {
+          const notAdmin = err instanceof ApiError && (err.status === 401 || err.status === 403);
+          if (!notAdmin) {
+            failure = API_BASE
+              ? `Couldn't reach the API at ${API_BASE}${err instanceof Error && err.message ? ` (${err.message})` : ''}.`
+              : 'VITE_API_URL is not set for this build.';
+          }
         }
         if (!active || resolvedFor.current !== userId) return;
         setAdmin(me);
+        setCheckError(failure);
         setLoading(false);
       }, 0);
     });
@@ -85,7 +95,7 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Ctx.Provider value={{ session, admin, loading, isSysadmin: !!admin, signIn, signOut, updateAdmin }}>
+    <Ctx.Provider value={{ session, admin, loading, isSysadmin: !!admin, checkError, signIn, signOut, updateAdmin }}>
       {children}
     </Ctx.Provider>
   );

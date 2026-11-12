@@ -25,15 +25,22 @@ function Loader() {
 }
 
 function NotAuthorized() {
-  const { signOut } = useAdminAuth();
+  const { signOut, checkError } = useAdminAuth();
   return (
     <div className="flex h-full items-center justify-center">
       <div className="max-w-sm text-center rounded-2xl bg-surface border border-line p-8">
-        <div className="text-lg font-bold text-ink mb-1">Not authorized</div>
-        <p className="text-sm text-muted mb-5">This account isn’t a system administrator.</p>
-        <button onClick={signOut} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
-          Sign out
-        </button>
+        <div className="text-lg font-bold text-ink mb-1">{checkError ? 'Can’t reach the server' : 'Not authorized'}</div>
+        <p className="text-sm text-muted mb-5 break-words">{checkError ?? 'This account isn’t a system administrator.'}</p>
+        <div className="flex justify-center gap-2">
+          {checkError ? (
+            <button onClick={() => window.location.reload()} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark">
+              Try again
+            </button>
+          ) : null}
+          <button onClick={signOut} className={checkError ? 'rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ink' : 'rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark'}>
+            Sign out
+          </button>
+        </div>
       </div>
     </div>
   );
