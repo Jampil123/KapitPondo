@@ -80,6 +80,11 @@ function isExpoGo(): boolean {
   }
 }
 
+/** Web has no Expo push service (it would need a VAPID key) — realtime covers notifications there. */
+function pushUnsupported(): boolean {
+  return Platform.OS === 'web' || isExpoGo();
+}
+
 /**
  * Requests permission, obtains an Expo push token, and registers it with the
  * API. Returns null if unavailable for ANY reason — Expo Go / no dev build
@@ -90,7 +95,7 @@ function isExpoGo(): boolean {
  * whether push ends up available.
  */
 export async function registerForPushNotificationsAsync(): Promise<string | null> {
-  if (isExpoGo()) return null; // known-unavailable — don't even attempt to touch the native module
+  if (pushUnsupported()) return null; // Expo Go / web: don't even touch expo-notifications
 
   const Notifications = loadNotifications();
   if (!Notifications) return null;
@@ -150,7 +155,7 @@ export async function unregisterPushToken(token: string | null) {
  * A no-op where expo-notifications isn't available (Expo Go).
  */
 export function onPushTap(onTap: (data: Record<string, unknown>) => void): () => void {
-  if (isExpoGo()) return () => {};
+  if (pushUnsupported()) return () => {};
   const Notifications = loadNotifications();
   if (!Notifications) return () => {};
   const handled = new Set<string>();
