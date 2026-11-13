@@ -19,7 +19,7 @@
     },
     "web": {
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/KP-Logo-icon.png"
     },
     "plugins": [
       "expo-router",
